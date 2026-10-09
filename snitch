@@ -246,7 +246,7 @@ class Egress:
         if not totals:
             return Text(" collecting ... (nothing sent in this time window yet)" if self.ws else " connecting ...", "dim")
         big = max(totals.values())
-        lw, vw = 26, 7
+        lw, vw = 34, 7
         bw = max(6, (width - 2 * lw - 2 * vw - 22) // 2)  # rate, arrow, padding, scrollbar
         out = Text(f" EGRESS  last {self.app.period}   {size(sum(totals.values()))} sent by {len(totals)} programs"
                    f"   bars: log scale   rate: since the last refresh\n\n", "bold #7ee787")
@@ -466,8 +466,15 @@ class Snitch(App):
             f"default   {m.get('defaultAction')}",
         ]
         for r in m.get("coveringRules", []) + m.get("relatedRules", []):
-            desc = ", ".join(f"{k}={v}" for k, v in r.items() if k not in ("type", "id", "isDisabled") and v not in (None, "", [], {}))
-            lines.append(f"rule      {r.get('type')} #{r.get('id', '')} {desc}" + (" (disabled)" if r.get("isDisabled") else ""))
+            if r.get("type") == "blocklist":
+                desc = f"blocklist entry {r.get('value', '')}"
+            else:  # rule: its note says what it is; without one, program and target
+                remote = r.get("remotePattern") or {}
+                desc = r.get("notes") or " ".join(filter(None, [
+                    Path(r.get("viaExecutable") or r.get("primaryExecutable") or "any program").name,
+                    "->", remote.get("value") or remote.get("type", "any")]))
+            lines.append(f"rule      {r.get('action', '')} #{r.get('id', '')} · {desc}".replace(H, "~")
+                         + (" (disabled)" if r.get("isDisabled") else ""))
         self.query_one("#info", Static).update("\n".join(lines[:8]))
 
     def log_line(self, s):
