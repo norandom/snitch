@@ -77,7 +77,9 @@ snitch baseline --dev
 
 adds allow rules for the dev tools, each to its own hosts only: Claude Code → Anthropic,
 Codex → OpenAI, Copilot / `gh` / `git` → GitHub, `npm` → npmjs.org, `uv` / `pip` → PyPI,
-`cargo` → crates.io, `go` → golang.org, `podman` → the registries, and the bar's quota module.
+`cargo` → crates.io, `go` → golang.org, `podman` → the registries, `helm` → chart sources and
+the cluster on the local network, `kubectl` / `k9s` / `ktop` → the cluster, and the bar's quota
+module.
 Versioned installs are matched with narrow wildcards (`~/.local/share/claude/versions/*`), so
 the rules survive updates. Each tool gets a rule for "started in the session" and one for
 "running on its own"; there is no session-wide rule, which would open those hosts to

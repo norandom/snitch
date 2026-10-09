@@ -567,6 +567,7 @@ BASELINE = [  # what this box needs when everything else is denied by default
 H = str(Path.home())
 SESSION = "/usr/bin/start-hyprland"  # Little Snitch's "primary" for everything started in the session
 DEV_TOOLS = [  # (tool, program paths: narrow globs survive updates, the hosts it needs[, launchers])
+    # hosts: comma-separated domains, or "localnet" for Little Snitch's local-network target
     ("Claude Code", [f"{H}/.local/share/claude/versions/*"], "anthropic.com,claude.ai,claude.com"),
     ("Codex", [f"{H}/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/*/bin/codex",
                f"{H}/.codex/packages/app-server-daemon/releases/*/bin/codex"], "chatgpt.com,openai.com,oaiusercontent.com"),
@@ -580,6 +581,9 @@ DEV_TOOLS = [  # (tool, program paths: narrow globs survive updates, the hosts i
     ("cargo", ["/usr/bin/cargo"], "crates.io"),
     ("go", ["/usr/lib/go-*/bin/go", f"{H}/go/pkg/mod/golang.org/toolchain@*/bin/go"], "golang.org,storage.googleapis.com"),
     ("podman", ["/usr/bin/podman"], "docker.io,docker.com,ghcr.io,quay.io,gcr.io,githubusercontent.com"),
+    ("helm", ["/usr/local/bin/helm"], "openobserve.ai,github.com,githubusercontent.com,ghcr.io"),
+    ("helm to the cluster", ["/usr/local/bin/helm"], "localnet"),  # the Kubernetes API (10.0.0.x)
+    ("kubernetes tools to the cluster", ["/usr/local/bin/kubectl", "/usr/local/bin/k9s", "/usr/local/bin/ktop"], "localnet"),
     # the bar's quota module: waybar (a systemd user service) is its own "primary"
     ("bar quota", [f"{H}/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/*/bin/codex"],
      "chatgpt.com,openai.com", ["/usr/bin/waybar"]),
@@ -594,7 +598,8 @@ def dev_rules():
     for tool, paths, hosts, *launchers in DEV_TOOLS:
         launchers = launchers[0] if launchers else [SESSION]
         for p in paths:
-            remote, where = {"type": "domains", "value": hosts}, p.replace(H, "~")
+            remote = {"type": "localNet"} if hosts == "localnet" else {"type": "domains", "value": hosts}
+            where = p.replace(H, "~")
             for launcher in launchers:
                 place = "in the session" if launcher == SESSION else f"started by {Path(launcher).name}"
                 out.append(rule("allow", launcher, p, remote, note=f"snitch dev: {tool}, {where}, {place}"))
