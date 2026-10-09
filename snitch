@@ -1,0 +1,487 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["textual>=6", "websockets>=15"]
+# ///
+"""snitch - Little Snitch for Linux in the terminal.
+
+Speaks the daemon's own web-UI protocol (ws://127.0.0.1:3031/stream): the same
+process > host > address tree, the same rules. Blocking here is blocking there.
+
+  up/down   move; the details follow     enter/right  open (expand)
+  left      close / go to parent         x / space    block <-> unblock
+  t, 1..5   time window                  /            search, esc clears
+  s         sort by activity, re-sorted every 10s (s again: 20s)
+  S         sort by name                 e            egress graph (sender -> destination)
+  q         quit
+
+Config ~/.config/snitch/config.toml (all optional):
+  periods = ["15m", "30m", "1h", "24h", "7d"]
+  since   = "1h"
+  protect = ["hypr-rdp", "sshd"]   # blocking these asks for a second x
+  resort  = [10, 20]               # seconds between activity re-sorts, s cycles
+Log of blocks / unblocks and blocked connections: ~/.local/state/snitch/snitch.log
+"""
+import argparse, asyncio, json, math, re, time, tomllib
+from datetime import datetime
+from pathlib import Path
+
+import websockets
+from rich.text import Text
+from textual.app import App
+from textual.binding import Binding
+from textual.containers import VerticalScroll
+from textual.widgets import DataTable, Footer, Input, RichLog, Static
+
+URL, ORIGIN = "ws://127.0.0.1:3031/stream", "http://127.0.0.1:3031"
+CONF = Path.home() / ".config/snitch/config.toml"
+LOG = Path.home() / ".local/state/snitch/snitch.log"
+UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def secs(p): return int(p[:-1]) * UNITS[p[-1]]
+def size(n): return next(f"{n / 1024**i:.0f}{u}" for i, u in enumerate("BKMGT") if n < 1024 ** (i + 1) or u == "T")
+
+
+def age(t):
+    if not t: return "-"
+    d = max(0, int(time.time() - t))
+    return "now" if d < 5 else next(f"{d // s}{u}" for u, s in (("d", 86400), ("h", 3600), ("m", 60), ("s", 1)) if d >= s)
+
+
+class Tree:
+    """The daemon's connection tree, in the order and nesting it sends."""
+
+    def __init__(self): self.order, self.rows = [], {}
+
+    def apply(self, m):
+        u = m.get("update")
+        if u == "clearConnectionRows":
+            self.order, self.rows = [], {}
+        elif u == "insertConnectionRows":
+            ids = [r["id"] for r in m["rows"]]
+            self.order = [i for i in self.order if i not in ids]
+            at = self.order.index(m["afterId"]) + 1 if m["afterId"] in self.order else 0
+            self.order[at:at] = ids
+            self.rows.update({r["id"]: r for r in m["rows"]})
+        elif u in ("removeConnectionRows", "moveConnetionRows"):
+            if m["startId"] not in self.order: return True
+            a, b = self.order.index(m["startId"]), self.order.index(m.get("endId") or m["startId"])
+            chunk, self.order[a:b + 1] = self.order[a:b + 1], []
+            if u == "moveConnetionRows":
+                at = self.order.index(m["targetId"]) + 1 if m["targetId"] in self.order else 0
+                self.order[at:at] = chunk
+            else:
+                for i in chunk: self.rows.pop(i, None)
+        elif u == "updateConnectionRows":
+            for r in m["rows"]: self.rows.get(r["id"], {}).update(r)
+            for st in m["statistics"]:
+                if st["id"] in self.rows: self.rows[st["id"]]["statistics"] = st["statistics"]
+        else:
+            return False
+        return True
+
+    def walk(self):
+        """(row, ancestors) in tree order."""
+        stack = []
+        for rid in self.order:
+            r = self.rows[rid]
+            del stack[r["indentationLevel"]:]
+            yield r, list(stack)
+            stack.append(r)
+
+
+GROUPS = ("Inbound", "IP Addresses")
+SPARK = " ▏▎▍▌▋▊▉█"
+
+
+def scale(b, big):
+    """Log scale from 1 KiB to the biggest flow: 12G next to 50K stays visible."""
+    return 0.0 if b <= 0 else max(0.04, math.log(max(b, 1024) / 1024) / max(1e-9, math.log(max(big, 2048) / 1024)))
+
+
+def program(name):
+    """Claude Code's binary is named after its version (2.1.289): say so when that is what it is."""
+    return f"claude {name}" if re.fullmatch(r"[\d.]+", name) and (Path.home() / ".local/share/claude/versions" / name).exists() else name
+
+
+def bar(frac, width):
+    """btop-style bar: green -> yellow -> red along its length, 1/8-cell precision."""
+    cells, out = frac * width, Text()
+    for i in range(width):
+        part = min(1.0, max(0.0, cells - i))
+        if part <= 0: break
+        x = i / max(1, width - 1)
+        out.append(SPARK[max(1, round(part * 8))], f"rgb({int(80 + 175 * min(1, 2 * x))},{int(220 - 120 * max(0, 2 * x - 1))},80)")
+    return out
+
+
+class Egress:
+    """A second, hidden daemon connection that keeps the whole tree expanded (expansion is
+    per connection, so the list view is untouched) and turns it into sender -> destination."""
+
+    def __init__(self, app):
+        self.app, self.tree, self.ws, self.asked, self.prev = app, Tree(), None, set(), {}
+
+    async def run(self):
+        while True:
+            try:
+                async with websockets.connect(URL, origin=ORIGIN, max_size=None) as ws:
+                    self.ws, self.tree, self.asked = ws, Tree(), set()
+                    await self.period()
+                    async for raw in ws:
+                        for m in json.loads(raw):
+                            if self.tree.apply(m) and m.get("update") == "insertConnectionRows":
+                                await self.expand(m["rows"])
+            except (OSError, websockets.WebSocketException):
+                self.ws = None
+                await asyncio.sleep(3)
+
+    async def period(self):
+        if self.ws:
+            await self.ws.send(json.dumps({"action": "setConnectionsFilters",
+                                           "filters": {**self.app.filters, "visiblePeriodLimit": secs(self.app.period)}}))
+
+    async def expand(self, rows):
+        for r in rows:  # processes, "x via y" senders, groups and "n more" - not the hosts
+            want = r["indentationLevel"] == 0 or " via " in r["title"] or r["title"] in GROUPS or r["isMoreItems"]
+            if want and not r["isExpanded"] and not (r["isLeaf"] and not r["isMoreItems"]) and r["id"] not in self.asked:
+                self.asked.add(r["id"])
+                await self.ws.send(json.dumps({"action": "toggleDisclosure", "id": r["id"]}))
+
+    def flows(self):
+        """{sender: {destination: bytes sent}}; the sender is the program that really talks."""
+        out = {}
+        for r, up in self.tree.walk():
+            if r["indentationLevel"] == 0 or " via " in r["title"] or r["title"] in GROUPS or r["isMoreItems"]:
+                continue
+            if up and (" via " in up[-1]["title"] or up[-1]["indentationLevel"] == 0 or up[-1]["title"] in GROUPS):
+                via = next((a for a in reversed(up) if " via " in a["title"]), None)
+                sender = f'{program(via["title"].split(" via ", 1)[1])} ({up[0]["title"]})' if via else program(up[0]["title"])
+                dest = ("in " if up[-1]["title"] == "Inbound" else "") + r["title"]
+                sent = (r.get("statistics") or {}).get("bytesSent", 0)
+                if sent: out.setdefault(sender, {})[dest] = out.get(sender, {}).get(dest, 0) + sent
+        return out
+
+    def render(self, width, top=10, per=5):
+        flows, now = self.flows(), time.monotonic()
+        totals = {k: sum(v.values()) for k, v in flows.items()}
+        if not totals:
+            return Text(" collecting ... (nothing sent in this time window yet)" if self.ws else " connecting ...", "dim")
+        big = max(totals.values())
+        lw, vw = 26, 7
+        bw = max(6, (width - 2 * lw - 2 * vw - 22) // 2)  # rate, arrow, padding, scrollbar
+        out = Text(f" EGRESS  last {self.app.period}   {size(sum(totals.values()))} sent by {len(totals)} programs"
+                   f"   bars: log scale   rate: since the last refresh\n\n", "bold #7ee787")
+        for sender in sorted(totals, key=totals.get, reverse=True)[:top]:
+            dests = sorted(flows[sender].items(), key=lambda kv: kv[1], reverse=True)
+            last_t, last_b = self.prev.get(sender, (now, totals[sender]))
+            rate = (totals[sender] - last_b) / (now - last_t) if now > last_t else 0
+            self.prev[sender] = (now, totals[sender])
+            shown, rest = dests[:per], dests[per:]
+            if rest: shown.append((f"+ {len(rest)} more", sum(b for _, b in rest)))
+            for i, (dest, b) in enumerate(shown):
+                line = Text(" ")
+                if i == 0:
+                    line.append(f"{sender[:lw - 1]:<{lw}}", "bold")
+                    line.append(f"{size(totals[sender]):>{vw}} ")
+                    b_sender = bar(scale(totals[sender], big), bw)
+                    line.append_text(b_sender); line.append(" " * (bw - len(b_sender)))
+                    line.append(f" {(size(rate) + '/s') if rate >= 1 else '':>8} ", "#e3b341")
+                else:
+                    line.append(" " * (lw + vw + 1 + bw + 10))
+                last = i == len(shown) - 1
+                line.append(("━▶ " if len(shown) == 1 else "┳▶ " if i == 0 else "┗▶ " if last else "┣▶ "), "#3fb950")
+                line.append(f"{dest[:lw - 1]:<{lw}}", "dim" if dest.startswith("+ ") else "")
+                line.append(f"{size(b):>{vw}} "); line.append_text(bar(scale(b, big), bw)); line.append("\n")
+                out.append_text(line)
+            out.append("\n")
+        return out
+
+
+class Connections(DataTable):
+    """The table keeps up/down; open, close and block go to the app."""
+    BINDINGS = [Binding("enter,right,l", "app.open", "open"), Binding("left,h", "app.close", "close"),
+                Binding("x,space", "app.block", "block/unblock")]
+
+
+class Snitch(App):
+    TITLE = "snitch"
+    CSS = """
+    Screen { background: #0b0f0b; }
+    #head { height: 1; padding: 0 1; background: #142014; color: #7ee787; }
+    DataTable { height: 1fr; background: #0b0f0b; }
+    DataTable > .datatable--cursor { background: #1f3d1f; }
+    #info { height: 9; padding: 0 1; border-top: solid #2b4a2b; color: #c9d1c9; }
+    RichLog { height: 6; padding: 0 1; border-top: solid #2b4a2b; background: #0b0f0b; }
+    #search { dock: bottom; display: none; }
+    #flows { height: 1fr; display: none; background: #0b0f0b; }
+    """
+    BINDINGS = [
+        Binding("q", "quit", "quit"), Binding("t", "period", "time window"), Binding("slash", "search", "search"),
+        Binding("s", "sort_activity", "sort: activity"), Binding("S", "sort_name", "sort: name"),
+        Binding("e", "egress", "egress graph"),
+        Binding("escape", "clear_search", show=False),
+        *[Binding(str(i), f"period({i - 1})", show=False) for i in range(1, 10)],
+    ]
+
+    def __init__(self, periods, since, protect, resort=(10, 20)):
+        super().__init__()
+        self.resorts, self.resort, self.sort = list(resort), resort[0], "activity"
+        self.rank, self.ranked_at, self.view = {}, 0.0, []  # frozen activity order, shown order
+        self.periods, self.period, self.protect = periods, since, set(protect)
+        self.conns, self.rule, self.egress = Tree(), {}, None  # tree as the daemon sends it
+        self.filters, self.ws, self.dirty, self.armed, self.pending = {}, None, True, None, {}
+        self.filter_off = False
+
+    order = property(lambda self: self.conns.order)
+    rows = property(lambda self: self.conns.rows)
+
+    def compose(self):
+        yield Static(id="head")
+        yield Connections(cursor_type="row", zebra_stripes=False)
+        with VerticalScroll(id="flows"):
+            yield Static(id="graph")
+        yield Static(id="info")
+        yield RichLog(markup=False, wrap=False)
+        yield Input(placeholder="search (enter), esc clears", id="search")
+        yield Footer()
+
+    def on_mount(self):
+        self.query_one(DataTable).add_columns(" ", "connection", "last", "down", "up", "ok/denied", "rule")
+        LOG.parent.mkdir(parents=True, exist_ok=True)
+        for line in LOG.read_text().splitlines()[-5:] if LOG.exists() else []:
+            self.query_one(RichLog).write(line)
+        self.run_worker(self.stream(), exclusive=True)
+        self.set_interval(0.5, self.redraw)
+        self.set_interval(1, self.tick)
+        self.set_interval(2, self.draw_egress)
+
+    # ---- daemon connection -------------------------------------------------------------
+    async def stream(self):
+        while True:
+            try:
+                async with websockets.connect(URL, origin=ORIGIN, max_size=None) as ws:
+                    self.ws, self.conns = ws, Tree()
+                    async for raw in ws:
+                        for m in json.loads(raw):
+                            self.handle(m)
+            except (OSError, websockets.WebSocketException) as e:
+                self.ws = None
+                self.query_one("#head", Static).update(f" littlesnitch not reachable ({e}); retrying")
+                await asyncio.sleep(3)
+
+    async def send(self, action, **payload):
+        if self.ws: await self.ws.send(json.dumps({"action": action, **payload}))
+
+    def handle(self, m):
+        u, self.dirty = m.get("update"), True
+        if self.conns.apply(m):
+            return
+        if u == "updateRuleButtons":
+            for r in m["rows"]:
+                self.rule[r["rowId"]] = r["rule"]
+                was = self.pending.get(r["rowId"])  # (path, rule before the toggle)
+                if was and was[1].startswith("deny") != r["rule"].startswith("deny"):
+                    self.log_line(("BLOCKED   " if r["rule"].startswith("deny") else "UNBLOCKED ") + was[0])
+                    del self.pending[r["rowId"]]
+        elif u == "setConnectionsStatus":
+            self.filters = m["status"]["filters"]
+            if self.filters.get("visiblePeriodLimit") != secs(self.period):
+                asyncio.ensure_future(self.set_period(self.period))
+        elif u == "globalSettings":
+            self.filter_off = m.get("filterDisabled", False)
+        elif u == "setInspector":
+            self.show_info(m)
+        elif u == "trafficEvents":
+            for e in m.get("data", []):
+                if e.get("type") == "blocked" and e.get("rowId") in self.rows:
+                    self.log_line("denied    " + self.path(e["rowId"]))
+
+    # ---- view ----------------------------------------------------------------------------
+    def path(self, rid):
+        """process > host > address for a row, from the indentation of the rows above it."""
+        i, lvl, parts = self.order.index(rid), self.rows[rid]["indentationLevel"], []
+        for j in range(i, -1, -1):
+            r = self.rows[self.order[j]]
+            if r["indentationLevel"] <= lvl:
+                parts.insert(0, r["title"]); lvl = r["indentationLevel"] - 1
+            if lvl < 0: break
+        return " > ".join(parts)
+
+    @staticmethod
+    def last(r):
+        st = r.get("statistics") or {}
+        return max(st.get("lastAllowed", 0), st.get("lastBlocked", 0))
+
+    def tick(self):
+        if self.sort == "activity" and time.monotonic() - self.ranked_at >= self.resort:
+            self.rerank()
+
+    def rerank(self):
+        """Freeze the activity order; new rows go on top until the next re-sort."""
+        self.rank = {rid: i for i, rid in enumerate(sorted(self.rows, key=lambda i: -self.last(self.rows[i])))}
+        self.ranked_at, self.dirty = time.monotonic(), True
+
+    def sort_key(self, rid):
+        r = self.rows[rid]
+        if self.sort == "name": return (r["isMoreItems"], r["title"].lower())
+        return (r["isMoreItems"], self.rank.get(rid, -1), -self.last(r))
+
+    def sorted_tree(self):
+        """The daemon's tree with each level's siblings sorted our way."""
+        kids, stack = {}, []
+        for rid in self.order:
+            del stack[self.rows[rid]["indentationLevel"]:]
+            kids.setdefault(stack[-1] if stack else None, []).append(rid)
+            stack.append(rid)
+        out = []
+        def walk(parent):
+            for c in sorted(kids.get(parent, []), key=self.sort_key):
+                out.append(c); walk(c)
+        walk(None)
+        return out
+
+    def redraw(self):
+        if not self.dirty or self.ws is None or not self.is_running: return
+        self.dirty, table = False, self.query_one(DataTable)
+        keep = self.current()
+        table.clear()
+        self.view = self.sorted_tree()
+        for rid in self.view:
+            r, rule = self.rows[rid], self.rule.get(rid, "")
+            st, deny = r.get("statistics") or {}, rule.startswith("deny")
+            arrow = "  " if r["isLeaf"] and not r["isMoreItems"] else ("v " if r["isExpanded"] else "> ")
+            denied = st.get("deepDenyCount", 0)
+            table.add_row(
+                Text("[x]", "bold red") if deny else Text("[ ]", "green"),
+                Text("│ " * r["indentationLevel"] + arrow + r["title"], "red" if deny else ""),
+                age(self.last(r)),
+                size(st.get("bytesReceived", 0)), size(st.get("bytesSent", 0)),
+                Text(f'{st.get("deepAllowCount", 0)}/{denied}', "red" if denied else "dim"),
+                Text(rule.replace("By", " by ").lower(), "dim"), key=str(rid))
+        if keep in self.view: table.move_cursor(row=self.view.index(keep), animate=False)
+        on = sum(1 for i in self.order if self.rows[i]["indentationLevel"] == 0)
+        self.query_one("#head", Static).update(
+            f" snitch | last {self.period} | {on} processes | sort: "
+            + (f"activity, every {self.resort}s" if self.sort == "activity" else "name") + f" | {URL[5:20]}"
+            + (" | FILTER OFF (all allowed)" if self.filter_off else ""))
+
+    def current(self):
+        t = self.query_one(DataTable)
+        return int(t.coordinate_to_cell_key(t.cursor_coordinate).row_key.value) if t.row_count else None
+
+    def on_data_table_row_highlighted(self, ev):
+        if ev.row_key and ev.row_key.value:
+            asyncio.ensure_future(self.send("selectRow", id=int(ev.row_key.value)))
+
+    def show_info(self, m):
+        if m.get("row") not in self.rows:
+            return self.query_one("#info", Static).update("")
+        st = self.rows[m["row"]].get("statistics") or {}
+        name = m.get("remoteName") or {}
+        lines = [
+            f"path      {self.path(m['row'])}",
+            f"program   {m.get('primaryExecutable') or '-'}" + (f"  via {m['viaExecutable']}" if m.get("viaExecutable") else ""),
+            f"remote    {name.get('value', '-')}" + (f" ({name['type']})" if name else "") + f"  ip {m.get('ipAddress') or '-'}"
+            f"  port {m.get('port') or '-'}  {m.get('protocol') or ''}  {'inbound' if m.get('isInbound') else 'outbound'}",
+            f"traffic   down {size(st.get('bytesReceived', 0))}  up {size(st.get('bytesSent', 0))}"
+            f"  last allowed {age(st.get('lastAllowed'))}  last denied {age(st.get('lastBlocked'))}",
+            f"default   {m.get('defaultAction')}",
+        ]
+        for r in m.get("coveringRules", []) + m.get("relatedRules", []):
+            desc = ", ".join(f"{k}={v}" for k, v in r.items() if k not in ("type", "id", "isDisabled") and v not in (None, "", [], {}))
+            lines.append(f"rule      {r.get('type')} #{r.get('id', '')} {desc}" + (" (disabled)" if r.get("isDisabled") else ""))
+        self.query_one("#info", Static).update("\n".join(lines[:8]))
+
+    def log_line(self, s):
+        line = f"{datetime.now():%Y-%m-%d %H:%M:%S}  {s}"
+        self.query_one(RichLog).write(line)
+        with LOG.open("a") as f: f.write(line + "\n")
+
+    # ---- actions -------------------------------------------------------------------------
+    async def action_block(self):
+        rid = self.current()
+        if rid is None: return
+        top = self.path(rid).split(" > ")[0]
+        if top in self.protect and not self.rule.get(rid, "").startswith("deny") and self.armed != rid:
+            self.armed = rid
+            return self.notify(f"{top} is protected: press x again to block it", severity="warning")
+        self.armed, self.pending[rid] = None, (self.path(rid), self.rule.get(rid, ""))
+        await self.send("toggleRule", id=rid)
+
+    async def action_open(self):
+        rid = self.current()
+        if rid is not None and not self.rows[rid]["isExpanded"] and (not self.rows[rid]["isLeaf"] or self.rows[rid]["isMoreItems"]):
+            await self.send("toggleDisclosure", id=rid)
+
+    async def action_close(self):
+        rid = self.current()
+        if rid is None: return
+        if self.rows[rid]["isExpanded"]: return await self.send("toggleDisclosure", id=rid)
+        lvl, i = self.rows[rid]["indentationLevel"], self.order.index(rid)
+        parent = next((p for p in reversed(self.order[:i]) if self.rows[p]["indentationLevel"] < lvl), None)
+        if parent is not None and parent in self.view: self.query_one(DataTable).move_cursor(row=self.view.index(parent))
+
+    def action_sort_activity(self):
+        if self.sort == "activity":
+            self.resort = self.resorts[(self.resorts.index(self.resort) + 1) % len(self.resorts)]
+        self.sort = "activity"
+        self.rerank()
+        self.notify(f"sorted by activity, re-sorted every {self.resort}s", timeout=2)
+
+    def action_sort_name(self):
+        self.sort, self.dirty = "name", True
+        self.notify("sorted by name", timeout=2)
+
+    def action_egress(self):
+        flows, table, info = self.query_one("#flows"), self.query_one(DataTable), self.query_one("#info")
+        if self.egress is None:
+            self.egress = Egress(self)
+            self.run_worker(self.egress.run(), group="egress")
+        flows.display = not flows.display
+        table.display = info.display = not flows.display
+        (flows if flows.display else table).focus()
+        self.draw_egress()
+
+    def draw_egress(self):
+        if self.egress and self.query_one("#flows").display:
+            self.query_one("#graph", Static).update(self.egress.render(self.size.width))
+
+    async def set_period(self, p):
+        self.period, self.filters["visiblePeriodLimit"] = p, secs(p)
+        await self.send("setConnectionsFilters", filters={**self.filters, "visiblePeriodLimit": secs(p)})
+        if self.egress: self.egress.prev = {}; await self.egress.period()
+
+    async def action_period(self, n=None):
+        n = (self.periods.index(self.period) + 1) % len(self.periods) if n is None else n
+        if n < len(self.periods): await self.set_period(self.periods[n])
+
+    def action_search(self):
+        box = self.query_one("#search", Input)
+        box.display = True; box.focus()
+
+    async def on_input_submitted(self, ev):
+        ev.input.display = False
+        self.query_one(DataTable).focus()
+        await self.send("setSearch", query=ev.value)
+
+    async def action_clear_search(self):
+        box = self.query_one("#search", Input)
+        box.value, box.display = "", False
+        self.query_one(DataTable).focus()
+        await self.send("setSearch", query="")
+
+
+def main():
+    conf = tomllib.loads(CONF.read_text()) if CONF.exists() else {}
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--since", default=conf.get("since", "1h"), help="time window, e.g. 15m 30m 1h 24h 7d")
+    a = ap.parse_args()
+    periods = conf.get("periods", ["15m", "30m", "1h", "24h", "7d"])
+    if a.since not in periods: periods = sorted([*periods, a.since], key=secs)
+    Snitch(periods, a.since, conf.get("protect", ["hypr-rdp", "sshd", "littlesnitch"]), conf.get("resort", [10, 20])).run()
+
+
+if __name__ == "__main__":
+    main()
