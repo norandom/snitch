@@ -22,6 +22,8 @@ Subcommands (default: the overview above):
   snitch status            waybar JSON
   snitch default deny|allow  switch Little Snitch's default (deny adds the baseline first)
   snitch baseline          allow rules a deny-by-default box needs (RDP, DNS, DHCP, NTP, apt)
+  snitch baseline --dev    plus the dev tools, each to its own hosts only (Claude, Codex, gh, git,
+                           npm, uv, pip, cargo, go, podman): for jobs that run while you're away
 
 Config ~/.config/snitch/config.toml (all optional):
   periods = ["15m", "30m", "1h", "24h", "7d"]
@@ -504,8 +506,19 @@ class Snitch(App):
 
 
 # ---- rules (ordinary Little Snitch rules: listed, editable and deletable in the web UI) ------
+def narrow(path):
+    """Little Snitch expands wildcards in rule paths by walking the filesystem: a rule for "/**"
+    hung its web server. Paths must be absolute, without "**", with no wildcard in the first two
+    components (/usr/bin/python3.* and ~/.local/share/claude/versions/* are fine)."""
+    if path is None: return None
+    parts = path.split("/")
+    if not path.startswith("/") or "**" in path or any(c in "".join(parts[:3]) for c in "*?["):
+        raise ValueError(f"rule path too broad for Little Snitch: {path}")
+    return path
+
+
 def rule(action, primary=None, via=None, remote=None, port="Any", protocol=31, direction=1, until=None, note=""):
-    now = int(time.time())
+    primary, via, now = narrow(primary), narrow(via), int(time.time())
     return {"id": 0, "primaryExecutable": primary, "viaExecutable": via, "remotePattern": remote or {"type": "any"},
             "port": port, "protocol": protocol, "direction": direction, "priority": 1, "action": action,
             "isDisabled": False, "lifetime": {"Until": now + until} if until else "Forever",
@@ -528,7 +541,7 @@ async def daemon_rules(add=()):
     """Add rules; returns (all rules before, rules added)."""
     async with websockets.connect(URL, origin=ORIGIN, max_size=None) as ws:
         await ws.send(json.dumps({"action": "setSection", "section": "rules"}))
-        before, added, end = None, [], time.monotonic() + 4
+        before, added, end = None, [], time.monotonic() + 4 + 0.2 * len(add)
         while time.monotonic() < end and (before is None or len(added) < len(add)):
             try: msgs = json.loads(await asyncio.wait_for(ws.recv(), 0.5))
             except TimeoutError: continue
@@ -546,19 +559,60 @@ BASELINE = [  # what this box needs when everything else is denied by default
     rule("allow", port="53", protocol=6, note="snitch baseline: DNS for every program"),
     rule("allow", port="67-68", protocol=4, direction=3, note="snitch baseline: DHCP"),
     rule("allow", "/usr/lib/systemd/systemd-timesyncd", port="123", protocol=4, note="snitch baseline: time sync"),
-    rule("allow", "/usr/lib/apt/methods/http", note="snitch baseline: apt"),
-    rule("allow", "/usr/lib/apt/methods/https", note="snitch baseline: apt"),
+    rule("allow", "/usr/lib/apt/methods/http", note="snitch baseline: apt (http)"),
+    rule("allow", "/usr/lib/apt/methods/https", note="snitch baseline: apt (https)"),
 ]
 
 
-def baseline():
+H = str(Path.home())
+SESSION = "/usr/bin/start-hyprland"  # Little Snitch's "primary" for everything started in the session
+DEV_TOOLS = [  # (tool, program paths: narrow globs survive updates, the hosts it needs[, launchers])
+    ("Claude Code", [f"{H}/.local/share/claude/versions/*"], "anthropic.com,claude.ai,claude.com"),
+    ("Codex", [f"{H}/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/*/bin/codex",
+               f"{H}/.codex/packages/app-server-daemon/releases/*/bin/codex"], "chatgpt.com,openai.com,oaiusercontent.com"),
+    ("Copilot CLI", [f"{H}/.local/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot"],
+     "github.com,githubcopilot.com"),
+    ("gh", ["/usr/bin/gh"], "github.com,githubusercontent.com"),
+    ("git", ["/usr/lib/git-core/git-remote-http"], "github.com"),
+    ("npm", ["/usr/bin/node"], "npmjs.org"),
+    ("uv", [f"{H}/.local/bin/uv"], "pypi.org,pythonhosted.org,astral.sh,github.com,githubusercontent.com"),
+    ("pip", ["/usr/bin/python3.*", f"{H}/.local/share/uv/python/*/bin/python3*"], "pypi.org,pythonhosted.org"),
+    ("cargo", ["/usr/bin/cargo"], "crates.io"),
+    ("go", ["/usr/lib/go-*/bin/go", f"{H}/go/pkg/mod/golang.org/toolchain@*/bin/go"], "golang.org,storage.googleapis.com"),
+    ("podman", ["/usr/bin/podman"], "docker.io,docker.com,ghcr.io,quay.io,gcr.io,githubusercontent.com"),
+    # the bar's quota module: waybar (a systemd user service) is its own "primary"
+    ("bar quota", [f"{H}/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/*/bin/codex"],
+     "chatgpt.com,openai.com", ["/usr/bin/waybar"]),
+    ("bar quota", [f"{H}/.local/bin/hypr-agent-quota"], "anthropic.com,chatgpt.com,openai.com", ["/usr/bin/waybar"]),
+]
+
+
+def dev_rules():
+    """Two rules per program: started in the session (primary = the session, via = the program; never
+    a session-wide rule, that would open the hosts to everything) and running on its own."""
+    out = []
+    for tool, paths, hosts, *launchers in DEV_TOOLS:
+        launchers = launchers[0] if launchers else [SESSION]
+        for p in paths:
+            remote, where = {"type": "domains", "value": hosts}, p.replace(H, "~")
+            for launcher in launchers:
+                place = "in the session" if launcher == SESSION else f"started by {Path(launcher).name}"
+                out.append(rule("allow", launcher, p, remote, note=f"snitch dev: {tool}, {where}, {place}"))
+            if SESSION in launchers:
+                out.append(rule("allow", p, None, remote, note=f"snitch dev: {tool}, {where}, on its own"))
+    return out
+
+
+def baseline(dev=False):
+    want = BASELINE + (dev_rules() if dev else [])
     have = {r.get("notes") for r in asyncio.run(daemon_rules())[0]}
-    missing = [r for r in BASELINE if r["notes"] not in have]
-    added = asyncio.run(daemon_rules(missing))[1] if missing else []
-    for r in BASELINE:
-        print(("added    " if r["notes"] not in have else "present  ") + r["notes"])
-    if len(added) != len(missing):
-        sys.exit(f"only {len(added)} of {len(missing)} baseline rules were stored")
+    missing = [r for r in want if r["notes"] not in have]
+    if missing: asyncio.run(daemon_rules(missing))
+    stored = {r.get("notes") for r in asyncio.run(daemon_rules())[0]}  # read back: the daemon batches its replies
+    for r in want:
+        print(("present  " if r["notes"] in have else "added    " if r["notes"] in stored else "MISSING  ") + r["notes"])
+    if any(r["notes"] not in stored for r in want):
+        sys.exit("some rules were not stored")
 
 
 def deny_by_default():
@@ -725,11 +779,12 @@ def main():
                     choices=["overview", "egress", "watch", "ask", "status", "default", "baseline"])
     ap.add_argument("arg", nargs="?", help="ask: the alert file; default: deny or allow")
     ap.add_argument("--since", default=conf.get("since", "1h"), help="time window, e.g. 15m 30m 1h 24h 7d")
+    ap.add_argument("--dev", action="store_true", help="baseline: also the dev tools' allow rules")
     a = ap.parse_args()
     if a.cmd == "watch": return asyncio.run(watch(conf))
     if a.cmd == "ask": return ask(a.arg, conf)
     if a.cmd == "status": return waybar_status()
-    if a.cmd == "baseline": return baseline()
+    if a.cmd == "baseline": return baseline(dev=a.dev)
     if a.cmd == "default":
         if a.arg not in ("deny", "allow"): ap.error("snitch default deny|allow")
         return set_default(a.arg)

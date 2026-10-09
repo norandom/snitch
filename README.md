@@ -67,6 +67,23 @@ popups aren't running (`snitch-watch.service`).
 
 ![the shield in the bar](bar.png)
 
+### Dev tools and overnight jobs
+
+Nobody answers popups while you're away, so jobs that run overnight need their rules before:
+
+```sh
+snitch baseline --dev
+```
+
+adds allow rules for the dev tools, each to its own hosts only: Claude Code → Anthropic,
+Codex → OpenAI, Copilot / `gh` / `git` → GitHub, `npm` → npmjs.org, `uv` / `pip` → PyPI,
+`cargo` → crates.io, `go` → golang.org, `podman` → the registries, and the bar's quota module.
+Versioned installs are matched with narrow wildcards (`~/.local/share/claude/versions/*`), so
+the rules survive updates. Each tool gets a rule for "started in the session" and one for
+"running on its own"; there is no session-wide rule, which would open those hosts to
+everything. General-purpose tools such as `curl` are left out on purpose: they get a popup.
+Running it again only adds what's missing.
+
 ## The away lock
 
 You are the pro while you're connected: nothing changes. When the RDP session is gone for
@@ -89,4 +106,5 @@ without the password, or a connection a local process makes itself, doesn't coun
 | ✅ unattended agents doing something unplanned while you're away | no sudo, no new rules |
 | ✅ malware adding allow rules while you're away | the UI is closed to your processes |
 | ⚠️ malware while you're connected | you have passwordless sudo then, and that is root. Watch the popups and the egress graph |
+| ⚠️ wildcards in rule paths | Little Snitch expands them on disk: `/**` hung its web server once. `snitch` refuses paths without two fixed leading components |
 | ⚠️ the RDP password | stored in plain text in `~/.config/hypr-rdp/password`. Keep it different from your login password |
