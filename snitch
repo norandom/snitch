@@ -562,6 +562,13 @@ BASELINE = [  # what this box needs when everything else is denied by default
     # the local network is always open, both ways (RDP and SSH clients, the cluster, the router)
     rule("allow", remote={"type": "localNet"}, direction=3, note="snitch baseline: local network, always"),
     rule("allow", "/usr/bin/hypr-rdp", direction=3, note="snitch baseline: RDP session (hypr-rdp), never block"),
+    # Anthropic for any program: right after Little Snitch starts, rules with a program path (Claude's
+    # versions/*) take minutes to apply and some connections come without an identified program; a
+    # rule without a path applies at once (like the local network) and Claude Code keeps working
+    rule("allow", remote={"type": "domains", "value": "anthropic.com,claude.ai,claude.com"},
+         note="snitch baseline: Anthropic (Claude Code) for any program"),
+    rule("allow", remote={"type": "ipAddresses", "value": "160.79.104.0/23,2607:6bc0::/48"},
+         note="snitch baseline: Anthropic API addresses for any program"),
     rule("allow", port="53", protocol=6, note="snitch baseline: DNS for every program"),
     rule("allow", port="67-68", protocol=4, direction=3, note="snitch baseline: DHCP"),
     rule("allow", "/usr/lib/systemd/systemd-timesyncd", port="123", protocol=4, note="snitch baseline: time sync"),

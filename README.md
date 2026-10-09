@@ -68,6 +68,8 @@ that already exist when it restarts, its per-program rules don't apply yet, so e
 denied, the RDP session included. Hence:
 
 * the local network is always allowed (a baseline rule for any program, both directions)
+* Anthropic (Claude Code) is allowed for any program: rules with a program path take minutes to
+  apply after Little Snitch starts, and some connections come without an identified program
 * `snitch default deny` is only a trial: a root timer goes back to allow after `trial` (10 min),
   and an open trial at boot is ended before Little Snitch starts
 * recommended: stay on allow, watch the overview and the egress graph, block with `x`
