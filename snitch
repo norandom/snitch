@@ -111,6 +111,36 @@ class Tree:
             return False
         return True
 
+    def subtree(self, rid):
+        """Ids below rid (the rows after it with a deeper indentation)."""
+        i, lvl, out = self.order.index(rid), self.rows[rid]["indentationLevel"], []
+        for nid in self.order[i + 1:]:
+            if self.rows[nid]["indentationLevel"] <= lvl: break
+            out.append(nid)
+        return out
+
+    def deepest(self, rids):
+        """The daemon sends a blocked event for every visible row on the way to the connection
+        (process, "x via y", host): keep only the deepest of each, one per blocked connection."""
+        rids = {r for r in rids if r in self.rows}
+        return [r for r in rids if not rids.intersection(self.subtree(r))]
+
+    def label(self, rid):
+        """Readable: program (started by) > destination, e.g. curl (start-hyprland) > example.com."""
+        i, lvl, up = self.order.index(rid), self.rows[rid]["indentationLevel"], []
+        for j in range(i - 1, -1, -1):
+            r = self.rows[self.order[j]]
+            if r["indentationLevel"] < lvl:
+                up.insert(0, r); lvl = r["indentationLevel"]
+            if lvl == 0: break
+        titles = [r["title"] for r in up] + [self.rows[rid]["title"]]
+        if not up: return titles[0]
+        via = next((t.split(" via ", 1)[1] for t in titles if " via " in t), None)
+        who = f"{program(via)} ({titles[0]})" if via else program(titles[0])
+        where = [t for t in titles[1:] if " via " not in t and t not in GROUPS]
+        inbound = "Inbound" in titles
+        return f"{who} {'<' if inbound else '>'} {where[-1] if where else titles[-1]}"
+
     def walk(self):
         """(row, ancestors) in tree order."""
         stack = []
@@ -160,7 +190,7 @@ class Egress:
     per connection, so the list view is untouched) and turns it into sender -> destination."""
 
     def __init__(self, app):
-        self.app, self.tree, self.ws, self.asked, self.prev = app, Tree(), None, set(), {}
+        self.app, self.tree, self.ws, self.asked, self.prev, self.logged = app, Tree(), None, set(), {}, {}
 
     async def run(self):
         while True:
@@ -172,9 +202,21 @@ class Egress:
                         for m in json.loads(raw):
                             if self.tree.apply(m) and m.get("update") == "insertConnectionRows":
                                 await self.expand(m["rows"])
+                            elif m.get("update") == "trafficEvents":
+                                self.log_blocked(m.get("data", []))
             except (OSError, websockets.WebSocketException):
                 self.ws = None
                 await asyncio.sleep(3)
+
+    def log_blocked(self, events):
+        """The log lines for blocked connections come from this expanded tree: the list view is
+        mostly collapsed, where an event only names the process."""
+        now = time.monotonic()
+        for rid in self.tree.deepest(e.get("rowId") for e in events if e.get("type") == "blocked"):
+            what = self.tree.label(rid)
+            if now - self.logged.get(what, 0) >= 10:
+                self.logged[what] = now
+                self.app.log_line("denied    " + what)
 
     async def period(self):
         if self.ws:
@@ -287,6 +329,8 @@ class Snitch(App):
         for line in LOG.read_text().splitlines()[-5:] if LOG.exists() else []:
             self.query_one(RichLog).write(line)
         self.run_worker(self.stream(), exclusive=True)
+        self.egress = Egress(self)  # hidden expanded connection: egress graph and the denied log
+        self.run_worker(self.egress.run(), group="egress")
         self.set_interval(0.5, self.redraw)
         self.set_interval(1, self.tick)
         self.set_interval(2, self.draw_egress)
@@ -328,10 +372,6 @@ class Snitch(App):
             self.filter_off = m.get("filterDisabled", False)
         elif u == "setInspector":
             self.show_info(m)
-        elif u == "trafficEvents":
-            for e in m.get("data", []):
-                if e.get("type") == "blocked" and e.get("rowId") in self.rows:
-                    self.log_line("denied    " + self.path(e["rowId"]))
 
     # ---- view ----------------------------------------------------------------------------
     def path(self, rid):
@@ -471,9 +511,6 @@ class Snitch(App):
 
     def action_egress(self):
         flows, table, info = self.query_one("#flows"), self.query_one(DataTable), self.query_one("#info")
-        if self.egress is None:
-            self.egress = Egress(self)
-            self.run_worker(self.egress.run(), group="egress")
         flows.display = not flows.display
         table.display = info.display = not flows.display
         (flows if flows.display else table).focus()
@@ -758,9 +795,8 @@ async def watch(conf):
                             info[m["row"]] = m
                             await consider(m)
                         elif u == "trafficEvents":
-                            for e in m.get("data", []):
-                                rid = e.get("rowId")
-                                if e.get("type") != "blocked" or rid not in tree.rows: continue
+                            ids = tree.deepest(e.get("rowId") for e in m.get("data", []) if e.get("type") == "blocked")
+                            for rid in ids:
                                 now = time.time()
                                 blocked[:] = [t for t in blocked if now - t < 3600] + [now]
                                 if rules.get(rid) not in prompt_on: continue
