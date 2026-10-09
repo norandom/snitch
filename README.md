@@ -57,12 +57,22 @@ deletable in the web UI, and 15-minute rules expire inside the daemon itself. De
 blocks are logged to `~/.local/state/snitch/snitch.log`.
 
 ```sh
-snitch default deny    # baseline rules first (RDP, DNS, DHCP, NTP, apt), then deny by default
-snitch default allow   # back
+snitch default deny          # a trial: baseline first, back to allow after 10 min and at the next boot
+snitch default deny --keep   # keep it
+snitch default allow         # back
 ```
 
-The baseline keeps your RDP session and the system's own needs open, so deny by default can't
-lock you out. In the bar, the shield is solid for deny, an outline for allow, and red when the
+**Deny by default locked this box out once** (2026-10-09): RDP and SSH were cut, it took a
+reboot and the Proxmox console. Right after Little Snitch (1.1.0) starts, and for connections
+that already exist when it restarts, its per-program rules don't apply yet, so everything is
+denied, the RDP session included. Hence:
+
+* the local network is always allowed (a baseline rule for any program, both directions)
+* `snitch default deny` is only a trial: a root timer goes back to allow after `trial` (10 min),
+  and an open trial at boot is ended before Little Snitch starts
+* recommended: stay on allow, watch the overview and the egress graph, block with `x`
+
+In the bar, the shield is solid for deny, an outline for allow, and red when the
 popups aren't running (`snitch-watch.service`).
 
 ![the shield in the bar](bar.png)
@@ -76,7 +86,8 @@ snitch baseline --dev
 ```
 
 adds allow rules for the dev tools, each to its own hosts only: Claude Code → Anthropic,
-Codex → OpenAI, Copilot / `gh` / `git` → GitHub, `npm` → npmjs.org, `uv` / `pip` → PyPI,
+Codex → OpenAI, Copilot / `gh` → GitHub, `git` (https and ssh) → GitHub / GitLab / Codeberg /
+Gitea, `apt` from the session (sudo, deploys) → its repositories, `npm` → npmjs.org, `uv` / `pip` → PyPI,
 `cargo` → crates.io, `go` → golang.org, `podman` → the registries, `helm` → chart sources and
 the cluster on the local network, `kubectl` / `k9s` / `ktop` → the cluster, and the bar's quota
 module.
@@ -104,9 +115,10 @@ without the password, or a connection a local process makes itself, doesn't coun
 
 | | |
 |---|---|
-| ✅ a package phoning home | denied by default, you get asked |
+| ⚠️ a package phoning home | only with deny by default (popups); on allow you see it in the overview and block it with `x` |
 | ✅ unattended agents doing something unplanned while you're away | no sudo, no new rules |
 | ✅ malware adding allow rules while you're away | the UI is closed to your processes |
 | ⚠️ malware while you're connected | you have passwordless sudo then, and that is root. Watch the popups and the egress graph |
+| ⚠️ deny by default | cut RDP and SSH once (rules don't apply right after Little Snitch starts): only as a 10-minute trial |
 | ⚠️ wildcards in rule paths | Little Snitch expands them on disk: `/**` hung its web server once. `snitch` refuses paths without two fixed leading components |
 | ⚠️ the RDP password | stored in plain text in `~/.config/hypr-rdp/password`. Keep it different from your login password |
