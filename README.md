@@ -49,6 +49,12 @@ With **deny by default**, a connection no rule covers is blocked and a popup ask
 | `O` / `X` | allow / block for 15 minutes (`temporary` in the config) |
 | esc | decide later (asks again after `snooze`, 10 min) |
 
+Below the destination the popup shows a **trace**: the running process behind the connection
+and how it was started (`session › terminator › bash › claude`, with PIDs; the session itself is
+known and shown as `session`), its command line and working directory. Little Snitch only names
+the program, so `snitch` looks the process up in `/proc` the moment the block arrives;
+short-lived programs such as `curl` may have exited by then, and the popup says so.
+
 The popup ignores keys for its first 0.6 s, so it can't catch an `o` or `x` you were typing
 somewhere else. The program has to retry after you allow it; nothing is held open.
 

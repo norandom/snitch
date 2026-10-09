@@ -39,6 +39,7 @@ Log of blocks / unblocks and blocked connections: ~/.local/state/snitch/snitch.l
 """
 import argparse
 import asyncio
+import fnmatch
 import json
 import math
 import os
@@ -725,6 +726,47 @@ def set_default(mode, keep=False, trial="10m"):
     subprocess.run(["pkill", "-RTMIN+14", "-x", "waybar"])
 
 
+# ---- trace: which running process is it, and how was it started -------------------------------
+SESSION_ROOTS = ("start-hyprland", "Hyprland", "systemd")  # known: shown as "session"
+
+
+def proc(pid, name):
+    try:
+        with open(f"/proc/{pid}/{name}", "rb") as f: return f.read()
+    except OSError:
+        return b""
+
+
+def trace(info):
+    """The process behind a blocked connection: Little Snitch only names the program (via, else
+    primary). Find a running process with that executable (newest first), and walk up to the
+    session. Short-lived programs may be gone already."""
+    target = info.get("viaExecutable") or info.get("primaryExecutable")
+    if not target or Path(target).name in SESSION_ROOTS: return None
+    found = []
+    for d in os.listdir("/proc"):
+        if not d.isdigit(): continue
+        try: exe = os.readlink(f"/proc/{d}/exe").removesuffix(" (deleted)")
+        except OSError: continue
+        if exe == target or fnmatch.fnmatch(exe, target):
+            stat = proc(d, "stat").rsplit(b")", 1)[-1].split()
+            found.append((int(stat[19]) if len(stat) > 19 else 0, int(d)))
+    if not found: return {"gone": True}
+    pid = max(found)[1]
+    chain, p = [], pid
+    while p > 1:
+        comm = proc(p, "comm").decode(errors="replace").strip()
+        if comm in SESSION_ROOTS:
+            chain.insert(0, "session"); break
+        chain.insert(0, f"{comm} {p}")
+        ppid = re.search(rb"^PPid:\s+(\d+)", proc(p, "status"), re.M)
+        p = int(ppid.group(1)) if ppid else 1
+    cmd = proc(pid, "cmdline").replace(b"\0", b" ").decode(errors="replace").strip()
+    try: cwd = os.readlink(f"/proc/{pid}/cwd").replace(str(Path.home()), "~")
+    except OSError: cwd = "?"
+    return {"chain": chain, "cmd": cmd[:160], "cwd": cwd, "running": len(found)}
+
+
 # ---- alerts ---------------------------------------------------------------------------------
 async def watch(conf):
     """Third hidden connection: only denied rows, fully expanded. A blocked connection that no
@@ -771,8 +813,10 @@ async def watch(conf):
                (m.get("remoteName") or {}).get("value") or m.get("ipAddress"), m.get("isInbound"))
         if time.time() - asked_at.get(key, 0) < snooze: return
         asked_at[key] = time.time()
-        await queue.put({k: m.get(k) for k in ("primaryExecutable", "viaExecutable", "remoteName",
-                                               "ipAddress", "isInbound", "protocol", "port")})
+        alert = {k: m.get(k) for k in ("primaryExecutable", "viaExecutable", "remoteName",
+                                       "ipAddress", "isInbound", "protocol", "port")}
+        alert["trace"] = trace(alert)  # now, while the process may still be running
+        await queue.put(alert)
 
     _tasks = [asyncio.create_task(popups()), asyncio.create_task(heartbeat())]  # keep references
     while True:
@@ -823,10 +867,21 @@ def ask(path, conf):
     G, R, D, B, N = "\033[32m", "\033[31m", "\033[2m", "\033[1m", "\033[0m"
     print(f"\033]2;snitch alert\007\n {R}{B}BLOCKED{N} {'inbound' if info.get('isInbound') else 'outbound'}"
           f" connection{D}  denied by default  {datetime.now():%H:%M:%S}{N}\n")
-    print(f"   program  {B}{Path(prog).name}{N}  {D}{prog}{N}")
+    print(f"   program  {B}{program(Path(prog).name)}{N}  {D}{prog}{N}")
     if info.get("viaExecutable") and start: print(f"   for      {Path(start).name}  {D}{start}{N}")
     print(f"   {'from' if info.get('isInbound') else 'to  '}     {B}{remote}{N}  {D}{name.get('type') or 'ip'}"
-          f"{'  port ' + str(info['port']) if info.get('port') else ''}{N}\n")
+          f"{'  port ' + str(info['port']) if info.get('port') else ''}{N}")
+    t = info.get("trace")
+    if t and t.get("chain"):
+        more = f"  ({t['running']} running, newest)" if t.get("running", 1) > 1 else ""
+        print(f"   trace    {' › '.join(t['chain'])}{D}{more}{N}")
+        print(f"   command  {t['cmd']}")
+        print(f"   in       {D}{t['cwd']}{N}")
+    elif t and t.get("gone"):
+        print(f"   trace    {D}the process has already exited{N}")
+    elif not info.get("viaExecutable") and not info.get("primaryExecutable"):
+        print(f"   trace    {D}Little Snitch could not identify the program{N}")
+    print()
     print(f"   {G}o{N} allow   {R}x{N} block   {G}O{N} allow {temp}   {R}X{N} block {temp}   {D}esc later{N}")
     time.sleep(0.6)  # a popup that appears while typing must not take the next key
     fd = sys.stdin.fileno()
