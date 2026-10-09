@@ -15,14 +15,24 @@ process > host > address tree, the same rules. Blocking here is blocking there.
   S         sort by name                 e            egress graph (sender -> destination)
   q         quit
 
+Subcommands (default: the overview above):
+  snitch egress            start in the egress graph
+  snitch watch             alert popups for connections denied by default (user service)
+  snitch ask FILE          one popup: o allow, x block, O / X for `temporary`, esc later
+  snitch status            waybar JSON
+  snitch default deny|allow  switch Little Snitch's default (deny adds the baseline first)
+  snitch baseline          allow rules a deny-by-default box needs (RDP, DNS, DHCP, NTP, apt)
+
 Config ~/.config/snitch/config.toml (all optional):
   periods = ["15m", "30m", "1h", "24h", "7d"]
   since   = "1h"
   protect = ["hypr-rdp", "sshd"]   # blocking these asks for a second x
   resort  = [10, 20]               # seconds between activity re-sorts, s cycles
+  temporary = "15m"                # O / X in the popup
+  snooze  = "10m"                  # esc in the popup: ask again after this
 Log of blocks / unblocks and blocked connections: ~/.local/state/snitch/snitch.log
 """
-import argparse, asyncio, json, math, re, time, tomllib
+import argparse, asyncio, json, math, os, re, subprocess, sys, termios, time, tomllib, tty
 from datetime import datetime
 from pathlib import Path
 
@@ -37,6 +47,10 @@ URL, ORIGIN = "ws://127.0.0.1:3031/stream", "http://127.0.0.1:3031"
 CONF = Path.home() / ".config/snitch/config.toml"
 LOG = Path.home() / ".local/state/snitch/snitch.log"
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+RUN = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "snitch"
+LS_CONF = Path("/var/lib/littlesnitch/config/main.toml")
+LS_OVERRIDE = Path("/var/lib/littlesnitch/override/config/main.toml")
+BIN = Path.home() / ".local/bin"
 
 
 def secs(p): return int(p[:-1]) * UNITS[p[-1]]
@@ -92,6 +106,15 @@ class Tree:
 
 
 GROUPS = ("Inbound", "IP Addresses")
+
+
+async def expand_to_hosts(ws, rows, asked):
+    """Open processes, "x via y" senders, groups and "n more" rows - not the hosts."""
+    for r in rows:
+        want = r["indentationLevel"] == 0 or " via " in r["title"] or r["title"] in GROUPS or r["isMoreItems"]
+        if want and not r["isExpanded"] and not (r["isLeaf"] and not r["isMoreItems"]) and r["id"] not in asked:
+            asked.add(r["id"])
+            await ws.send(json.dumps({"action": "toggleDisclosure", "id": r["id"]}))
 SPARK = " ▏▎▍▌▋▊▉█"
 
 
@@ -142,12 +165,7 @@ class Egress:
             await self.ws.send(json.dumps({"action": "setConnectionsFilters",
                                            "filters": {**self.app.filters, "visiblePeriodLimit": secs(self.app.period)}}))
 
-    async def expand(self, rows):
-        for r in rows:  # processes, "x via y" senders, groups and "n more" - not the hosts
-            want = r["indentationLevel"] == 0 or " via " in r["title"] or r["title"] in GROUPS or r["isMoreItems"]
-            if want and not r["isExpanded"] and not (r["isLeaf"] and not r["isMoreItems"]) and r["id"] not in self.asked:
-                self.asked.add(r["id"])
-                await self.ws.send(json.dumps({"action": "toggleDisclosure", "id": r["id"]}))
+    async def expand(self, rows): await expand_to_hosts(self.ws, rows, self.asked)
 
     def flows(self):
         """{sender: {destination: bytes sent}}; the sender is the program that really talks."""
@@ -256,6 +274,7 @@ class Snitch(App):
         self.set_interval(0.5, self.redraw)
         self.set_interval(1, self.tick)
         self.set_interval(2, self.draw_egress)
+        if getattr(self, "start_egress", False): self.call_after_refresh(self.action_egress)
 
     # ---- daemon connection -------------------------------------------------------------
     async def stream(self):
@@ -473,14 +492,236 @@ class Snitch(App):
         await self.send("setSearch", query="")
 
 
+# ---- rules (ordinary Little Snitch rules: listed, editable and deletable in the web UI) ------
+def rule(action, primary=None, via=None, remote=None, port="Any", protocol=31, direction=1, until=None, note=""):
+    now = int(time.time())
+    return {"id": 0, "primaryExecutable": primary, "viaExecutable": via, "remotePattern": remote or {"type": "any"},
+            "port": port, "protocol": protocol, "direction": direction, "priority": 1, "action": action,
+            "isDisabled": False, "lifetime": {"Until": now + until} if until else "Forever",
+            "creationDate": now, "modificationDate": now, "notes": note}
+
+
+def rule_for(info, action, until=None):
+    """A rule for one blocked connection as the daemon described it (setInspector)."""
+    name = info.get("remoteName") or {}
+    if name.get("value"):
+        remote = {"type": "domains" if name.get("type") == "domain" else "hosts", "value": name["value"]}
+    else:
+        remote = {"type": "ipAddresses", "value": info["ipAddress"]}
+    note = f"snitch popup {datetime.now():%Y-%m-%d %H:%M}" + (f", for {until // 60} min" if until else "")
+    return rule(action, info.get("primaryExecutable"), info.get("viaExecutable"), remote,
+                direction=2 if info.get("isInbound") else 1, until=until, note=note)
+
+
+async def daemon_rules(add=()):
+    """Add rules; returns (all rules before, rules added)."""
+    async with websockets.connect(URL, origin=ORIGIN, max_size=None) as ws:
+        await ws.send(json.dumps({"action": "setSection", "section": "rules"}))
+        before, added, end = None, [], time.monotonic() + 4
+        while time.monotonic() < end and (before is None or len(added) < len(add)):
+            try: msgs = json.loads(await asyncio.wait_for(ws.recv(), 0.5))
+            except asyncio.TimeoutError: continue
+            for m in msgs:
+                if m.get("update") == "setRules" and before is None:
+                    before = m["rules"]
+                    for r in add: await ws.send(json.dumps({"action": "addRule", "rule": r}))
+                elif m.get("update") == "updateRules":
+                    added += m.get("rulesAdded", [])
+        return before or [], added
+
+
+BASELINE = [  # what this box needs when everything else is denied by default
+    rule("allow", "/usr/bin/hypr-rdp", direction=3, note="snitch baseline: RDP session (hypr-rdp), never block"),
+    rule("allow", port="53", protocol=6, note="snitch baseline: DNS for every program"),
+    rule("allow", port="67-68", protocol=4, direction=3, note="snitch baseline: DHCP"),
+    rule("allow", "/usr/lib/systemd/systemd-timesyncd", port="123", protocol=4, note="snitch baseline: time sync"),
+    rule("allow", "/usr/lib/apt/methods/http", note="snitch baseline: apt"),
+    rule("allow", "/usr/lib/apt/methods/https", note="snitch baseline: apt"),
+]
+
+
+def baseline():
+    have = {r.get("notes") for r in asyncio.run(daemon_rules())[0]}
+    missing = [r for r in BASELINE if r["notes"] not in have]
+    added = asyncio.run(daemon_rules(missing))[1] if missing else []
+    for r in BASELINE:
+        print(("added    " if r["notes"] not in have else "present  ") + r["notes"])
+    if len(added) != len(missing):
+        sys.exit(f"only {len(added)} of {len(missing)} baseline rules were stored")
+
+
+def deny_by_default():
+    try: return tomllib.loads((LS_OVERRIDE if LS_OVERRIDE.exists() else LS_CONF).read_text()).get("deny_by_default", False)
+    except (OSError, tomllib.TOMLDecodeError): return None
+
+
+def set_default(mode):
+    if mode == "deny": baseline()
+    text = (LS_OVERRIDE if LS_OVERRIDE.exists() else LS_CONF).read_text()
+    text = re.sub(r"(?m)^deny_by_default\s*=.*$", f"deny_by_default = {str(mode == 'deny').lower()}", text)
+    subprocess.run(["sudo", "tee", str(LS_OVERRIDE)], input=text, text=True, stdout=subprocess.DEVNULL, check=True)
+    subprocess.run(["sudo", "systemctl", "restart", "littlesnitch"], check=True)
+    print(f"Little Snitch: {mode} by default (override: {LS_OVERRIDE})")
+    subprocess.run(["pkill", "-RTMIN+14", "-x", "waybar"])
+
+
+# ---- alerts ---------------------------------------------------------------------------------
+async def watch(conf):
+    """Third hidden connection: only denied rows, fully expanded. A blocked connection that no
+    rule covers (denied by default) gets a popup, one at a time."""
+    prompt_on = set(filter(None, os.environ.get("SNITCH_PROMPT_ON", "").split(","))) or {"denyByDefault"}
+    RUN.mkdir(parents=True, exist_ok=True)
+    snooze = secs(conf.get("snooze", "10m"))
+    queue, asked_at, blocked, seq, up = asyncio.Queue(), {}, [], 0, False
+
+    def status():
+        (RUN / "status.json").write_text(json.dumps({"ts": time.time(), "blocked_1h": len(blocked),
+                                                     "queued": queue.qsize(), "down": not up}))
+        subprocess.run(["pkill", "-RTMIN+14", "-x", "waybar"])
+
+    async def heartbeat():  # the bar treats a status older than 2 min as "not running"
+        while True:
+            now = time.time()
+            blocked[:] = [t for t in blocked if now - t < 3600]
+            status()
+            await asyncio.sleep(60)
+
+    async def popups():
+        nonlocal seq
+        while True:
+            info = await queue.get()
+            seq += 1
+            f = RUN / f"ask-{seq}.json"
+            f.write_text(json.dumps(info))
+            test = f"env SNITCH_ASK_KEY={os.environ['SNITCH_ASK_KEY']} " if os.environ.get("SNITCH_ASK_KEY") else ""  # tests
+            subprocess.run([str(BIN / "hypr-launch"), f"{test}foot --app-id=snitch-alert -e {BIN / 'snitch'} ask {f}"])
+            end = time.monotonic() + 600
+            while f.exists() and time.monotonic() < end: await asyncio.sleep(0.3)
+            f.unlink(missing_ok=True)
+            status()
+
+    asyncio.ensure_future(popups())
+    asyncio.ensure_future(heartbeat())
+    while True:
+        try:
+            async with websockets.connect(URL, origin=ORIGIN, max_size=None) as ws:
+                tree, rules, info, asked, up = Tree(), {}, {}, set(), True
+                await ws.send(json.dumps({"action": "setConnectionsFilters", "filters": {
+                    "direction": 3, "action": "deny", "localnet": None, "localhost": False, "visiblePeriodLimit": 3600}}))
+                status()
+                async def consider(m):
+                    if not (m.get("remoteName") or {}).get("value") and not m.get("ipAddress"): return
+                    if rules.get(m["row"]) not in prompt_on: return
+                    key = (m.get("primaryExecutable"), m.get("viaExecutable"),
+                           (m.get("remoteName") or {}).get("value") or m.get("ipAddress"), m.get("isInbound"))
+                    if time.time() - asked_at.get(key, 0) < snooze: return
+                    asked_at[key] = time.time()
+                    await queue.put({k: m.get(k) for k in ("primaryExecutable", "viaExecutable", "remoteName",
+                                                           "ipAddress", "isInbound", "protocol", "port")})
+
+                async for raw in ws:
+                    for m in json.loads(raw):
+                        u = m.get("update")
+                        if tree.apply(m) and u == "insertConnectionRows":
+                            await expand_to_hosts(ws, m["rows"], asked)
+                        elif u == "updateRuleButtons":
+                            rules.update({r["rowId"]: r["rule"] for r in m["rows"]})
+                        elif u == "setInspector" and m.get("row") in tree.rows:
+                            info[m["row"]] = m
+                            await consider(m)
+                        elif u == "trafficEvents":
+                            for e in m.get("data", []):
+                                rid = e.get("rowId")
+                                if e.get("type") != "blocked" or rid not in tree.rows: continue
+                                now = time.time()
+                                blocked[:] = [t for t in blocked if now - t < 3600] + [now]
+                                if rules.get(rid) not in prompt_on: continue
+                                if rid in info: await consider(info[rid])
+                                else: await ws.send(json.dumps({"action": "selectRow", "id": rid}))
+                        if u == "trafficEvents": status()
+
+        except (OSError, websockets.WebSocketException):
+            up = False
+            status()
+            await asyncio.sleep(3)
+
+
+def ask(path, conf):
+    """The popup: o allow, x block, O / X the same for `temporary`, esc ask later."""
+    f, temp = Path(path), conf.get("temporary", "15m")
+    try:
+        info = json.loads(f.read_text())
+    except OSError:
+        return
+    name = info.get("remoteName") or {}
+    remote = name.get("value") or info.get("ipAddress") or "?"
+    prog, start = info.get("viaExecutable") or info.get("primaryExecutable") or "?", info.get("primaryExecutable")
+    G, Y, R, D, B, N = "\033[32m", "\033[33m", "\033[31m", "\033[2m", "\033[1m", "\033[0m"
+    print(f"\033]2;snitch alert\007\n {R}{B}BLOCKED{N} {'inbound' if info.get('isInbound') else 'outbound'}"
+          f" connection{D}  denied by default  {datetime.now():%H:%M:%S}{N}\n")
+    print(f"   program  {B}{Path(prog).name}{N}  {D}{prog}{N}")
+    if info.get("viaExecutable") and start: print(f"   for      {Path(start).name}  {D}{start}{N}")
+    print(f"   {'from' if info.get('isInbound') else 'to  '}     {B}{remote}{N}  {D}{name.get('type') or 'ip'}"
+          f"{'  port ' + str(info['port']) if info.get('port') else ''}{N}\n")
+    print(f"   {G}o{N} allow   {R}x{N} block   {G}O{N} allow {temp}   {R}X{N} block {temp}   {D}esc later{N}")
+    time.sleep(0.6)  # a popup that appears while typing must not take the next key
+    fd = sys.stdin.fileno()
+    termios.tcflush(fd, termios.TCIFLUSH)
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        key = os.environ.get("SNITCH_ASK_KEY") or os.read(fd, 1).decode(errors="ignore")
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    choice = {"o": ("allow", None), "x": ("deny", None), "O": ("allow", secs(temp)), "X": ("deny", secs(temp))}.get(key)
+    try:
+        if choice:
+            r = rule_for(info, *choice)
+            added = asyncio.run(daemon_rules([r]))[1]
+            what = ("ALLOWED   " if choice[0] == "allow" else "BLOCKED   ") + (f"for {temp} " if choice[1] else "")
+            line = f"{datetime.now():%Y-%m-%d %H:%M:%S}  {what}{Path(prog).name} > {remote} (popup)"
+            LOG.parent.mkdir(parents=True, exist_ok=True)
+            with LOG.open("a") as log: log.write(line + "\n")
+            print(f"\n   {G if added else R}{'rule stored: ' + what.strip() if added else 'the daemon did not store the rule'}{N}")
+            time.sleep(0.6 if added else 4)
+    finally:
+        f.unlink(missing_ok=True)
+
+
+def waybar_status():
+    mode = deny_by_default()
+    try: st = json.loads((RUN / "status.json").read_text())
+    except (OSError, ValueError): st = {}
+    alive = st and time.time() - st.get("ts", 0) < 120 and not st.get("down")
+    icon = "\U000F0498" if mode else "\U000F0499"  # shield (deny by default) / shield outline (allow)
+    cls = "down" if mode is None or not alive else ("deny" if mode else "allow")
+    tip = [f"Little Snitch: {'deny' if mode else 'allow'} by default" if mode is not None else "Little Snitch: config unreadable",
+           f"blocked in the last hour: {st.get('blocked_1h', 0)}" if alive else "alerts: snitch-watch not running",
+           "click: connections / right-click: egress graph", "snitch default deny|allow switches the mode"]
+    print(json.dumps({"text": icon + (f" {st['blocked_1h']}" if alive and st.get("blocked_1h") else ""), "class": cls,
+                      "tooltip": "\n".join(tip)}))
+
+
 def main():
     conf = tomllib.loads(CONF.read_text()) if CONF.exists() else {}
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", nargs="?", default="overview",
+                    choices=["overview", "egress", "watch", "ask", "status", "default", "baseline"])
+    ap.add_argument("arg", nargs="?", help="ask: the alert file; default: deny or allow")
     ap.add_argument("--since", default=conf.get("since", "1h"), help="time window, e.g. 15m 30m 1h 24h 7d")
     a = ap.parse_args()
+    if a.cmd == "watch": return asyncio.run(watch(conf))
+    if a.cmd == "ask": return ask(a.arg, conf)
+    if a.cmd == "status": return waybar_status()
+    if a.cmd == "baseline": return baseline()
+    if a.cmd == "default":
+        if a.arg not in ("deny", "allow"): ap.error("snitch default deny|allow")
+        return set_default(a.arg)
     periods = conf.get("periods", ["15m", "30m", "1h", "24h", "7d"])
     if a.since not in periods: periods = sorted([*periods, a.since], key=secs)
-    Snitch(periods, a.since, conf.get("protect", ["hypr-rdp", "sshd", "littlesnitch"]), conf.get("resort", [10, 20])).run()
+    app = Snitch(periods, a.since, conf.get("protect", ["hypr-rdp", "sshd", "littlesnitch"]), conf.get("resort", [10, 20]))
+    app.start_egress = a.cmd == "egress"
+    app.run()
 
 
 if __name__ == "__main__":
