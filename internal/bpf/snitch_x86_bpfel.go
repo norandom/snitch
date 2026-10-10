@@ -13,27 +13,62 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type SnitchControlState struct {
+	_           structs.HostLayout
+	HeartbeatNs uint64
+	Mode        uint32
+	Pad         uint32
+}
+
 type SnitchEvent struct {
-	_      structs.HostLayout
-	Pid    uint32
-	Ppid   uint32
-	ExeIno uint64
-	ExeDev uint32
-	Daddr  uint32
-	Dport  uint16
-	Family uint16
-	Proto  uint8
-	Comm   [16]int8
-	_      [3]byte
+	_       structs.HostLayout
+	Pid     uint32
+	Ppid    uint32
+	ExeIno  uint64
+	ExeDev  uint32
+	Program uint32
+	Addr    [16]uint8
+	Dport   uint16
+	Family  uint8
+	Proto   uint8
+	Verdict uint8
+	Hook    uint8
+	Comm    [16]int8
+	_       [2]byte
+}
+
+type SnitchExeKey struct {
+	_   structs.HostLayout
+	Ino uint64
+	Dev uint32
+	Pad uint32
+}
+
+type SnitchRuleKey struct {
+	_         structs.HostLayout
+	Prefixlen uint32
+	Program   uint32
+	Family    uint8
+	Proto     uint8
+	Port      uint16
+	Addr      [16]uint8
 }
 
 // Names of all BPF objects in the ELF.
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
+	SnitchMapControl        = "control"
 	SnitchMapEvents         = "events"
+	SnitchMapKill           = "kill"
+	SnitchMapPrograms       = "programs"
+	SnitchMapRules          = "rules"
 	SnitchProgSocketConnect = "socket_connect"
+	SnitchProgSocketSendmsg = "socket_sendmsg"
+	SnitchVarUnusedControl  = "unused_control"
 	SnitchVarUnusedEvent    = "unused_event"
+	SnitchVarUnusedExeKey   = "unused_exe_key"
+	SnitchVarUnusedRuleKey  = "unused_rule_key"
 )
 
 // LoadSnitch returns the embedded CollectionSpec for Snitch.
@@ -79,20 +114,28 @@ type SnitchSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type SnitchProgramSpecs struct {
 	SocketConnect *ebpf.ProgramSpec `ebpf:"socket_connect"`
+	SocketSendmsg *ebpf.ProgramSpec `ebpf:"socket_sendmsg"`
 }
 
 // SnitchMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type SnitchMapSpecs struct {
-	Events *ebpf.MapSpec `ebpf:"events"`
+	Control  *ebpf.MapSpec `ebpf:"control"`
+	Events   *ebpf.MapSpec `ebpf:"events"`
+	Kill     *ebpf.MapSpec `ebpf:"kill"`
+	Programs *ebpf.MapSpec `ebpf:"programs"`
+	Rules    *ebpf.MapSpec `ebpf:"rules"`
 }
 
 // SnitchVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type SnitchVariableSpecs struct {
-	UnusedEvent *ebpf.VariableSpec `ebpf:"unused_event"`
+	UnusedControl *ebpf.VariableSpec `ebpf:"unused_control"`
+	UnusedEvent   *ebpf.VariableSpec `ebpf:"unused_event"`
+	UnusedExeKey  *ebpf.VariableSpec `ebpf:"unused_exe_key"`
+	UnusedRuleKey *ebpf.VariableSpec `ebpf:"unused_rule_key"`
 }
 
 // SnitchObjects contains all objects after they have been loaded into the kernel.
@@ -115,12 +158,20 @@ func (o *SnitchObjects) Close() error {
 //
 // It can be passed to LoadSnitchObjects or ebpf.CollectionSpec.LoadAndAssign.
 type SnitchMaps struct {
-	Events *ebpf.Map `ebpf:"events"`
+	Control  *ebpf.Map `ebpf:"control"`
+	Events   *ebpf.Map `ebpf:"events"`
+	Kill     *ebpf.Map `ebpf:"kill"`
+	Programs *ebpf.Map `ebpf:"programs"`
+	Rules    *ebpf.Map `ebpf:"rules"`
 }
 
 func (m *SnitchMaps) Close() error {
 	return _SnitchClose(
+		m.Control,
 		m.Events,
+		m.Kill,
+		m.Programs,
+		m.Rules,
 	)
 }
 
@@ -128,7 +179,10 @@ func (m *SnitchMaps) Close() error {
 //
 // It can be passed to LoadSnitchObjects or ebpf.CollectionSpec.LoadAndAssign.
 type SnitchVariables struct {
-	UnusedEvent *ebpf.Variable `ebpf:"unused_event"`
+	UnusedControl *ebpf.Variable `ebpf:"unused_control"`
+	UnusedEvent   *ebpf.Variable `ebpf:"unused_event"`
+	UnusedExeKey  *ebpf.Variable `ebpf:"unused_exe_key"`
+	UnusedRuleKey *ebpf.Variable `ebpf:"unused_rule_key"`
 }
 
 // SnitchPrograms contains all programs after they have been loaded into the kernel.
@@ -136,11 +190,13 @@ type SnitchVariables struct {
 // It can be passed to LoadSnitchObjects or ebpf.CollectionSpec.LoadAndAssign.
 type SnitchPrograms struct {
 	SocketConnect *ebpf.Program `ebpf:"socket_connect"`
+	SocketSendmsg *ebpf.Program `ebpf:"socket_sendmsg"`
 }
 
 func (p *SnitchPrograms) Close() error {
 	return _SnitchClose(
 		p.SocketConnect,
+		p.SocketSendmsg,
 	)
 }
 
