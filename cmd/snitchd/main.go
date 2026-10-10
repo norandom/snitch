@@ -8,7 +8,6 @@ package main
 import (
 	"encoding/binary"
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -24,6 +23,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	snitchbpf "github.com/norandom/snitch/internal/bpf"
+	"github.com/norandom/snitch/internal/rules"
 )
 
 const pinDir = "/sys/fs/bpf/snitch" // control + kill maps live here (kill: bpftool from a console)
@@ -32,9 +32,22 @@ var verdicts = [...]string{"allow (monitor)", "allow (rule)", "DENY (rule)", "DE
 	"allow (local net)", "allow (heartbeat stale)", "allow (kill switch)"}
 
 func main() {
-	mode := flag.String("mode", "monitor", "monitor (allow + report) or enforce (deny what no rule allows)")
-	duration := flag.Duration("duration", 0, "exit after this long (0: run until signalled)")
-	flag.Parse()
+	cfg, err := parseFlagsTo(os.Args[1:], os.Stderr)
+	if err != nil {
+		var ue *usageError
+		if errors.As(err, &ue) {
+			fmt.Fprintln(os.Stderr, "snitchd:", err)
+			os.Exit(ue.exitCode())
+		}
+		fatal("flags:", err)
+	}
+	mode, duration := &cfg.mode, &cfg.duration
+	// rules first: a bad file is reported before anything touches the kernel
+	notice := func(m string) { fmt.Fprintln(os.Stderr, "snitchd:", m) }
+	snap, err := loadRules(cfg.rules, notice)
+	if err != nil {
+		fatal("rules:", err)
+	}
 	if err := rlimit.RemoveMemlock(); err != nil {
 		fmt.Fprintln(os.Stderr, "memlock:", err)
 	}
@@ -42,7 +55,7 @@ func main() {
 		fatal("pin dir:", err)
 	}
 	var objs snitchbpf.SnitchObjects
-	err := snitchbpf.LoadSnitchObjects(&objs, &ebpf.CollectionOptions{Maps: ebpf.MapOptions{PinPath: pinDir}})
+	err = snitchbpf.LoadSnitchObjects(&objs, &ebpf.CollectionOptions{Maps: ebpf.MapOptions{PinPath: pinDir}})
 	if err != nil {
 		fatal("load:", err)
 	}
@@ -64,6 +77,12 @@ func main() {
 	if err := beat(); err != nil {
 		fatal("heartbeat:", err)
 	}
+	var st state
+	if err := apply(mapOps(objs.Programs), mapOps(objs.Rules), rules.Diff(rules.Entries{}, snap.ent)); err != nil {
+		fatal("rules:", err)
+	}
+	st.publish(snap)
+	fmt.Println(summary(snap))
 	for _, p := range []*ebpf.Program{objs.SocketConnect, objs.SocketSendmsg} {
 		l, err := link.AttachLSM(link.LSMOptions{Program: p})
 		if err != nil {

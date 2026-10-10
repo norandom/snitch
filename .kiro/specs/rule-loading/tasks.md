@@ -99,12 +99,12 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Requirements: 9.3, 9.4, 9.6, 9.8_
 
 - [ ] 6. Daemon wiring (integration)
-- [ ] 6.1 Flags and startup checks
+- [x] 6.1 Flags and startup checks
   - Flags for the rules file (default `/etc/snitch/rules.toml`) and the learning file (default `/var/lib/snitch/learned.toml` when given without a value); enforce without a duration and learning together with enforce are refused before any kernel load, exit code 2 with the reason
   - Done when: `snitchd -mode enforce` exits 2 with a message, `snitchd -mode enforce -learn` exits 2 with "learning never denies", and `-h` lists the new flags
   - _Boundary: main.go (flags and checks only)_
   - _Requirements: 1.2, 6.1, 9.2, 9.5_
-- [ ] 6.2 Snapshot state, map apply and summary
+- [x] 6.2 Snapshot state, map apply and summary
   - Load, resolve and encode before the kernel objects are loaded; apply puts then deletes to the two maps; publish an immutable snapshot through an atomic pointer only after a successful apply; contracts guard publish-after-apply
   - Missing rules file starts empty with a notice; invalid file exits 1 with file:line:reason; summary line after apply: programs declared/resolved/unresolved (names), executables mapped, rules effective
   - Done when: a monitor run with the example file prints the summary, a bad file exits 1 with the line, a missing file prints the notice, and the `kill` map value is unchanged across a start/stop (bpftool before and after)
@@ -169,3 +169,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 3.1/3.2: `rules.DevOf` gives the kernel's device (ext4 root here: 8388609 where stat says 2049). The mountinfo source is the unexported `openMountinfo` variable, swapped by internal tests; those tests must stay serial (no `t.Parallel`). `OSFS(warn)` takes the warning sink as a delegate. Literal paths skip Glob so a missing file reports the OS error; a program with no paths is reported as unresolved "no paths".
 - 4.1/4.2: two rules that encode to the same key (same program, prefix, proto, port after the any-proto expansion) are rejected by the validator naming both lines; `Encode` itself has no error path and would otherwise keep the later rule silently. `Diff` puts changed values (never delete+put); "identical → empty" is pinned by a test, not a runtime contract.
 - 5.1: learned entries are keyed by the executable (path, else ExeKey), never by the program name; a configured name is a display preference. A pathless program carries its identity in its `note` ("exe ino=N dev=N", with the `unknown-<ino>-<dev>` name as fallback). Observation times are truncated to seconds (what the file carries). Residual: a configured name shaped exactly `<base>-<digits>` reads back as derived and reverts to `<base>` on the next write. A configured program with several executables is written as one program per executable (`tooling`, `tooling-2`); the operator merges. For 6.6: `Dirty()` + `File()` + `WriteFile`; `File()` clears dirty.
+- 6.1/6.2: Go flags cannot take an optional value, so learning is `-learn` (bool) plus `-learned <path>`. Flags and checks live in `config.go`, the snapshot/apply/summary in `state.go`, the ExeKey→kernel key helper in `keys.go`. Map operations are `putDel{put, del}` delegates built from `*ebpf.Map`, so `apply` is tested with a recorder. "rules effective" in the summary counts declared rules (entries land for unresolved programs too).
