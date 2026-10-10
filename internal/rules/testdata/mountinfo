@@ -1,0 +1,6 @@
+26 31 0:23 / /sys rw,nosuid,nodev,noexec,relatime shared:7 - sysfs sysfs rw
+310 31 0:99 / /mnt/decoy rw,relatime shared:9 - tmpfs tmpfs rw
+31 2 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw,errors=remount-ro
+3 2 0:3 / /mnt/three rw - tmpfs tmpfs rw
+45 31 0:38 /@home /home rw,relatime shared:30 - btrfs /dev/sdb1 rw,subvol=/@home
+52 31 0:41 / /var/lib/containers/overlay rw,relatime - overlay overlay rw,lowerdir=/a,upperdir=/b
