@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,8 @@ import (
 	"time"
 
 	"github.com/norandom/snitch/internal/contract"
+	"github.com/norandom/snitch/internal/status"
+	"github.com/norandom/snitch/internal/trial"
 )
 
 // verb is one command-line word and its handler. The handler parses its own flags through
@@ -25,13 +28,13 @@ type verb struct {
 	run  func(c *ctl, args []string) int
 }
 
-// verbs is the table main consults; the handlers of 4.2 (trial, keep, unkeep, end) and 4.3
-// (status) replace the stubs.
+// verbs is the table main consults; the handlers live in ctl_verbs.go, status (4.3) replaces
+// its stub.
 var verbs = []verb{
-	{"trial", notImplemented},
-	{"keep", notImplemented},
-	{"unkeep", notImplemented},
-	{"end", notImplemented},
+	{"trial", runTrial},
+	{"keep", runKeep},
+	{"unkeep", runUnkeep},
+	{"end", runEnd},
 	{"status", notImplemented},
 }
 
@@ -44,6 +47,41 @@ type probes struct {
 
 func realProbes() probes { return probes{control: controlState, kill: killSet} }
 
+// deps are the verbs' other delegates, so every message is tested without root or a daemon:
+// the store over the parsed -state-dir, whether that directory exists (the store would create
+// it; the CLI refuses instead), the status record, the boot id, the clock and the y/N prompt.
+type deps struct {
+	store      func(dir string) trial.Store
+	dirExists  func(dir string) bool
+	readStatus func(path string) (status.Record, error)
+	bootID     func() (string, error)
+	now        func() time.Time
+	confirm    func(question string) bool
+}
+
+func realDeps(in io.Reader, out io.Writer) deps {
+	return deps{
+		store:      trial.OSStore,
+		dirExists:  func(dir string) bool { fi, err := os.Stat(dir); return err == nil && fi.IsDir() },
+		readStatus: status.Read,
+		bootID:     func() (string, error) { return trial.BootID(os.ReadFile) },
+		now:        time.Now,
+		confirm:    askYN(in, out),
+	}
+}
+
+// askYN prints the question and reads one line: "y" or "yes" in any case is a yes; anything
+// else, a closed stdin included, is a no (the safe answer: nothing starts).
+func askYN(in io.Reader, out io.Writer) func(string) bool {
+	r := bufio.NewReader(in)
+	return func(question string) bool {
+		fmt.Fprint(out, question, " ")
+		line, _ := r.ReadString('\n')
+		answer := strings.ToLower(strings.TrimSpace(line))
+		return answer == "y" || answer == "yes"
+	}
+}
+
 // ctl is one invocation: the verb, the shared flag values, where it prints, and its delegates.
 type ctl struct {
 	name     string
@@ -53,10 +91,12 @@ type ctl struct {
 	errw     io.Writer
 	euid     func() int
 	probes   probes
+	deps     deps
 }
 
 func newCtl(out, errw io.Writer, p probes) *ctl {
-	return &ctl{stateDir: defaultStateDir, status: defaultStatus, out: out, errw: errw, euid: os.Geteuid, probes: p}
+	return &ctl{stateDir: defaultStateDir, status: defaultStatus, out: out, errw: errw,
+		euid: os.Geteuid, probes: p, deps: realDeps(os.Stdin, out)}
 }
 
 // parse reads the verb's flags: the shared -state-dir and -status plus the verb's own, which
@@ -125,4 +165,25 @@ func notImplemented(c *ctl, args []string) int {
 	}
 	fmt.Fprintf(c.errw, "snitchd %s: not implemented yet\n", c.name)
 	return exitUsage
+}
+
+// liveTrial is the trial the daemon is following: this boot's, before its deadline (Decide's
+// rule, clock cap included); a foreign-boot or expired file counts as none (the daemon clears
+// it). The kept marker is left out so a kept enforce does not read as a trial.
+func liveTrial(st trial.State, boot string, now time.Time) *trial.Deadline {
+	if st.Trial == nil || trial.Decide(now, boot, trial.State{Trial: st.Trial}, false).Mode != trial.Enforce {
+		return nil
+	}
+	return st.Trial
+}
+
+// present says which files exist, a malformed one included (Read names it in a Problem), so
+// end and unkeep report what they removed.
+func present(store trial.Store, st trial.State) (trialFile, keptFile bool) {
+	trialFile, keptFile = st.Trial != nil, st.Kept
+	for _, p := range st.Problems {
+		trialFile = trialFile || strings.HasPrefix(p, store.TrialPath()+":")
+		keptFile = keptFile || strings.HasPrefix(p, store.KeptPath()+":")
+	}
+	return trialFile, keptFile
 }

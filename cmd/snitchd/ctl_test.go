@@ -109,15 +109,13 @@ func TestVerbNeedsRoot(t *testing.T) {
 	}
 }
 
-func TestVerbStubsExitTwoNotImplemented(t *testing.T) {
-	for _, v := range verbs {
-		c, _, errw := testCtl(t, probes{})
-		if code := dispatch(verbs, c, []string{v.name, "-state-dir", t.TempDir()}); code != 2 {
-			t.Errorf("%s: exit %d, want 2", v.name, code)
-		}
-		if !strings.Contains(errw.String(), "snitchd "+v.name+": not implemented yet") {
-			t.Errorf("%s: message %q", v.name, errw.String())
-		}
+func TestVerbStatusStubExitsTwoNotImplemented(t *testing.T) {
+	c, _, errw := testCtl(t, probes{})
+	if code := dispatch(verbs, c, []string{"status", "-state-dir", t.TempDir()}); code != 2 {
+		t.Errorf("status: exit %d, want 2", code)
+	}
+	if !strings.Contains(errw.String(), "snitchd status: not implemented yet") {
+		t.Errorf("status: message %q", errw.String())
 	}
 }
 
