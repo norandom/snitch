@@ -36,7 +36,7 @@ func identityFunc(warn func(string)) func(string) (ExeKey, error) {
 		dev, err := devViaMountinfo(mnt)
 		if err != nil {
 			once.Do(func() { warn(fmt.Sprintf("%s: %v: using the stat device, wrong on btrfs/overlayfs", path, err)) })
-			dev = DevFromStat(stDev)
+			dev = devFromStat(stDev)
 		}
 		return ExeKey{Ino: ino, Dev: dev}, nil
 	}
@@ -50,7 +50,7 @@ func devViaMountinfo(mnt uint64) (uint32, error) {
 		return 0, err
 	}
 	defer f.Close()
-	dev, ok, err := DevFromMountinfo(mnt, f)
+	dev, ok, err := devFromMountinfo(mnt, f)
 	if err != nil {
 		return 0, err
 	}
@@ -60,11 +60,11 @@ func devViaMountinfo(mnt uint64) (uint32, error) {
 	return dev, nil
 }
 
-// DevOf returns the kernel's device number for the filesystem holding path: the file's mount
+// devOf returns the kernel's device number for the filesystem holding path: the file's mount
 // id (statx) looked up in /proc/self/mountinfo, whose major:minor column is printed from the
 // superblock's s_dev. This is what i_sb->s_dev reads in the BPF program, also on btrfs
 // subvolumes and overlayfs, where stat's st_dev differs.
-func DevOf(path string) (uint32, error) {
+func devOf(path string) (uint32, error) {
 	_, mnt, _, err := statx(path)
 	if err != nil {
 		return 0, err
@@ -76,9 +76,9 @@ func DevOf(path string) (uint32, error) {
 	return dev, nil
 }
 
-// DevFromMountinfo finds the row for mount id mnt and returns its device in kernel encoding.
+// devFromMountinfo finds the row for mount id mnt and returns its device in kernel encoding.
 // ok is false when no row has that id. Format: "id parent major:minor root mountpoint ...".
-func DevFromMountinfo(mnt uint64, r io.Reader) (dev uint32, ok bool, err error) {
+func devFromMountinfo(mnt uint64, r io.Reader) (dev uint32, ok bool, err error) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
@@ -96,9 +96,9 @@ func DevFromMountinfo(mnt uint64, r io.Reader) (dev uint32, ok bool, err error) 
 	return 0, false, sc.Err()
 }
 
-// DevFromStat converts a stat st_dev (glibc encoding) to the kernel's; right for ext4/xfs,
+// devFromStat converts a stat st_dev (glibc encoding) to the kernel's; right for ext4/xfs,
 // wrong for btrfs subvolumes and overlayfs. The fallback when mountinfo has no row.
-func DevFromStat(stDev uint64) uint32 { return kernelDev(unix.Major(stDev), unix.Minor(stDev)) }
+func devFromStat(stDev uint64) uint32 { return kernelDev(unix.Major(stDev), unix.Minor(stDev)) }
 
 func kernelDev(major, minor uint32) uint32 { return major<<20 | minor }
 

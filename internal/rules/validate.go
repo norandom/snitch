@@ -21,7 +21,7 @@ func validate(f *File, name string) error {
 	}
 	for i := range f.Rules {
 		r := &f.Rules[i]
-		if _, ok := seen[r.Program]; !ok && r.Program != AnyProgram {
+		if _, ok := seen[r.Program]; !ok && r.Program != anyProgram {
 			return &Error{File: name, Line: r.Line, Msg: fmt.Sprintf("rule for undeclared program %q", r.Program)}
 		}
 		r.ID = uint32(i + 1)
@@ -75,8 +75,8 @@ func checkProgramName(n string, seen map[string]int) error {
 	switch {
 	case n == "":
 		return fmt.Errorf("program without a name")
-	case n == AnyProgram:
-		return fmt.Errorf("program name %q is reserved for rules that apply to every program", AnyProgram)
+	case n == anyProgram:
+		return fmt.Errorf("program name %q is reserved for rules that apply to every program", anyProgram)
 	}
 	if line, dup := seen[n]; dup {
 		return fmt.Errorf("program %q already declared at line %d", n, line)

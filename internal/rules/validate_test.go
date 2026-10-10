@@ -68,7 +68,7 @@ func TestValidateAssignsDenseIDs(t *testing.T) {
 func TestValidateKeepsLearnedFieldsAndAnyProgram(t *testing.T) {
 	f := load(t, "valid.toml")
 	r := f.Rules[2]
-	if r.Program != rules.AnyProgram || r.Count != 12 || r.First.IsZero() || r.Last.IsZero() {
+	if r.Program != "any" || r.Count != 12 || r.First.IsZero() || r.Last.IsZero() {
 		t.Fatalf("learned fields or any-program lost: %+v", r)
 	}
 }

@@ -28,8 +28,8 @@ const (
 	Deny  Verdict = 2
 )
 
-// AnyProgram is the program name that makes a rule apply to every program.
-const AnyProgram = "any"
+// anyProgram is the program name that makes a rule apply to every program.
+const anyProgram = "any"
 
 // Program is one named set of executables.
 type Program struct {

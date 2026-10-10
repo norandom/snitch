@@ -113,7 +113,7 @@ func TestExampleRulesFileLoads(t *testing.T) {
 	if len(f.Programs) != 3 || len(f.Rules) != 6 {
 		t.Fatalf("want 3 programs and 6 rules, got %d and %d", len(f.Programs), len(f.Rules))
 	}
-	if f.Rules[5].Program != rules.AnyProgram || f.Rules[5].Verdict != rules.Deny {
+	if f.Rules[5].Program != "any" || f.Rules[5].Verdict != rules.Deny {
 		t.Fatalf("the last example rule should be the any-program deny, got %+v", f.Rules[5])
 	}
 }

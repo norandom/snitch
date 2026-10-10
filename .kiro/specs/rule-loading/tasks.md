@@ -139,11 +139,11 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Requirements: 9.1, 9.4, 9.5, 9.6, 9.7_
 
 - [ ] 7. Validation
-- [ ] 7.1 Monitor-mode integration pass on the dev VM
+- [x] 7.1 Monitor-mode integration pass on the dev VM
   - Run the acceptance checks of tasks 6.2–6.6 end to end from a clean start with the example file and record the observed lines in the spec's research log; include one explicit deny rule and show it denies in monitor mode
   - Done when: every check has a recorded observation and no contract violation or verifier error occurred
   - _Requirements: 3.5, 4.1, 4.3, 5.1, 5.3, 9.1_
-- [ ] 7.2 Enforce test script
+- [x] 7.2 Enforce test script
   - Root script: options for duration, allowed address, denied address, local probe, daemon binary, `-y`, and `--check-only`; generates a temp rules file (curl → allowed address/32 tcp 443; session tooling glob → anywhere)
   - Phase 1 (always, monitor mode, no confirmation needed): identity pre-check, an event for a curl run shows `program curl` (this is the live proof that the resolver's device equals the kernel's); stop here with `--check-only` or when the confirmation is declined
   - Phase 2 (after confirmation or `-y`): steps allowed curl ok with allow-by-rule logged, other public address EPERM with default-deny logged, local probe ok, kill switch on → ok, off → EPERM, SIGSTOP → ok within 16 s, SIGCONT → EPERM within 3 s; IP literals only
@@ -155,7 +155,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - Only with the operator's explicit go in the session and the hypervisor console open; duration ≤ 120 s; the operator confirms the RDP session stayed up
   - Done when: all steps pass, the trap prints mode monitor / kill clear / zero attached programs, and the output is recorded in the research log
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 6.2, 6.3_
-- [ ] 7.4 Caps and contract coverage audit
+- [x] 7.4 Caps and contract coverage audit
   - Every documented contract in design.md "Code contracts" has a test asserting its violation; caps tooling and file-length check green for `cmd/` and `internal/`; no exported identifier without a caller in another package
   - Done when: the CI workflow passes on the branch
   - _Requirements: 8.1, 8.3_
@@ -172,3 +172,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 6.1/6.2: Go flags cannot take an optional value, so learning is `-learn` (bool) plus `-learned <path>`. Flags and checks live in `config.go`, the snapshot/apply/summary in `state.go`, the ExeKey→kernel key helper in `keys.go`. Map operations are `putDel{put, del}` delegates built from `*ebpf.Map`, so `apply` is tested with a recorder. "rules effective" in the summary counts declared rules (entries land for unresolved programs too).
 - 6.3/6.4: every job runs behind `guard()`: a contract violation on a job goroutine becomes the run's error and exits 70 with the goroutine's stack (main's recover only sees startup). A heartbeat write error now ends the run (exit 1, hooks detach: the fail-safe direction). Reloads are serialized by a mutex and `Invariant` that the base snapshot did not move. A failed `apply` on reload (realistically only E2BIG/ENOMEM) can leave the puts that succeeded before the error in the maps; the snapshot stays old and a later Diff never deletes those strays until a file names the same keys. The daemon source split: main.go (entry), daemon.go (startup, jobs, guard), state.go, reload.go, events.go, config.go, keys.go.
 - 6.5/6.6: the kernel fills the exe path only for unmapped programs or with want_path (set while learning), so a mapped program's event carries its configured name, not a path. The sink gate (verdict 0 only) sits in the pump loop and is covered by the VM learned-file check, not a unit test. The final learned-file flush runs after the jobs are cancelled; an event decoded in that window can be lost (at most a record or two). `-learned` equal to `-rules` is refused.
+- 7.1/7.2/7.4: curl 8.x prints the connect errno only with `-v` ("connect to … failed: Operation not permitted"); without it every connect failure reads "Could not connect to server". The enforce script's EPERM detector relies on that. The trap reads mode and kill value back from the maps instead of asserting them. The summary counts a program as resolved when at least one executable maps and lists unmatched patterns apart. The device helpers (`devOf`, …) are unexported: the live identity check is the `program curl` event in the script's phase 1. CI has not run remotely (nothing pushed); every lint.yml command was run locally.

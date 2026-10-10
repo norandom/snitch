@@ -22,7 +22,7 @@ func statDev(t *testing.T, path string) uint32 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return DevFromStat(stDev)
+	return devFromStat(stDev)
 }
 
 func TestDevFallbackWhenMountinfoHasNoRow(t *testing.T) {
@@ -49,8 +49,8 @@ func TestDevFallbackWhenMountinfoIsUnreadable(t *testing.T) {
 	if err != nil || k.Dev != statDev(t, "testdata/valid.toml") || warned != 1 {
 		t.Fatalf("want the stat device with one warning, got %+v %v warned=%d", k, err, warned)
 	}
-	if _, err := DevOf("testdata/valid.toml"); err == nil {
-		t.Fatal("DevOf must not fall back silently; it reports the error")
+	if _, err := devOf("testdata/valid.toml"); err == nil {
+		t.Fatal("devOf must not fall back silently; it reports the error")
 	}
 }
 

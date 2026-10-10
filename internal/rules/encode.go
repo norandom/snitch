@@ -49,7 +49,7 @@ func Encode(r *Resolved) Entries {
 }
 
 func programID(r *Resolved, name string) uint32 {
-	if name == AnyProgram {
+	if name == anyProgram {
 		return anyProgramID
 	}
 	for id, n := range r.Names {

@@ -196,10 +196,10 @@ func derivedName(s subject) string {
 	if s.path == "" {
 		return fmt.Sprintf("unknown-%d-%d", s.exe.Ino, s.exe.Dev)
 	}
-	if b := path.Base(s.path); b != AnyProgram {
+	if b := path.Base(s.path); b != anyProgram {
 		return b
 	}
-	return AnyProgram + "-exe"
+	return anyProgram + "-exe"
 }
 
 func sortedSubjects[V any](m map[subject]V) []subject {

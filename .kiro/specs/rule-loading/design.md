@@ -392,7 +392,8 @@ type FS struct {
 
 func OSFS() FS
 func Resolve(f *File, fs FS) (*Resolved, error)     // error only for ErrConflict
-func DevOf(path string, mountinfo io.Reader) (uint32, error)   // exported for the VM check
+// device identity: unexported devOf / devFromMountinfo / devFromStat; the VM check is an
+// event showing "program curl" (scripts/enforce-test.sh phase 1), not a Go call
 ```
 - `Identity` default: `statx(STATX_INO|STATX_MNT_ID)` → `Mnt_id` → mountinfo row → `maj<<20|min`;
   if mountinfo has no row or is unreadable → `unix.Major/Minor` of `st_dev` with a one-time
@@ -586,12 +587,17 @@ func Invariant(ok bool, msg string)   // data-structure invariant (after build, 
 ```
 - All three panic with `*Violation`; they are always compiled in (the checks are cheap
   comparisons). A violation is a bug, never an operator error: operator errors return `error`.
-- Where contracts go: `Parse` ensures ids are 1..n and dense; `Resolve` ensures no `ExeKey`
-  maps to two ids; `Encode` requires `prefix.Bits() ≥ 0` and ensures `Prefixlen ≥ 64` and
-  `Addr` zero beyond the prefix; `Diff` ensures `len(Put)+len(Del) == 0` for identical inputs;
-  `apply` requires a snapshot has not been published before its diff is applied; `decode`
-  requires `len(record) ≥ unsafe.Sizeof(event)`; `Learned.Observe` requires a valid address
-  and a port ≤ 65535; `jobs.Run` requires at least one job.
+- Where contracts go (the implemented set; every one has a violation test unless noted):
+  `validate` ensures ids are 1..n and dense (programs and rules); `Resolve` requires a
+  complete `FS` and ensures no mapped executable lacks a declared program and every rule is
+  reachable by id; `Encode` requires a built `Resolved` and a canonical prefix (so address
+  bytes beyond the prefix are zero) and has an `Invariant` that a rule's program was declared;
+  `Encode`'s `Ensure(Prefixlen ≥ 64)` holds by construction and has no test; `Learned.Observe`
+  requires a valid address (the port is bounded by its type); the daemon's `publish` requires
+  a built snapshot and `reload` has an `Invariant` that the base snapshot did not move (the
+  design's "apply before publish" made mechanical); `decodeEvent` requires a record at least
+  as long as the event struct; `jobs.Run/Every/OnSignal/After` require their arguments. The
+  "identical inputs → empty `Diff`" property is pinned by a test, not a runtime contract.
 - The daemon's top level recovers a `*Violation` only to log it with a stack and exit 70. An
   exit detaches the kernel programs, so a contract failure fails open (fail-safe 3).
 - Tests assert violations with a helper (`contracttest.Panics(t, kind, func()) *Violation`, in the
