@@ -66,6 +66,9 @@ func decode(src []byte, name string) (*File, error) {
 		}
 		f.Rules = append(f.Rules, rule)
 	}
+	if err := validate(f, name); err != nil {
+		return nil, err
+	}
 	return f, nil
 }
 

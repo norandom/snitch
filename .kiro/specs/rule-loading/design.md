@@ -427,7 +427,8 @@ func Diff(old, new Entries) Changes   // old may be zero value (first load)
 ```
 - Encoding: `Family` = 2 (v4) or 10 (v6); `Prefixlen` = 64 + prefix bits; `Addr` v4 in bytes
   0–3; `Program` = id or 0 for "any"; `Proto` 0/6/17; `Port` host order, 0 for any; one entry
-  per port in a range. Invariant: the fixed 8 bytes are always inside the prefix (the C side
+  per port in a range. A rule with ports but proto any becomes TCP and UDP entries per port:
+  the kernel probes (proto, port), (proto, 0), (0, 0) and never (0, port). Invariant: the fixed 8 bytes are always inside the prefix (the C side
   assumes this).
 
 #### Learning (`learn.go`)
