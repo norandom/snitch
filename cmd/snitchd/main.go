@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/norandom/snitch/internal/contract"
 )
@@ -21,6 +22,9 @@ const (
 )
 
 func main() {
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+		os.Exit(runCtl(os.Args[1:])) // a verb runs the command line; any other bare word is a usage error
+	}
 	cfg, err := parseFlagsTo(os.Args[1:], os.Stderr)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
