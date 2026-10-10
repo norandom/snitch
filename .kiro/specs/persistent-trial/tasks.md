@@ -10,7 +10,7 @@ may touch. A task is done when its "Done when" command succeeds and `gofmt -l .`
 put this VM into enforce mode: the trial flow is observed only in task 6.2, after the operator's
 go. Tasks in one package run one at a time.
 
-- [ ] 1. Trial logic, pure and file-backed
+- [x] 1. Trial logic, pure and file-backed
 - [x] 1.1 The mode decision and its bounds
   - A mode decision from (now, boot id, state, learning): with learning the decision is always monitor and the files are logged as ignored; otherwise kept wins; no trial is monitor; a trial from another boot ends at boot; a passed deadline or a trial older than the maximum ends at its deadline; otherwise enforce until the deadline; a malformed trial file counts as none and is cleared. Each decision carries the log reason and whether the trial file is spent
   - Bounds: durations from 1 to 60 minutes, default 10; the boot id read through a delegate
@@ -25,14 +25,14 @@ go. Tasks in one package run one at a time.
   - _Boundary: internal/trial/store.go, store_test.go_
   - _Requirements: 2.1, 3.3, 3.4, 5.1, 5.4, 6.1_
 
-- [ ] 2. Status record
+- [x] 2. Status record
 - [x] 2.1 (P) The daemon's facts for the command line
   - A record (pid, mode, source, learning, trial deadline, kept, rules file, rules numbers, written time) written atomically as key=value lines and read back; a missing file is a distinct error
   - Done when: `go test ./internal/status` proves the round trip and the missing-file error
   - _Boundary: internal/status/status.go, status_test.go_
   - _Requirements: 2.4, 2.7, 7.1, 7.2_
 
-- [ ] 3. The daemon follows the files
+- [x] 3. The daemon follows the files
 - [x] 3.1 Mode source, atomic mode, mode-change log
   - The daemon's mode becomes an atomic read by the heartbeat; a source "flag" when `-mode` was given, "files" otherwise; a single mode-change function that logs `mode: <monitor|enforce> (<reason>)`; flags for the state directory and the status file path with the design's defaults; the state directory created when missing
   - At startup with source "files", the decision runs once before the first heartbeat, so a kept enforce starts enforcing and a trial from another boot is cleared before anything is attached. Learning never denies: with `-learn` the decision is always monitor and a kept or trial file is logged as ignored
@@ -48,7 +48,7 @@ go. Tasks in one package run one at a time.
   - _Depends: 2.1, 3.1_
   - _Requirements: 1.4, 3.1, 3.2, 3.4, 3.5, 4.1, 5.4, 7.1_
 
-- [ ] 4. The command line
+- [x] 4. The command line
 - [x] 4.1 Verb dispatch and the pinned-map readers
   - A first argument that is a verb runs the command line instead of the daemon, `main()` stays within its cap; shared verb flags `-state-dir` and `-status` (the same defaults as the daemon) so the test script can point the verbs at temp paths; readers for the pinned control map (heartbeat age on the monotonic clock, mode, flags) and the kill map; absent maps read as "not running, kill clear"; root required with a clear message
   - Done when: `go test ./cmd/snitchd -run 'Verb|Pinned'` proves the dispatch with a stub verb, the shared flags, and the absent-map behaviour with fakes; `snitchd -h` still exits 0 and a bare word that is not a verb exits 2 (never treated as a daemon argument)
@@ -69,7 +69,7 @@ go. Tasks in one package run one at a time.
   - _Depends: 2.1, 4.2_
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 5. Service units
+- [x] 5. Service units
 - [x] 5.1 The two unit files
   - `systemd/snitchd.service` (root, default rules file, no mode flag, restart on failure, state and runtime directories) and `systemd/snitchd-trial-boot.service` (oneshot before the service, runs the boot-time end); neither is installed or enabled by this spec; the README's install section lists them as "not enabled here, deployed by the VM repo" and says the older `snitch-trial*` units belong to the Little Snitch client, not to snitchd
   - Done when: `systemd-analyze verify` passes on copies of both units whose `ExecStart` is rewritten to the built binary's path (`/usr/local/sbin/snitchd` does not exist on this VM), and the README section is in place (6.1 extends it later)
@@ -87,7 +87,7 @@ go. Tasks in one package run one at a time.
   - Only with the operator's explicit go in the session and the serial console open; the operator confirms the RDP session stayed up
   - Done when: every phase-3 step passes, the trap prints mode monitor, kill 0, no attached programs, no trial and no kept file, and the transcript is in the research log
   - _Requirements: 8.1, 8.2, 3.1, 3.2, 3.3, 4.1, 5.1, 5.4, 6.1_
-- [ ] 6.3 Caps, contracts and CI
+- [x] 6.3 Caps, contracts and CI
   - Every documented contract of this spec has a violation test; caps green for the new packages; no exported identifier without a caller in another package; the design's contract list matches the code
   - Done when: every command of `.github/workflows/lint.yml` passes locally (the remote run follows the operator's push, recorded as pending until then)
   - _Boundary: `*_test.go` of this spec's packages, design.md contract list_
@@ -105,3 +105,4 @@ go. Tasks in one package run one at a time.
 - 4.3: `snitchd status` prints eight stable keys (daemon, mode, trial, kept, kill, learning, rules, status), reads each source once (0.03 s on the VM). "Running" is the heartbeat age ≤ 15 s, and the pinned maps outlive the daemon, so for up to 15 s after a stop the daemon line says `running (… not following the files: status record Ns old)` with exit 0: 6.1's "exit 1 after stop" step must wait more than 15 s or grep `^daemon: *not running`. `notFollowing` duplicates `followingDaemon`'s record checks (later cleanup).
 - 5.1: `snitchd.service` also `Wants=` the boot oneshot, so enabling only the daemon still gets the boot revert; both directories 0700; `TimeoutStopSec=10`. Neither unit is installed on this VM; the VM repo deploys them after 6.2 passed.
 - 6.1: phase 3 runs behind its own [y/N] prompt after phase 2 (`-y` covers both; `--skip-trial` runs phase 2 alone); the daemon's ceiling is the given duration plus 240 s; verbs get `-state-dir`/`-status` before the duration and stdin from /dev/null; T17 waits up to 20 s for `^daemon: *not running`; the trap runs `snitchd end` on the temp state dir before stopping the daemon. Phase 3 is desk-checked only until 6.2.
+- 6.3: every contract of this spec is listed in the design's "Contracts" subsection with the test that trips it; `TrialFile`/`KeptFile` unexported. All lint.yml commands green locally; the remote run is pending the push. Remaining: 6.2, the trial run on the dev VM (operator's go, serial console open).

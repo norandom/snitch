@@ -16,8 +16,8 @@ import (
 // The two files under Store.Dir. Their names are part of the operator's recovery
 // ("rm /var/lib/snitch/enforce"), so they never change.
 const (
-	TrialFile = "trial"   // start=<RFC3339>\nend=<RFC3339>\nboot=<uuid>\n
-	KeptFile  = "enforce" // kept=<RFC3339>\n
+	trialFile = "trial"   // start=<RFC3339>\nend=<RFC3339>\nboot=<uuid>\n
+	keptFile  = "enforce" // kept=<RFC3339>\n
 )
 
 // FS is the file access a Store goes through: the os package in the daemon (OSStore), a map
@@ -64,8 +64,8 @@ func writeAtomic(path string, data []byte) error {
 }
 
 // TrialPath and KeptPath are the full paths, for log lines and the CLI's "rm" hint.
-func (s Store) TrialPath() string { return filepath.Join(s.Dir, TrialFile) }
-func (s Store) KeptPath() string  { return filepath.Join(s.Dir, KeptFile) }
+func (s Store) TrialPath() string { return filepath.Join(s.Dir, trialFile) }
+func (s Store) KeptPath() string  { return filepath.Join(s.Dir, keptFile) }
 
 func (s Store) require() {
 	contract.Require(s.Dir != "", "store: empty directory")

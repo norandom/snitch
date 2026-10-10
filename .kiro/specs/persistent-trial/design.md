@@ -292,16 +292,15 @@ type Store struct {
 }
 func OSStore(dir string) Store
 func (s Store) Read() State
-func (s Store) StartTrial(d Deadline) error      // writes trial; refuses if Kept (contract: caller checked)
+func (s Store) StartTrial(d Deadline) error      // writes trial; whether Kept or a running trial allows it is the caller's check (Req 2.5, 5.6), not a contract
 func (s Store) Keep(now time.Time) error         // writes enforce, removes trial
 func (s Store) ClearTrial() error
 func (s Store) ClearKept() error
 ```
 - File `trial`: `start=<RFC3339>\nend=<RFC3339>\nboot=<uuid>\n`. File `enforce`:
   `kept=<RFC3339>\n`. Missing file = absent; unparsable = Problem.
-- Contracts: `Decide` requires `now` non-zero and `bootID != ""`; ensures `ClearTrial` only
-  when `Trial != nil` or a Problem exists; `Bounds` is pure; `StartTrial` requires
-  `d.End.After(d.Start)` and `d.End.Sub(d.Start) ≤ MaxTrial`.
+- Contracts: the implemented set is listed once, under "Contracts" in Implementation Rules
+  (`Decide`, `Store.require`, `StartTrial`); `Bounds` and `BootID` return errors, no contracts.
 
 ### internal/status
 
@@ -410,6 +409,48 @@ enforce stays → `snitchd unkeep` → ok within 5 s → kill switch and SIGSTOP
 As in `rule-loading`: caps 40/10/300 (`scripts/caps.sh`), delegates (`FS`, `now`, `apply`,
 `log`), immutable values, `internal/contract` assertions with a test per contract, jobs for
 every loop, tasks as self-contained briefs.
+
+### Contracts
+The `internal/contract` conventions of the rule-loading design apply (`Require` on the inputs
+of a function, `Ensure` before return; a violation is a bug, an operator error returns `error`
+or exits 1). Where contracts go (the implemented set; every one has a `contracttest.Panics`
+test that trips exactly it, named next to the bullet):
+- `trial.Decide` requires a non-zero `now` and `bootID != ""`; ensures (in `spent`) that
+  `ClearTrial` is set only when `st.Trial != nil` or a Problem exists, so the daemon never
+  removes a file that was not there. `trial_test`: `TestContractDecideNeedsATime`,
+  `TestContractDecideNeedsABootID`, `TestContractDecideSpentOnlyWithATrialOrAProblem`.
+- `trial.Store.Read`, `StartTrial`, `Keep`, `ClearTrial`, `ClearKept` require (through
+  `Store.require`) `Dir != ""` and a complete `FS` (`ReadFile`, `WriteFile`, `Remove`).
+  `store_test`: `TestStoreContracts` (through `Read`; the other four call the same method).
+- `trial.Store.StartTrial` also requires `d.End.After(d.Start)`,
+  `d.End.Sub(d.Start) ≤ MaxTrial` and `d.Boot != ""`: a deadline the daemon could not
+  follow is a bug in the CLI. `store_test`: `TestStoreContracts`.
+- `trial.Bounds` and `trial.BootID` have no contracts: an out-of-bound duration and an
+  unreadable boot id are operator or environment errors, returned as `error`.
+- `status.Write` requires `path != ""` and no newline in `Mode`, `Source`, `Trial`,
+  `RulesFile` (the line format could not carry the record back). `status_test`:
+  `TestWriteContracts`.
+- `status.Read` requires `path != ""`. `status_test`: `TestReadRequiresAPath`.
+- `follower.tick` and `decide` (cmd/snitchd `follow.go`) require `boot != ""` and the `now`,
+  `apply`, `log` delegates. `follow_test`: `TestFollowContracts`.
+- `statusWriter.tick` requires `path != ""` and the `mode`, `snap`, `now`, `write`, `log`
+  delegates. `follow_test`: `TestStatusWriterContracts`.
+- `dispatch` (cmd/snitchd `ctl.go`) requires at least one argument, the verb. `ctl_test`:
+  `TestContractDispatchNeedsAVerb`.
+- `controlFrom` requires its `lookup` and `now` delegates; `killFrom` requires `lookup`
+  (`ctl_maps.go`). `ctl_test`: `TestContractPinnedReadersNeedTheirDelegates`.
+- Every verb handler (`runTrial`, `runKeep`, `runUnkeep`, `runEnd`, `runStatus`) requires
+  (through `ctl.require`) the writers `out`, `errw`, the probes `control`, `kill` (one
+  `Require`) and the six `deps` (a second). `contracts_trial_test`:
+  `TestContractEveryVerbNamesTheMissingSlot` (each slot blank on its own, for every verb,
+  asserting which line fired); `ctl_verbs_test`/`ctl_status_test`:
+  `TestContractVerbsNeedACompleteCtl and TestContractStatusNeedsACompleteCtl`.
+- Not contracts, pinned by ordinary tests: the verbs' refusals (keep without a running trial,
+  trial while kept or while the kill switch is set, out-of-bound durations) are operator
+  errors with exit 1 or 2; a status file with a wrong key set is a `Read` error; "identical
+  decision → silent tick" is `follower.changed`'s table test.
+- A violation inside the follow or status job goes through `guard()` (rule-loading 6.3/6.4):
+  the run ends with exit 70 and the hooks detach, so a contract failure fails open.
 
 ## Error Handling
 

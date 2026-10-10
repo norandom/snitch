@@ -190,8 +190,8 @@ func TestStoreReportsFSErrors(t *testing.T) {
 	}
 	for _, c := range cases {
 		s, m := memStore()
-		m.files[filepath.Join(memDir, TrialFile)] = []byte(trialBody)
-		m.files[filepath.Join(memDir, KeptFile)] = []byte(keptBody)
+		m.files[filepath.Join(memDir, trialFile)] = []byte(trialBody)
+		m.files[filepath.Join(memDir, keptFile)] = []byte(keptBody)
 		m.fail = boom
 		if err := c.op(s); !errors.Is(err, boom) {
 			t.Errorf("%s: err = %v, want %v", c.name, err, boom)
@@ -203,7 +203,7 @@ func TestStoreReportsFSErrors(t *testing.T) {
 // 0600 files by rename, so a reader never sees a partial file (a new inode every write).
 func TestStoreOSWriteReplacesTheFile(t *testing.T) {
 	s := OSStore(filepath.Join(t.TempDir(), "snitch"))
-	path := filepath.Join(s.Dir, TrialFile)
+	path := filepath.Join(s.Dir, trialFile)
 	stat := func(p string) syscall.Stat_t {
 		var st syscall.Stat_t
 		if err := syscall.Stat(p, &st); err != nil {
