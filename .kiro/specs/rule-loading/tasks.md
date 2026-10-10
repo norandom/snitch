@@ -18,13 +18,13 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - Done when: every new CI command runs green locally on the current tree and `go build ./...` still needs no clang
   - _Boundary: CI, go.mod_
   - _Requirements: 8.1, 7.8_
-- [ ] 1.2 (P) Code-contract helpers
+- [x] 1.2 (P) Code-contract helpers
   - Precondition, postcondition and invariant assertions that panic with a typed violation carrying the kind and a message; always compiled in
   - A test helper that asserts a function panics with a violation of a given kind
   - Done when: `go test ./internal/contract/...` passes with one test per helper and the file is under the caps
   - _Boundary: contract_
   - _Requirements: 8.1_
-- [ ] 1.3 (P) Jobs runner
+- [x] 1.3 (P) Jobs runner
   - A job is a function of a context returning an error; a runner starts all jobs, ends them all when the first returns an error or the context ends, and returns that error
   - Helpers: periodic job from a tick function, signal-driven job, deadline job (zero means never)
   - Contracts: the runner requires at least one job
@@ -162,3 +162,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 
 ## Implementation Notes
 - 1.1: `funlen`'s standalone command has no line-limit flag, so the function and file caps are enforced by the in-repo `tools/caps` (go/ast, tests included in scope); gocyclo v0.6.0 does complexity. `scripts/caps.sh` is the single entry point for CI and developers. Do not run `go mod tidy` before task 2.1 imports go-toml, it would drop the require.
+- 1.3: `jobs.Run` ends when the FIRST job returns, nil included (that is how `After` ends a run). Consequences: the event pump (6.5) must never return nil by accident (today's loop returns on `ringbuf.ErrClosed`), or the daemon exits early; other jobs' errors are discarded, so the learned-file writer (6.6) must log its own shutdown write failure. `Every` does not tick before the first period: main writes the first heartbeat before `Run` (design order heartbeat → apply → attach → Run).

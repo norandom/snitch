@@ -589,8 +589,9 @@ func Invariant(ok bool, msg string)   // data-structure invariant (after build, 
   and a port ≤ 65535; `jobs.Run` requires at least one job.
 - The daemon's top level recovers a `*Violation` only to log it with a stack and exit 70. An
   exit detaches the kernel programs, so a contract failure fails open (fail-safe 3).
-- Tests assert violations with a helper (`contracttest.Panics(t, func())`) for every documented
-  contract.
+- Tests assert violations with a helper (`contracttest.Panics(t, kind, func()) *Violation`, in the
+  sub-package `internal/contract/contracttest`) for every documented contract. `Kind` is a named
+  string type with constants `Precondition`, `Postcondition`, `InvariantKind`.
 
 ### Task briefs for an external implementer
 Each task in `tasks.md` is written to be handed to a separate agent (Codex over MCP) with no
