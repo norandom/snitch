@@ -39,6 +39,7 @@ func TestChecksRefuseUnsafeCombinations(t *testing.T) {
 		{"learn with enforce", []string{"-mode", "enforce", "-duration", "10s", "-learn"}, "learning never denies"},
 		{"unknown mode", []string{"-mode", "panic"}, "mode"},
 		{"negative duration", []string{"-duration", "-5s"}, "duration"},
+		{"learned is the live file", []string{"-learn", "-rules", "/tmp/r.toml", "-learned", "/tmp/r.toml"}, "live rules file"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

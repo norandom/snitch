@@ -64,6 +64,8 @@ func check(cfg config) error {
 		return &usageError{"-mode enforce needs -duration: enforce mode only runs bounded in this phase (fail-safe 5)"}
 	case cfg.mode == modeEnforce && cfg.learn:
 		return &usageError{"-learn with -mode enforce: learning never denies, run it in monitor mode"}
+	case cfg.learn && cfg.learned == cfg.rules:
+		return &usageError{"-learned must not be the live rules file: learning never writes it"}
 	}
 	return nil
 }

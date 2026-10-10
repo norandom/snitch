@@ -124,14 +124,14 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - Done when: in a monitor run, editing the file changes the summary within 5 s, breaking it logs the error while rules stay effective, copying an executable into a globbed directory is matched within 10 s, and SIGHUP reloads at once
   - _Boundary: reload.go, main.go (job list entry only)_
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
-- [ ] 6.5 Event pump with program and rule names
+- [x] 6.5 Event pump with program and rule names
   - Fixed-layout decode of ring buffer records (length contract, no reflection) replaces the reflective reader; the old reader helper file is removed
   - Program name from the snapshot; unknown programs show the kernel-provided path or the `/proc` link, marked unknown; verdicts by rule show `#id program prefix proto port verdict`; observations are handed to a sink delegate (a no-op until 6.6)
   - Done when: a monitor run with the example file shows `program curl` and `rule #n …` for an allowed address, `allow (monitor)` without rule for another, and a path plus `unknown` for a program not in the file; a short-lived program not in the file (a copy of curl under /tmp) still shows its path
   - _Boundary: events.go, decode.go, main.go (job list entry only); deletes reader.go_
   - _Depends: 1.4, 6.3_
   - _Requirements: 5.1, 5.2, 5.3, 9.9_
-- [ ] 6.6 Learning sink and writer job
+- [x] 6.6 Learning sink and writer job
   - Events decided as "allow (monitor)" become observations through the sink; the writer job saves every 60 s when dirty and once more at shutdown; an existing learned file seeds the state (invalid seed exits 1); the startup config sets the want-path flag while learning
   - Done when: a 60 s `-learn` monitor run with no rules writes a file that then loads with `-rules` and turns the same connections into `allow (rule)` events
   - _Boundary: learn.go, main.go (sink, job list entry and the learning startup config)_
@@ -171,3 +171,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 5.1: learned entries are keyed by the executable (path, else ExeKey), never by the program name; a configured name is a display preference. A pathless program carries its identity in its `note` ("exe ino=N dev=N", with the `unknown-<ino>-<dev>` name as fallback). Observation times are truncated to seconds (what the file carries). Residual: a configured name shaped exactly `<base>-<digits>` reads back as derived and reverts to `<base>` on the next write. A configured program with several executables is written as one program per executable (`tooling`, `tooling-2`); the operator merges. For 6.6: `Dirty()` + `File()` + `WriteFile`; `File()` clears dirty.
 - 6.1/6.2: Go flags cannot take an optional value, so learning is `-learn` (bool) plus `-learned <path>`. Flags and checks live in `config.go`, the snapshot/apply/summary in `state.go`, the ExeKey→kernel key helper in `keys.go`. Map operations are `putDel{put, del}` delegates built from `*ebpf.Map`, so `apply` is tested with a recorder. "rules effective" in the summary counts declared rules (entries land for unresolved programs too).
 - 6.3/6.4: every job runs behind `guard()`: a contract violation on a job goroutine becomes the run's error and exits 70 with the goroutine's stack (main's recover only sees startup). A heartbeat write error now ends the run (exit 1, hooks detach: the fail-safe direction). Reloads are serialized by a mutex and `Invariant` that the base snapshot did not move. A failed `apply` on reload (realistically only E2BIG/ENOMEM) can leave the puts that succeeded before the error in the maps; the snapshot stays old and a later Diff never deletes those strays until a file names the same keys. The daemon source split: main.go (entry), daemon.go (startup, jobs, guard), state.go, reload.go, events.go, config.go, keys.go.
+- 6.5/6.6: the kernel fills the exe path only for unmapped programs or with want_path (set while learning), so a mapped program's event carries its configured name, not a path. The sink gate (verdict 0 only) sits in the pump loop and is covered by the VM learned-file check, not a unit test. The final learned-file flush runs after the jobs are cancelled; an event decoded in that window can be lost (at most a record or two). `-learned` equal to `-rules` is refused.
