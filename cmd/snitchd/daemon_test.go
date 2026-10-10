@@ -152,7 +152,8 @@ func TestStartupDecisionFromTheFiles(t *testing.T) {
 
 func TestStartupDecisionWithTheFlagNeverReadsTheFiles(t *testing.T) {
 	var logs []string
-	d := &daemon{cfg: config{source: sourceFlag, mode: modeEnforce, stateDir: filepath.Join(t.TempDir(), "state")},
+	stateDir := filepath.Join(t.TempDir(), "state")
+	d := &daemon{cfg: config{source: sourceFlag, mode: modeEnforce, stateDir: stateDir},
 		log: func(s string) { logs = append(logs, s) }}
 	if err := d.startMode(); err != nil {
 		t.Fatal(err)
@@ -160,7 +161,7 @@ func TestStartupDecisionWithTheFlagNeverReadsTheFiles(t *testing.T) {
 	if d.mode.Load() != 1 || !slices.Equal(logs, []string{"mode: enforce (-mode enforce)"}) {
 		t.Fatalf("want enforce from the flag, got mode %d, logs %q", d.mode.Load(), logs)
 	}
-	if _, err := os.Stat(filepath.Join(t.TempDir(), "state")); err == nil {
+	if _, err := os.Stat(stateDir); err == nil {
 		t.Fatal("the bounded run must not create the state directory")
 	}
 }
