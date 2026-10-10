@@ -124,13 +124,16 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
 
 Works on Debian forky 7.2 (BPF LSM active): attach, heartbeat, mode, local-net classification,
 IPv4/IPv6/v4-mapped, TCP + UDP (connect and unconnected sendmsg), events with verdicts.
+Done since (spec `rule-loading`, 2026-10-10, see `.kiro/specs/rule-loading/`): rules file
+(`examples/rules.toml`, `-rules`) resolved to inode + superblock device via mountinfo and
+loaded into the maps, reload on change / exe change / SIGHUP, learning mode (`-learn`, writes
+`-learned`), events with program name and rule, enforce only bounded (`-mode enforce` needs
+`-duration`); `scripts/enforce-test.sh` passed 16/16 on this VM with the serial console open;
+`scripts/fail-open.sh` is the console recovery. Needs Linux >= 6.12 (kfuncs in the C).
 Not done yet, in order:
 
-1. Load rules from a file into `programs` + `rules` (resolve exe paths/globs to inode+dev,
-   convert stat dev to the kernel's `(major << 20) | minor`); then the enforce test on this VM:
-   deny-by-default + allow curl -> 10.0.0.0/8 only: `curl 10.0.0.1` works, `curl example.com`
-   fails with EPERM; kill switch on -> works; off -> fails; SIGSTOP the daemon -> after 15 s
-   works (heartbeat); SIGCONT. Reset everything in a trap.
+1. A persistent deny-by-default trial (deadline file + boot revert, shape of `snitch-trial`)
+   and a systemd unit; until then enforce runs only through the test script.
 2. Daemon API over a unix socket (JSON lines, same shapes the Python TUI consumes), event
    dedupe, per-socket byte counting (cgroup skb programs, socket cookie) for the egress graph.
 3. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.

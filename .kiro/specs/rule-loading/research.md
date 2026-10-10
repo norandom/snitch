@@ -411,3 +411,14 @@ Every step passed: allow by rule, default deny with EPERM, local network still o
 switch on and off, heartbeat fail-open after 16 s of SIGSTOP and deny again after SIGCONT,
 hooks detached at exit; the trap read back mode monitor and kill switch 0. The RDP session
 driving this run stayed up (the Claude Code binary was allowed by the generated rules).
+
+# Feature validation (2026-10-10, /kiro-validate-impl)
+Mechanical: full suite under -race green (6 packages), no residual markers, no secrets, smoke
+boot green (monitor run attributes a rule, detaches, kill 0). Two independent validators:
+requirements/design ALIGNED_WITH_NOTES (all 49 criteria realized; 3.4, 3.5, 6.4, 7.x, 9.1 by
+VM evidence only; btrfs/overlay device identity only by fixture arithmetic; conflict error
+lacked the file name; README/CLAUDE.md status were still owed), integration
+INTEGRATED_WITH_NOTES (binary contracts with the kernel match field for field; one seam bug:
+a non-tcp/udp observation in learning mode was keyed by its raw protocol but written as "any",
+so a re-seeded file could produce a duplicate key and be refused). All items fixed in the
+validation commit; decision GO.

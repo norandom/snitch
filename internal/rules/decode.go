@@ -55,7 +55,7 @@ func decode(src []byte, name string) (*File, error) {
 	if len(lines["program"]) != len(raw.Program) || len(lines["rule"]) != len(raw.Rule) {
 		return nil, &Error{File: name, Msg: "programs and rules must be written as [[program]] and [[rule]] tables"}
 	}
-	f := &File{}
+	f := &File{Name: name}
 	for i, p := range raw.Program {
 		f.Programs = append(f.Programs, Program{Name: p.Name, Paths: p.Paths, Note: p.Note, Line: lines["program"][i]})
 	}

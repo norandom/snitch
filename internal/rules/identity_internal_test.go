@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -13,7 +14,8 @@ func withMountinfo(t *testing.T, open func() (io.ReadCloser, error)) {
 	t.Helper()
 	prev := openMountinfo
 	openMountinfo = open
-	t.Cleanup(func() { openMountinfo = prev })
+	fallbackWarned = sync.Once{} // the warning is once per process; each test wants its own
+	t.Cleanup(func() { openMountinfo = prev; fallbackWarned = sync.Once{} })
 }
 
 func statDev(t *testing.T, path string) uint32 {

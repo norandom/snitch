@@ -127,12 +127,12 @@ func verdictWord(v rules.Verdict) string {
 // observation is what the learning sink gets for an uncovered connection.
 func observation(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, at time.Time) rules.Observation {
 	o := rules.Observation{Exe: rules.ExeKey{Ino: e.ExeIno, Dev: e.ExeDev}, Addr: addrOf(e), Proto: rules.Proto(e.Proto), Port: e.Dport, At: at}
-	if name, known := programOf(e, snap, exe); known {
-		o.Program = name
-	}
 	o.Path = pathOf(e)
 	if o.Path == "" {
-		o.Path = exe(e.Pid)
+		o.Path = exe(e.Pid) // one /proc lookup; programOf would repeat it
+	}
+	if e.Program != 0 && snap != nil {
+		o.Program = snap.res.Names[e.Program]
 	}
 	return o
 }

@@ -138,7 +138,7 @@ func TestResolveConflictNamesBothPrograms(t *testing.T) {
 	src := "[[program]]\nname = \"a\"\npaths = [\"/usr/bin/curl\"]\n\n[[program]]\nname = \"b\"\npaths = [\"/usr/bin/curl\"]\n"
 	_, err := rules.Resolve(parse(t, src), world.fs())
 	var e *rules.Error
-	if !errors.As(err, &e) || e.Line != 5 || !strings.Contains(e.Msg, "\"a\"") || !strings.Contains(e.Msg, "\"b\"") {
+	if !errors.As(err, &e) || e.File != "t.toml" || e.Line != 5 || !strings.Contains(e.Msg, "\"a\"") || !strings.Contains(e.Msg, "\"b\"") {
 		t.Fatalf("want a conflict error at line 5 naming a and b, got %v", err)
 	}
 }

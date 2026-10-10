@@ -259,3 +259,28 @@ func TestLearnSeedRecoversIdentityFromTheNameWhenTheNoteIsGone(t *testing.T) {
 		t.Fatalf("identity from the name did not merge: %+v", g)
 	}
 }
+
+func TestLearnOtherProtocolsRoundTripAsAny(t *testing.T) {
+	// an ICMP socket (proto 1) has no spelling in the file; it must not become a duplicate of
+	// its own re-seeded "any" entry on the next write
+	l := rules.NewLearned(nil)
+	icmp := obs("/usr/bin/ping", rules.ExeKey{Ino: 9, Dev: 1}, "1.1.1.1", rules.Proto(1), 0, t0)
+	l.Observe(icmp)
+	path := filepath.Join(t.TempDir(), "learned.toml")
+	if err := rules.WriteFile(path, l.File()); err != nil {
+		t.Fatal(err)
+	}
+	seed, err := rules.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := rules.NewLearned(seed)
+	again.Observe(icmp)
+	if err := rules.WriteFile(path, again.File()); err != nil {
+		t.Fatal(err)
+	}
+	f, err := rules.Load(path)
+	if err != nil || len(f.Rules) != 1 || f.Rules[0].Count != 2 || f.Rules[0].Proto != rules.AnyProto {
+		t.Fatalf("want one any-proto rule with count 2, got %v, %v", f, err)
+	}
+}

@@ -59,7 +59,8 @@ and all fail-safes are untouched.
 - Change of the rules file schema or default paths (`/etc/snitch/rules.toml`,
   `/var/lib/snitch/learned.toml`).
 - Change of program-id semantics (0 = any/unknown, ids from declaration order).
-- A new runtime prerequisite (e.g. requiring `bpf_d_path`) for older kernels.
+- A new runtime prerequisite for older kernels. Current floor: Linux 6.12 (`bpf_get_task_exe_file`,
+  `bpf_put_file`); dev kernel 7.2.
 
 ## Architecture
 
@@ -119,7 +120,7 @@ flowchart LR
 |---|---|---|---|
 | Config | TOML via go-toml/v2 2.4.x | parse rules + learned files, line-numbered errors | strict (unknown fields rejected) |
 | Daemon | Go 1.26, cilium/ebpf 0.22 | map Put/Delete, ringbuf, links | existing |
-| Kernel | BPF LSM, CO-RE, `bpf_d_path` | rule id + exe path in events | regen with clang 21 on the VM |
+| Kernel | BPF LSM, CO-RE, `bpf_d_path` via the `bpf_get_task_exe_file`/`bpf_put_file` kfuncs | rule id + exe path in events | Linux ≥ 6.12 (the kfuncs); regen with clang 21 on the VM |
 | OS interfaces | `statx` + `/proc/self/mountinfo` | device identity | fallback: stat major/minor |
 | Test | bash + bpftool + curl | enforce verification | root, interactive confirm |
 
@@ -474,7 +475,8 @@ package jobs
 
 type Job func(ctx context.Context) error
 
-// Run starts every job; the first non-nil error (or ctx end) cancels the rest and is returned.
+// Run starts every job; it ends when the FIRST job returns (nil included: that is how After ends
+// a run), cancels and awaits the rest, and returns that first result.
 func Run(ctx context.Context, js ...Job) error
 // Every calls tick on a period until ctx ends; a tick error ends the job.
 func Every(d time.Duration, tick func(context.Context) error) Job

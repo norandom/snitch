@@ -11,6 +11,30 @@ editable and deletable in the web UI. It started as part of a
 [Hyprland thin client over RDP](https://github.com/norandom/hyperland-forky-worker-vm), where it
 runs with deny by default.
 
+## snitchd: the Go rewrite (in progress)
+
+`snitchd` replaces Little Snitch's daemon: it decides at `connect()` in the kernel (BPF LSM),
+keyed by the program's executable and the destination. Phase 1 is in: rules from a file,
+learning mode, bounded enforce. The TUI below still talks to Little Snitch until parity.
+
+```sh
+go build -o /tmp/snitchd ./cmd/snitchd
+sudo /tmp/snitchd -rules examples/rules.toml -duration 60s           # monitor: report, deny by rule only
+sudo /tmp/snitchd -learn -learned /tmp/learned.toml -duration 60s    # learn: write what connected, as rules
+sudo scripts/enforce-test.sh --check-only                            # the enforce test's safe phase
+```
+
+* Rules: `examples/rules.toml` explains every field and the precedence. Programs are paths or
+  globs, resolved to the executable's identity; rules are program (or `any`), prefix, proto,
+  port, allow or deny. The file is reloaded within 5 s of a change, executables are checked
+  every 10 s, `SIGHUP` reloads at once; a broken file keeps the previous rules.
+* Fail-safes live in the kernel program, not in rules: the local network is always allowed,
+  a stale heartbeat (daemon gone) allows everything, and the kill switch
+  `bpftool map update pinned /sys/fs/bpf/snitch/kill key 0 0 0 0 value 1 0 0 0` allows
+  everything until cleared. `scripts/fail-open.sh` does all of it from a console.
+* Enforce (deny by default) runs only bounded (`-mode enforce -duration …`) and only through
+  `scripts/enforce-test.sh`, which resets everything in a trap. Needs Linux >= 6.12.
+
 ## Install
 
 Needs Little Snitch for Linux (tested with 1.1.0, web UI on its default `127.0.0.1:3031`) and

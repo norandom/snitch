@@ -24,10 +24,14 @@ const mountinfoPath = "/proc/self/mountinfo"
 // openMountinfo is the mountinfo source; an internal test swaps it to exercise the fallback.
 var openMountinfo = func() (io.ReadCloser, error) { return os.Open(mountinfoPath) }
 
+// fallbackWarned makes the stat-fallback warning fire once per process, not once per Resolve
+// (the resolver runs every 10 s).
+var fallbackWarned sync.Once
+
 // identityFunc builds FS.Identity: statx for inode and mount id, mountinfo for the device,
 // and the stat-based conversion as a fallback that warns exactly once.
 func identityFunc(warn func(string)) func(string) (ExeKey, error) {
-	var once sync.Once
+	once := &fallbackWarned
 	return func(path string) (ExeKey, error) {
 		ino, mnt, stDev, err := statx(path)
 		if err != nil {

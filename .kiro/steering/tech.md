@@ -86,8 +86,8 @@ regenerating the BPF object only: clang, llvm, libbpf-dev.
 
 ### Common Commands
 ```bash
-# complexity caps (CI runs the same)
-go run github.com/fzipp/gocyclo/cmd/gocyclo@latest -over 10 ./cmd ./internal/rules ./internal/jobs ./internal/contract
+# code-shape caps (CI runs the same script)
+scripts/caps.sh
 
 # build + bounded monitor run
 go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -duration 10s

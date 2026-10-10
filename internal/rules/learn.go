@@ -109,7 +109,12 @@ func (l *Learned) Observe(o Observation) bool {
 		l.names[s] = o.Program
 	}
 	at := o.At.Truncate(time.Second)
-	k := learnKey{s, o.Addr.Unmap(), o.Proto, o.Port}
+	// only tcp and udp exist in the file: anything else (icmp sockets from ping, …) is "any"
+	proto := o.Proto
+	if proto != TCP && proto != UDP {
+		proto = AnyProto
+	}
+	k := learnKey{s, o.Addr.Unmap(), proto, o.Port}
 	e, ok := l.entries[k]
 	if !ok {
 		e = &learnEntry{first: at, last: at}

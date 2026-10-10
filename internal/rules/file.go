@@ -55,8 +55,9 @@ type Rule struct {
 	Line    int       // line of the [[rule]] header
 }
 
-// File is a parsed rules file.
+// File is a parsed rules file. Name is what Parse was given, for error messages.
 type File struct {
+	Name     string
 	Programs []Program
 	Rules    []Rule
 }

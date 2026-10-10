@@ -108,7 +108,7 @@ func (r *Resolved) claim(p *Program, path string, fs FS) error {
 
 func (r *Resolved) own(p *Program, path string, key ExeKey) error {
 	if other, taken := r.Programs[key]; taken && other != p.ID {
-		return &Error{Line: p.Line, Msg: fmt.Sprintf("executable %s is both program %q and %q", path, r.Names[other], p.Name)}
+		return &Error{File: r.File.Name, Line: p.Line, Msg: fmt.Sprintf("executable %s is both program %q and %q", path, r.Names[other], p.Name)}
 	}
 	r.Programs[key] = p.ID
 	return nil
