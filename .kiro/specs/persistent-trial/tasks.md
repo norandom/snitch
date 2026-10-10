@@ -26,7 +26,7 @@ go. Tasks in one package run one at a time.
   - _Requirements: 2.1, 3.3, 3.4, 5.1, 5.4, 6.1_
 
 - [ ] 2. Status record
-- [ ] 2.1 (P) The daemon's facts for the command line
+- [x] 2.1 (P) The daemon's facts for the command line
   - A record (pid, mode, source, learning, trial deadline, kept, rules file, rules numbers, written time) written atomically as key=value lines and read back; a missing file is a distinct error
   - Done when: `go test ./internal/status` proves the round trip and the missing-file error
   - _Boundary: internal/status/status.go, status_test.go_
@@ -97,3 +97,4 @@ go. Tasks in one package run one at a time.
 ## Implementation Notes
 - 1.1: `trial.Decide` follows the decision table (a trial is over when now ≥ End or now − Start > MaxTrial; exactly MaxTrial is still active); reasons are the log lines later tasks grep for, "enforce kept" is a prefix when a broken trial file is also present. Implementers: end the status report with the dash form `- STATUS:` exactly as the template shows.
 - 1.2: `Store` has no Stat delegate (presence comes from ReadFile's ErrNotExist); `OSStore.WriteFile` creates the state dir 0700; `TrialPath()`/`KeptPath()` exist for the CLI's rm hint. For 3.2: a malformed `enforce` file reads as Kept=false plus a Problem naming `KeptPath()`, and `Decide` only carries ClearTrial, so the follow job must also remove a kept file named in a Problem (else it logs every tick). For 4.2: the CLI must check the state dir exists before writing (the store would create it). For 5.1: set `StateDirectoryMode=0700` in the unit (systemd's default is 0755 and MkdirAll leaves an existing dir alone).
+- 2.1: `status.Write` creates `/run/snitch` 0700 when missing; `Read` keeps fs.ErrNotExist for the missing-file case ("daemon not running"); `Written` is carried to the second. `parseKV`/`writeAtomic` are duplicated from `internal/trial/store.go` (a shared `internal/kvfile` helper is a later cleanup, outside this spec).
