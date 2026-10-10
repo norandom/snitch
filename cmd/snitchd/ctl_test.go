@@ -109,16 +109,6 @@ func TestVerbNeedsRoot(t *testing.T) {
 	}
 }
 
-func TestVerbStatusStubExitsTwoNotImplemented(t *testing.T) {
-	c, _, errw := testCtl(t, probes{})
-	if code := dispatch(verbs, c, []string{"status", "-state-dir", t.TempDir()}); code != 2 {
-		t.Errorf("status: exit %d, want 2", code)
-	}
-	if !strings.Contains(errw.String(), "snitchd status: not implemented yet") {
-		t.Errorf("status: message %q", errw.String())
-	}
-}
-
 func TestVerbRunCtlHasTheRealProbesAndUid(t *testing.T) {
 	c := newCtl(os.Stdout, os.Stderr, realProbes())
 	if c.probes.control == nil || c.probes.kill == nil || c.euid == nil {

@@ -8,7 +8,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,14 +27,14 @@ type verb struct {
 	run  func(c *ctl, args []string) int
 }
 
-// verbs is the table main consults; the handlers live in ctl_verbs.go, status (4.3) replaces
-// its stub.
+// verbs is the table main consults; the writing handlers live in ctl_verbs.go, status in
+// ctl_status.go.
 var verbs = []verb{
 	{"trial", runTrial},
 	{"keep", runKeep},
 	{"unkeep", runUnkeep},
 	{"end", runEnd},
-	{"status", notImplemented},
+	{"status", runStatus},
 }
 
 // probes read the kernel side: the pinned control map (heartbeat age on the monotonic clock,
@@ -151,19 +150,6 @@ func dispatch(table []verb, c *ctl, args []string) int {
 	}
 	fmt.Fprintf(c.errw, "snitchd: %q is not a command; commands: %s (flags alone run the daemon, -h lists them)\n",
 		args[0], verbNames(table))
-	return exitUsage
-}
-
-// notImplemented holds a verb's place until its task fills it in: the shared flags parse
-// (-h prints usage, exit 0), then a clear refusal.
-func notImplemented(c *ctl, args []string) int {
-	if err := c.parse(args, nil); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		return exitUsage
-	}
-	fmt.Fprintf(c.errw, "snitchd %s: not implemented yet\n", c.name)
 	return exitUsage
 }
 
