@@ -372,3 +372,42 @@ reachable in monitor mode, local probe 10.0.0.1:53 answers; trap reset read back
 acceptance: curl 8.22 prints the connect errno only with `-v`, so the EPERM detector uses
 `curl -sS -v` and greps `failed: Operation not permitted`; checked against a network namespace
 without network (ENETUNREACH must not match). The enforce phase (7.3) has NOT been run.
+
+# 7.3 Enforce test run (2026-10-10, dev VM, `sudo scripts/enforce-test.sh -y -d 120`)
+
+Operator's go given with the Proxmox serial console open (serial_console set up via the VM
+repo first, commit 974c5fe there). Transcript:
+
+```
+== phase 1: monitor, identity pre-check (nothing is blocked)
+  PASS  rules loaded: 2 programs resolved
+  PASS  curl event names 'program curl' (identity matches the kernel)
+  PASS  curl 1.1.1.1 reachable in monitor mode
+  PASS  curl 9.9.9.9 reachable in monitor mode
+  PASS  local probe 10.0.0.1:53 answers
+
+== phase 2: ENFORCE for 120s. Everything not in the generated rules is denied for every
+   program on this machine (local network excepted). Keep the hypervisor console open.
+-- rules
+  PASS  C1 curl 1.1.1.1:443 allowed
+  PASS  C1 log: allow (rule) for curl
+  PASS  C2 curl 9.9.9.9:443 denied with EPERM
+  PASS  C2 log: DENY (default) for curl
+  PASS  C3 local probe 10.0.0.1:53 still works
+-- kill switch
+  PASS  K1 kill switch on: curl 9.9.9.9 works
+  PASS  K2 kill switch off: curl 9.9.9.9 denied
+-- heartbeat
+  PASS  P1 daemon stopped 16 s: curl 9.9.9.9 works (heartbeat stale)
+  PASS  P2 daemon resumed: curl 9.9.9.9 denied again
+-- done: stopping the daemon
+  PASS  hooks detached after exit
+reset: mode: monitor heartbeat 0 (read back); kill switch value: 0 (read back)
+reset: attached snitch programs: 0
+failed steps: 0
+```
+
+Every step passed: allow by rule, default deny with EPERM, local network still open, kill
+switch on and off, heartbeat fail-open after 16 s of SIGSTOP and deny again after SIGCONT,
+hooks detached at exit; the trap read back mode monitor and kill switch 0. The RDP session
+driving this run stayed up (the Claude Code binary was allowed by the generated rules).
