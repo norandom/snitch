@@ -76,14 +76,14 @@ go. Tasks in one package run one at a time.
   - _Boundary: systemd/snitchd.service, systemd/snitchd-trial-boot.service, README.md (install section)_
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 4.3, 8.3_
 
-- [ ] 6. Validation
+- [x] 6. Validation
 - [x] 6.1 Trial phase in the enforce test
   - Phase 3 after the same confirmation: daemon run without `-mode` (duration as ceiling, state dir and status file on temp paths): trial 2 m → EPERM within 5 s; restart the daemon → still EPERM; end → ok; trial 1 m → ok within 65 s and "ended at its deadline" logged; foreign-boot trial file → monitor and "ended at boot"; trial 2 m then `snitchd end -at-boot` → trial file gone and monitor within 5 s (the running daemon logs "ended by the operator"; do not grep for "at boot" here); trial + keep → trial file gone, still EPERM; unkeep → ok; kill switch and SIGSTOP steps as in phase 2; status exit 0 while running and 1 after stop; the trap also runs `end`
   - Done when: `shellcheck scripts/enforce-test.sh` clean and `sudo scripts/enforce-test.sh --check-only` still passes (phase 3 is not entered); README (the section 5.1 started) and CLAUDE.md status describe the trial commands
   - _Boundary: scripts/enforce-test.sh, README.md (trial commands, after 5.1), CLAUDE.md_
   - _Depends: 3.2, 4.3_
   - _Requirements: 8.1, 8.2_
-- [ ] 6.2 Run the trial phase on the dev VM
+- [x] 6.2 Run the trial phase on the dev VM
   - Only with the operator's explicit go in the session and the serial console open; the operator confirms the RDP session stayed up
   - Done when: every phase-3 step passes, the trap prints mode monitor, kill 0, no attached programs, no trial and no kept file, and the transcript is in the research log
   - _Requirements: 8.1, 8.2, 3.1, 3.2, 3.3, 4.1, 5.1, 5.4, 6.1_
@@ -106,3 +106,4 @@ go. Tasks in one package run one at a time.
 - 5.1: `snitchd.service` also `Wants=` the boot oneshot, so enabling only the daemon still gets the boot revert; both directories 0700; `TimeoutStopSec=10`. Neither unit is installed on this VM; the VM repo deploys them after 6.2 passed.
 - 6.1: phase 3 runs behind its own [y/N] prompt after phase 2 (`-y` covers both; `--skip-trial` runs phase 2 alone); the daemon's ceiling is the given duration plus 240 s; verbs get `-state-dir`/`-status` before the duration and stdin from /dev/null; T17 waits up to 20 s for `^daemon: *not running`; the trap runs `snitchd end` on the temp state dir before stopping the daemon. Phase 3 is desk-checked only until 6.2.
 - 6.3: every contract of this spec is listed in the design's "Contracts" subsection with the test that trips it; `TrialFile`/`KeptFile` unexported. All lint.yml commands green locally; the remote run is pending the push. Remaining: 6.2, the trial run on the dev VM (operator's go, serial console open).
+- 6.2: run on 2026-10-10, 63/63 steps (phases 1 to 3), exit 0; transcript in research.md. The units are still not installed on this VM: deployment is the VM repo's step.

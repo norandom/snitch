@@ -155,3 +155,100 @@ Overall M (3–4 days), Medium.
   with a fake clock, the transition log, the kernel fail-safes, and the trial phase on the VM.
 - A kept enforce surviving boot is deliberate (Req 5.3); the way back is a file and
   `fail-open.sh`, both documented by the `keep` command's own output.
+
+# 6.2 Trial run on the dev VM (2026-10-10, `sudo scripts/enforce-test.sh -y -d 120`)
+
+Operator's go with the serial console open. Phase 1 (5 steps), phase 2 (10) and phase 3 (48)
+all passed: 63/63, exit 0. Transcript:
+
+```
+== phase 1: monitor, identity pre-check (nothing is blocked)
+  PASS  rules loaded: 2 programs resolved
+  PASS  curl event names 'program curl' (identity matches the kernel)
+  PASS  curl 1.1.1.1 reachable in monitor mode
+  PASS  curl 9.9.9.9 reachable in monitor mode
+  PASS  local probe 10.0.0.1:53 answers
+
+== phase 2: ENFORCE for 120s. Everything not in the generated rules is denied for every
+   program on this machine (local network excepted). Keep the hypervisor console open.
+   Phase 3 (the trial flow) follows, behind its own prompt.
+-- rules
+  PASS  C1 curl 1.1.1.1:443 allowed
+  PASS  C1 log: allow (rule) for curl
+  PASS  C2 curl 9.9.9.9:443 denied with EPERM
+  PASS  C2 log: DENY (default) for curl
+  PASS  C3 local probe 10.0.0.1:53 still works
+-- kill switch
+  PASS  K1 kill switch on: curl 9.9.9.9 works
+  PASS  K2 kill switch off: curl 9.9.9.9 denied
+-- heartbeat
+  PASS  P1 daemon stopped 16 s: curl 9.9.9.9 works (heartbeat stale)
+  PASS  P2 daemon resumed: curl 9.9.9.9 denied again
+-- done: stopping the daemon
+  PASS  hooks detached after exit
+
+== phase 3: TRIAL flow for up to 360s under the same rules. The daemon runs without -mode;
+   snitchd trial/keep/unkeep/end on temp files switch it. Keep the hypervisor console open.
+  PASS  T0 daemon follows the files (status: source files)
+-- trial, restart, end
+  PASS  T1 snitchd trial 2m: exit 0, prints 'enforce until'
+  PASS  T2 curl 9.9.9.9 denied with EPERM within 5 s
+  PASS  T2 local probe 10.0.0.1:53 still works
+  PASS  T3 log: mode: enforce (trial until
+  PASS  T4 restarted daemon: curl 9.9.9.9 denied within 5 s
+  PASS  T4 log: mode: enforce (trial until) again
+  PASS  T5 snitchd end: exit 0
+  PASS  T6 curl 9.9.9.9 works within 5 s
+  PASS  T6 log: trial ended by the operator
+-- deadline
+  PASS  T7 snitchd trial 1m: exit 0
+  PASS  T8 curl 9.9.9.9 denied within 5 s
+  PASS  T9 curl 9.9.9.9 works within 65 s (deadline)
+  PASS  T9 log: trial ended at its deadline
+-- boot revert
+  PASS  T10 foreign-boot trial file removed within 5 s
+  PASS  T10 log: trial ended at boot
+  PASS  T10 curl 9.9.9.9 still works (monitor)
+  PASS  T11 snitchd trial 2m: exit 0
+  PASS  T11 curl 9.9.9.9 denied within 5 s
+  PASS  T11 snitchd end -at-boot: exit 0
+  PASS  T11 trial file gone within 5 s
+  PASS  T11 curl 9.9.9.9 works within 5 s
+  PASS  T11 log: trial ended by the operator
+-- keep, unkeep
+  PASS  T12 snitchd trial 2m: exit 0
+  PASS  T12 curl 9.9.9.9 denied within 5 s
+  PASS  T12 snitchd keep: exit 0
+  PASS  T12 trial file gone, kept file present
+  PASS  T12 curl 9.9.9.9 still denied after 5 s (enforce kept)
+  PASS  T12 log: mode: enforce (enforce kept)
+  PASS  T13 snitchd unkeep: exit 0
+  PASS  T13 curl 9.9.9.9 works within 5 s
+  PASS  T13 log: enforce unkept
+  PASS  T13 kept file gone
+-- kill switch and heartbeat under a trial
+  PASS  T14 snitchd trial 2m: exit 0
+  PASS  T14 curl 9.9.9.9 denied within 5 s
+  PASS  T14 kill switch on: curl 9.9.9.9 works
+  PASS  T14 kill switch off: curl 9.9.9.9 denied
+  PASS  T15 daemon stopped 16 s: curl 9.9.9.9 works (heartbeat stale)
+  PASS  T15 daemon resumed: curl 9.9.9.9 denied within 3 s
+-- status, end, stop
+  PASS  T16 snitchd status: exit 0, daemon running
+  PASS  T16 snitchd end: exit 0
+  PASS  T16 curl 9.9.9.9 works within 5 s
+  PASS  hooks detached after exit
+  PASS  T17 snitchd status after stop: exit 1, daemon not running (within 20 s)
+reset: mode: monitor heartbeat 0 (read back); kill switch value: 0 (read back)
+reset: attached snitch programs: 0
+reset: trial file: absent; kept file: absent
+failed steps: 0
+```
+
+Observed, in the order the requirements list them: a trial denies within 5 s (local network
+still open); the daemon restarted under a trial resumes enforce; end returns to monitor; a one
+minute trial ends at its own deadline; a trial file from another boot is cleared with "trial
+ended at boot"; end -at-boot clears a running one; keep survives the trial file's removal and
+unkeep ends it; the kill switch and a stopped daemon still fail open under a trial; status
+exits 0 while running and 1 once the heartbeat is stale. The trap read back mode monitor,
+kill 0, 0 attached programs, no trial and no kept file. The RDP session stayed up.
