@@ -25,18 +25,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: build + vet (the BPF object and its Go bindings are committed; no clang needed)
+      - name: build + vet + test (the BPF object and its Go bindings are committed; no clang needed)
         run: |
           gofmt -l . | tee /dev/stderr | wc -l | grep -qx 0
           go build ./...
           go vet ./...
+          go test ./...
+      - name: caps (functions <= 40 lines, cyclomatic <= 10, files <= 300 lines)
+        run: scripts/caps.sh
 
   shellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck snitch-trial
+        run: shellcheck snitch-trial scripts/*.sh
 
   actionlint:
     runs-on: ubuntu-latest

@@ -57,7 +57,7 @@ the output; CI never runs clang.
 what the file does and its fail-safe implications.
 
 ### Code shape (binding, enforced in CI where a tool exists)
-- Caps: functions ≤ 40 lines and cyclomatic complexity ≤ 10 (`funlen`, `gocyclo`), files
+- Caps: functions ≤ 40 lines and cyclomatic complexity ≤ 10 (`tools/caps`, `gocyclo`; `scripts/caps.sh` runs both), files
   ≤ 300 lines (generated bindings excluded), `main()` ≤ 60 lines.
 - Delegates over interfaces: inject varying behaviour as function values (`FS{Glob, Identity}`,
   `Clock func() time.Time`, `Sink func(Observation)`, `jobs.Job`). An interface needs two real

@@ -12,7 +12,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 `internal/rules` package, so they run one at a time.
 
 - [ ] 1. Foundation: dependency, CI gates, contracts, jobs, kernel types
-- [ ] 1.1 Add the TOML dependency and the CI quality gates
+- [x] 1.1 Add the TOML dependency and the CI quality gates
   - Add `github.com/pelletier/go-toml/v2` (v2.4.x) to the module; `go mod tidy`
   - CI workflow: run the Go tests; `gocyclo -over 10` and `funlen` (40 lines) over `internal/` except `internal/bpf` (the `cmd/` tree joins the caps in task 6.3); a file-length check (≤ 300 lines, same exclusions); shellcheck over `snitch-trial` and, when the directory exists, `scripts/*.sh` (nullglob)
   - Done when: every new CI command runs green locally on the current tree and `go build ./...` still needs no clang
@@ -159,3 +159,6 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - Every documented contract in design.md "Code contracts" has a test asserting its violation; caps tooling and file-length check green for `cmd/` and `internal/`; no exported identifier without a caller in another package
   - Done when: the CI workflow passes on the branch
   - _Requirements: 8.1, 8.3_
+
+## Implementation Notes
+- 1.1: `funlen`'s standalone command has no line-limit flag, so the function and file caps are enforced by the in-repo `tools/caps` (go/ast, tests included in scope); gocyclo v0.6.0 does complexity. `scripts/caps.sh` is the single entry point for CI and developers. Do not run `go mod tidy` before task 2.1 imports go-toml, it would drop the require.

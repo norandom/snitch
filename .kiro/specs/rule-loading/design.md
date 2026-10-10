@@ -553,9 +553,9 @@ in steering `tech.md` and enforced in CI where a tool exists.
 ### Size and complexity caps
 | Cap | Value | Enforced by |
 |---|---|---|
-| function length | ≤ 40 lines (body) | `funlen` |
+| function length | ≤ 40 lines (body) | `tools/caps` (go/ast) |
 | cyclomatic complexity | ≤ 10 per function | `gocyclo -over 10` |
-| file length | ≤ 300 lines | CI `awk` check over `*.go` (generated `internal/bpf` excluded) |
+| file length | ≤ 300 lines | `tools/caps` over `*.go`, tests included (generated `internal/bpf` excluded) |
 | `main()` in `cmd/snitchd` | ≤ 60 lines | review |
 | package exports | only what another package calls | review |
 
