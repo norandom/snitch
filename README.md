@@ -32,8 +32,9 @@ sudo scripts/enforce-test.sh --check-only                            # the enfor
   a stale heartbeat (daemon gone) allows everything, and the kill switch
   `bpftool map update pinned /sys/fs/bpf/snitch/kill key 0 0 0 0 value 1 0 0 0` allows
   everything until cleared. `scripts/fail-open.sh` does all of it from a console.
-* Enforce (deny by default) runs only bounded (`-mode enforce -duration …`) and only through
-  `scripts/enforce-test.sh`, which resets everything in a trap. Needs Linux >= 6.12.
+* Enforce (deny by default) runs only bounded: `-mode enforce -duration …` through
+  `scripts/enforce-test.sh`, which resets everything in a trap, or as a trial (below).
+  Needs Linux >= 6.12.
 
 **Service.** `systemd/snitchd.service` runs the daemon as root from boot with the default rules
 file (`/etc/snitch/rules.toml`), restarts it on failure and never passes `-mode`: the daemon
@@ -49,6 +50,18 @@ sudo install -m 644 systemd/snitchd.service systemd/snitchd-trial-boot.service /
 sudo systemctl daemon-reload
 sudo systemctl enable --now snitchd-trial-boot.service snitchd.service
 ```
+
+**Trial.** With the service running (any daemon started without `-mode`), `sudo snitchd trial
+10m` turns deny-by-default on for a bounded time (default 10 min, 1 to 60; verb flags such as
+`-extend` go before the duration) and prints the deadline. `snitchd status` shows the daemon,
+mode, trial, kept, kill switch and rules, one line each (exit 1 when the daemon is not
+running); `snitchd end` ends a trial early; `snitchd keep`, only during a trial, makes enforce
+stay and prints the way back; `snitchd unkeep` takes it back. The daemon follows the two files
+under `/var/lib/snitch` and ends a trial itself at its deadline; a reboot ends an open trial
+(the boot oneshot above, and the daemon checks the boot id itself). A kept enforce is the one
+exception, and it is a plain file: `rm /var/lib/snitch/enforce` from a console removes it, and
+the kill switch (`scripts/fail-open.sh`) overrides it meanwhile. `scripts/enforce-test.sh`
+runs the whole flow as its phase 3 (`--skip-trial` leaves it out).
 
 `systemd/snitch-trial*.service`, `snitch-trial.timer` and `snitch-watch.service` belong to the
 Little Snitch client below, not to snitchd.
