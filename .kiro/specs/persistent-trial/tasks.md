@@ -18,7 +18,7 @@ go. Tasks in one package run one at a time.
   - Done when: `go test ./internal/trial -run 'Decide|Bounds|Boot'` covers every row of the design's decision table, the clock-jump cap, the bound edges (59 s, 1 min, 60 min, 61 min) and the contracts
   - _Boundary: internal/trial/trial.go, trial_test.go_
   - _Requirements: 2.2, 3.1, 3.2, 3.5, 4.1, 4.2, 5.3, 8.4_
-- [ ] 1.2 The two files
+- [x] 1.2 The two files
   - A store over a directory with read, start trial, keep (writes the kept marker and removes the trial), clear trial, clear kept; file access through delegates so tests use memory; atomic writes; the plain key=value formats from the design
   - Read reports malformed files as problems rather than errors, so the daemon can log and clear them; missing files are simply absent
   - Done when: `go test ./internal/trial -run Store` proves round trips of both files, problems for malformed contents, keep removing the trial, clears on absent files, and that a rewrite replaces the file (new inode)
@@ -96,3 +96,4 @@ go. Tasks in one package run one at a time.
 
 ## Implementation Notes
 - 1.1: `trial.Decide` follows the decision table (a trial is over when now ≥ End or now − Start > MaxTrial; exactly MaxTrial is still active); reasons are the log lines later tasks grep for, "enforce kept" is a prefix when a broken trial file is also present. Implementers: end the status report with the dash form `- STATUS:` exactly as the template shows.
+- 1.2: `Store` has no Stat delegate (presence comes from ReadFile's ErrNotExist); `OSStore.WriteFile` creates the state dir 0700; `TrialPath()`/`KeptPath()` exist for the CLI's rm hint. For 3.2: a malformed `enforce` file reads as Kept=false plus a Problem naming `KeptPath()`, and `Decide` only carries ClearTrial, so the follow job must also remove a kept file named in a Problem (else it logs every tick). For 4.2: the CLI must check the state dir exists before writing (the store would create it). For 5.1: set `StateDirectoryMode=0700` in the unit (systemd's default is 0755 and MkdirAll leaves an existing dir alone).
