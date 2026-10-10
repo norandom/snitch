@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -50,6 +48,7 @@ type daemon struct {
 	log    func(string)
 	sink   func(rules.Observation) // learning; nil = off
 	learn  *learner
+	follow *follower // source files: decides the mode from the trial and kept files; nil = flag
 }
 
 // startup: rules first (a bad file is reported before anything touches the kernel), then the
@@ -107,29 +106,12 @@ func (d *daemon) startMode() error {
 	return nil
 }
 
-// decideOnce reads the files, applies the decision, and removes what it spent: a trial that
-// ended (at boot, at its deadline) and a malformed kept file, which Decide reports as a Problem
-// naming the path. Learning ignores the files and so removes nothing. A failed removal is
-// logged; the mode is already the safe one, and the next decision sees the file again.
+// decideOnce builds the follower over the files on this boot and makes its first decision at
+// now (what it applies and removes: see follower.decide); the follow job carries it on from
+// there on the real clock, so a transition at startup is remembered for the next tick's log.
 func (d *daemon) decideOnce(store trial.Store, bootID string, now time.Time) {
-	st := store.Read()
-	dec := trial.Decide(now, bootID, st, d.cfg.learn)
-	d.setMode(dec.Mode, dec.Reason)
-	if d.cfg.learn {
-		return
-	}
-	if dec.ClearTrial {
-		d.clear(store.ClearTrial, store.TrialPath())
-	}
-	if slices.ContainsFunc(st.Problems, func(p string) bool { return strings.HasPrefix(p, store.KeptPath()+":") }) {
-		d.clear(store.ClearKept, store.KeptPath())
-	}
-}
-
-func (d *daemon) clear(remove func() error, path string) {
-	if err := remove(); err != nil {
-		d.log("remove " + path + ": " + err.Error())
-	}
+	d.follow = &follower{store: store, boot: bootID, now: time.Now, learn: d.cfg.learn, apply: d.setMode, log: d.log}
+	d.follow.decide(now)
 }
 
 // setMode is the one place the mode changes: it stores the value the next heartbeat carries
@@ -215,7 +197,11 @@ func (d *daemon) beat() error {
 }
 
 // serve runs the jobs until the deadline, a stop signal, or a job's error ends the run.
-func (d *daemon) serve() int {
+func (d *daemon) serve() int { return runJobs(d.log, d.jobList()...) }
+
+// jobList: the heartbeat, the deadline, the stop signals, the event pump, the reloads, and,
+// when configured, the learned-file writer and the mode follower with its status writer.
+func (d *daemon) jobList() []jobs.Job {
 	r := &reloader{path: d.cfg.rules, st: &d.st, programs: mapOps(d.objs.Programs), rules: mapOps(d.objs.Rules), load: loadRules, log: d.log}
 	js := []jobs.Job{
 		jobs.Every(heartbeatPeriod, func(context.Context) error { return d.beat() }),
@@ -227,7 +213,7 @@ func (d *daemon) serve() int {
 	if d.learn != nil {
 		js = append(js, d.learn.job())
 	}
-	return runJobs(d.log, js...)
+	return append(js, d.modeJobs()...)
 }
 
 // runJobs runs the jobs, each behind a contract guard, and turns the outcome into an exit
