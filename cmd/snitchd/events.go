@@ -1,27 +1,21 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
-	"golang.org/x/sys/unix"
 
 	snitchbpf "github.com/norandom/snitch/internal/bpf"
+	"github.com/norandom/snitch/internal/rules"
 )
 
-var verdicts = [...]string{"allow (monitor)", "allow (rule)", "DENY (rule)", "DENY (default)",
-	"allow (local net)", "allow (heartbeat stale)", "allow (kill switch)"}
-
-// pump is the provisional event job (task 6.3): today's read-and-print loop. Task 6.5
-// replaces it with the fixed-layout decoder and program/rule naming. It never returns nil:
-// a nil return would end the whole run.
+// pump reads the kernel's events, names them from the current snapshot, prints them and hands
+// uncovered connections to the learning sink. It never returns nil: that would end the run.
 func (d *daemon) pump(ctx context.Context) error {
 	go func() { <-ctx.Done(); d.rd.Close() }()
 	for {
@@ -29,45 +23,116 @@ func (d *daemon) pump(ctx context.Context) error {
 		if errors.Is(err, ringbuf.ErrClosed) {
 			return ctx.Err()
 		}
-		if err != nil {
+		if err != nil || len(rec.RawSample) < eventSize {
 			continue
 		}
-		var e snitchbpf.SnitchEvent
-		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
-			continue
+		e := decodeEvent(rec.RawSample)
+		snap := d.st.current()
+		fmt.Println(describe(&e, snap, exeOf))
+		if e.Verdict == verdictAllowMonitor && d.sink != nil {
+			d.sink(observation(&e, snap, exeOf, time.Now()))
 		}
-		fmt.Println(line(&e))
 	}
 }
 
-func line(e *snitchbpf.SnitchEvent) string {
-	var ip net.IP
-	if e.Family == unix.AF_INET {
-		ip = net.IP(e.Addr[:4])
-	} else {
-		ip = net.IP(e.Addr[:])
+// exeOf is the fallback for an event without a path: the process may still be alive.
+func exeOf(pid uint32) string {
+	p, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	if err != nil {
+		return ""
 	}
-	exe, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", e.Pid))
-	hook := "connect"
-	if e.Hook == 1 {
-		hook = "sendmsg"
-	}
-	v := "?"
-	if int(e.Verdict) < len(verdicts) {
-		v = verdicts[e.Verdict]
-	}
-	return fmt.Sprintf("%-23s %-8s pid %-7d %-15s proto %-2d -> %s:%d  %s",
-		v, hook, e.Pid, cstring(e.Comm[:]), e.Proto, ip, e.Dport, filepath.Base(exe))
+	return p
 }
 
-// cstring turns a NUL-terminated C char array (int8 in Go) into a string.
-func cstring(c []int8) string {
-	b := make([]byte, 0, len(c))
-	for _, ch := range c {
-		if ch == 0 {
-			break
-		}
-		b = append(b, byte(ch))
+// describe is the human log line (not a contract):
+//
+//	DENY (default)  connect pid 4242 curl   tcp -> 9.9.9.9:443  program curl
+//	allow (rule)    connect pid 4242 curl   tcp -> 1.1.1.1:443  program curl  rule #1 curl 1.1.1.1/32 tcp 443 allow
+func describe(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string) string {
+	name, _ := programOf(e, snap, exe)
+	s := fmt.Sprintf("%-23s %-8s pid %-7d %-15s %-4s -> %s  program %s",
+		verdictName(e), hookName(e), e.Pid, commOf(e), protoName(e.Proto), destination(e), name)
+	if r := ruleOf(e, snap); r != nil {
+		s += "  rule " + ruleText(r)
 	}
-	return string(b)
+	return s
+}
+
+func destination(e *snitchbpf.SnitchEvent) string {
+	return netipJoin(addrOf(e).String(), e.Dport)
+}
+
+func netipJoin(addr string, port uint16) string {
+	if strings.Contains(addr, ":") {
+		return fmt.Sprintf("[%s]:%d", addr, port)
+	}
+	return fmt.Sprintf("%s:%d", addr, port)
+}
+
+// programOf names the program: the configured name for a mapped executable, otherwise the
+// path the kernel saw (or /proc as a fallback) marked unknown. known is false for the latter.
+func programOf(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string) (name string, known bool) {
+	if e.Program != 0 && snap != nil {
+		if n, ok := snap.res.Names[e.Program]; ok {
+			return n, true
+		}
+	}
+	path := pathOf(e)
+	if path == "" {
+		path = exe(e.Pid)
+	}
+	if path == "" {
+		return "unknown", false
+	}
+	return path + " (unknown)", false
+}
+
+func ruleOf(e *snitchbpf.SnitchEvent, snap *snapshot) *rules.Rule {
+	if e.Rule == 0 || snap == nil {
+		return nil
+	}
+	return snap.res.ByID[e.Rule]
+}
+
+// ruleText: "#1 curl 1.1.1.1/32 tcp 443 allow"
+func ruleText(r *rules.Rule) string {
+	port := "any"
+	if len(r.Ports) == 1 {
+		port = fmt.Sprint(r.Ports[0])
+	} else if len(r.Ports) > 1 {
+		port = fmt.Sprintf("%d-%d", r.Ports[0], r.Ports[len(r.Ports)-1])
+	}
+	return fmt.Sprintf("#%d %s %s %s %s %s", r.ID, r.Program, r.To, protoName(uint8(r.Proto)), port, verdictWord(r.Verdict))
+}
+
+func protoName(p uint8) string {
+	switch p {
+	case 0:
+		return "any"
+	case 6:
+		return "tcp"
+	case 17:
+		return "udp"
+	}
+	return fmt.Sprintf("proto%d", p)
+}
+
+func verdictWord(v rules.Verdict) string {
+	if v == rules.Deny {
+		return "deny"
+	}
+	return "allow"
+}
+
+// observation is what the learning sink gets for an uncovered connection.
+func observation(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, at time.Time) rules.Observation {
+	o := rules.Observation{Exe: rules.ExeKey{Ino: e.ExeIno, Dev: e.ExeDev}, Addr: addrOf(e), Proto: rules.Proto(e.Proto), Port: e.Dport, At: at}
+	if name, known := programOf(e, snap, exe); known {
+		o.Program = name
+	}
+	o.Path = pathOf(e)
+	if o.Path == "" {
+		o.Path = exe(e.Pid)
+	}
+	return o
 }
