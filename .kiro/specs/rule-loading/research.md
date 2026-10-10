@@ -328,3 +328,47 @@ applied. Pass 2: NEEDS_FIXES with three one-line items (provisional pump job in 
 unprovided device print from 7.2's pre-check, 6.5's short-lived check must use an unmapped
 program) plus four minor notes; all applied verbatim after the review. tasks.md written as
 generated, not approved: the operator approves with this history known.
+
+---
+
+# 7.1 Monitor-mode integration pass (2026-10-10, dev VM, kernel 7.2, bounded runs, trap-protected)
+
+Build: `go build -o /tmp/snitchd ./cmd/snitchd` at the state after task 6.6 (commit 897ce7f).
+Finding of the pass: with a glob on an empty directory the summary read
+`rules: 2 programs (1 resolved, 1 unresolved (curl)), 4 executables mapped, …` although curl's
+`/usr/bin/curl` was mapped (the 4 executables include it). Fixed in `summary()` during 7.1: a
+program is resolved when at least one executable maps, unmatched patterns are listed apart.
+Re-run of the start check with the fixed binary, same rules file:
+`rules: 2 programs (2 resolved, 0 unresolved), 1 patterns unmatched (curl:…/bin/*), 4 executables
+mapped, 2 rules effective (2 entries)`. All other rows below are from the first run (the
+transcript `pass71.log`, before the fix); the fix changes only that line.
+Rules file for the pass: curl (`/usr/bin/curl` + a glob on an initially empty directory) and
+the Claude Code glob; rules: allow curl → 1.1.1.1/32 tcp 443, deny curl → 9.9.9.9/32.
+
+| Check | Req | Observed |
+|---|---|---|
+| start, summary | 3.6 | first run: `… (1 resolved, 1 unresolved (curl)) …` (the bug above); fixed binary: `(2 resolved, 0 unresolved), 1 patterns unmatched (curl:…)`, 4 executables mapped, 2 rules effective |
+| allow by rule | 5.1, 5.3 | `allow (rule) connect pid … curl tcp -> 1.1.1.1:443 program curl rule #1 curl 1.1.1.1/32 tcp 443 allow` |
+| deny by rule in monitor mode | 3.5 | curl exit 7 "Could not connect"; `DENY (rule) … program curl rule #2 curl 9.9.9.9/32 any any deny` |
+| no rule | 5.1 | `allow (monitor) … -> 1.1.1.1:80 program curl` |
+| unmapped copy of curl | 5.2, 9.9 | `allow (monitor) … curl-copy … program /…/curl-copy (unknown)` (path from the kernel) |
+| file edited | 4.1 | new summary after 1.6 s; `rules` map 2 entries with the new address |
+| file broken | 4.2 | `reload failed, keeping the previous rules: …/rules.toml:1: toml: array is incomplete`; entries unchanged |
+| executable copied into the globbed dir | 4.3 | `5 executables mapped` after 0.8 s |
+| SIGHUP | 4.4 | summaries 3 → 5 within 0.5 s (HUP plus the file watcher) |
+| SIGTERM | 6.3 | exit 0; 0 snitch programs attached |
+| learning cycle | 9.1, 9.4, 9.8 | learn 6 s with no rules → file with curl → 1.1.1.1 tcp 443; loaded as `-rules`: `allow (rule) … rule #1` |
+| contract or verifier errors | — | none in any log |
+| kill map after everything | 6.4 | value 0 (never written) |
+
+Full transcript: scratchpad `pass71.log` of this session (not committed).
+
+# 7.2 Enforce test script, check-only phase (2026-10-10)
+
+`sudo scripts/enforce-test.sh --check-only`: rules loaded (2 programs resolved), a curl event
+names `program curl` (the resolver's identity equals the kernel's), both public addresses
+reachable in monitor mode, local probe 10.0.0.1:53 answers; trap reset read back mode monitor
+(heartbeat 0) and kill switch value 0, 0 attached programs; exit 0. Review finding fixed before
+acceptance: curl 8.22 prints the connect errno only with `-v`, so the EPERM detector uses
+`curl -sS -v` and greps `failed: Operation not permitted`; checked against a network namespace
+without network (ENETUNREACH must not match). The enforce phase (7.3) has NOT been run.

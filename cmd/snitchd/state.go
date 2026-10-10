@@ -83,22 +83,35 @@ func loadRules(path string, notice func(string)) (*snapshot, error) {
 	return &snapshot{res: res, ent: rules.Encode(res)}, nil
 }
 
-// summary is the one line printed after every successful apply.
+// summary is the one line printed after every successful apply. A program counts as resolved
+// when at least one of its executables is mapped; patterns that matched nothing are listed.
 func summary(snap *snapshot) string {
 	res := snap.res
-	unresolved := map[string]bool{}
+	mapped := map[uint32]bool{}
+	for _, id := range res.Programs {
+		mapped[id] = true
+	}
+	var unresolved, unmatched []string
+	for _, p := range res.File.Programs {
+		if !mapped[p.ID] {
+			unresolved = append(unresolved, p.Name)
+		}
+	}
 	for _, u := range res.Unresolved {
-		unresolved[u.Program] = true
+		unmatched = append(unmatched, u.Program+":"+u.Pattern)
 	}
-	names := make([]string, 0, len(unresolved))
-	for n := range unresolved {
-		names = append(names, n)
+	sort.Strings(unmatched)
+	s := fmt.Sprintf("rules: %d programs (%d resolved, %d unresolved%s)", len(res.File.Programs),
+		len(res.File.Programs)-len(unresolved), len(unresolved), names(unresolved))
+	if len(unmatched) > 0 {
+		s += fmt.Sprintf(", %d patterns unmatched%s", len(unmatched), names(unmatched))
 	}
-	sort.Strings(names)
-	resolved := len(res.File.Programs) - len(unresolved)
-	s := fmt.Sprintf("rules: %d programs (%d resolved, %d unresolved", len(res.File.Programs), resolved, len(unresolved))
-	if len(names) > 0 {
-		s += " (" + strings.Join(names, ", ") + ")"
+	return s + fmt.Sprintf(", %d executables mapped, %d rules effective (%d entries)", len(snap.ent.Programs), len(res.File.Rules), len(snap.ent.Rules))
+}
+
+func names(list []string) string {
+	if len(list) == 0 {
+		return ""
 	}
-	return s + fmt.Sprintf("), %d executables mapped, %d rules effective (%d entries)", len(snap.ent.Programs), len(res.File.Rules), len(snap.ent.Rules))
+	return " (" + strings.Join(list, ", ") + ")"
 }

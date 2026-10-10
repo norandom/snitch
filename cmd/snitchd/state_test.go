@@ -98,10 +98,23 @@ func TestLoadRulesResolvesAndEncodes(t *testing.T) {
 		t.Fatalf("want 1 executable, 2 rules, 1 unresolved: %+v", snap.ent)
 	}
 	s := summary(snap)
-	for _, want := range []string{"2 programs", "1 resolved", "1 unresolved (ghost)", "1 executable", "2 rules effective"} {
+	for _, want := range []string{"2 programs", "1 resolved", "1 unresolved (ghost)", "1 patterns unmatched (ghost:/nonexistent/ghost)", "1 executable", "2 rules effective"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("summary %q lacks %q", s, want)
 		}
+	}
+}
+
+func TestSummaryCountsAProgramResolvedWhenOnePathMaps(t *testing.T) {
+	self, _ := os.Executable()
+	p := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\", \""+t.TempDir()+"/*\"]\n")
+	snap, err := loadRules(p, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := summary(snap)
+	if !strings.Contains(s, "1 programs (1 resolved, 0 unresolved)") || !strings.Contains(s, "1 patterns unmatched (me:") {
+		t.Fatalf("got %q", s)
 	}
 }
 
