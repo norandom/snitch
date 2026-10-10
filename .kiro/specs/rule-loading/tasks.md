@@ -74,14 +74,14 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Requirements: 2.1, 2.3, 2.4, 2.5, 2.6_
 
 - [ ] 4. Encoding rules for the kernel maps
-- [ ] 4.1 Encode resolved rules into map entries
+- [x] 4.1 Encode resolved rules into map entries
   - One entry per rule and port: prefix length = 64 + address bits, family 2 or 10, v4 address in the first four bytes, program id or 0 for any, proto 0/6/17, port host order or 0; value carries verdict and rule id using the generated kernel types from 1.4
   - Contracts: prefix length ≥ 64, address bytes beyond the prefix are zero
   - Done when: `go test ./internal/rules -run Encode` checks the documented keys for v4 /32, v4 /0, v6 /48, any-program, port range expansion and the value layout, and shows the precedence tiers produce distinct keys
   - _Boundary: Encoder_
   - _Depends: 1.4, 3.2_
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 8.3_
-- [ ] 4.2 Diff two entry sets into puts and deletes
+- [x] 4.2 Diff two entry sets into puts and deletes
   - New and changed entries become puts, removed entries deletes, for programs and rules alike; identical inputs give an empty change set (contract)
   - Done when: `go test ./internal/rules -run Diff` passes including the empty-old (first load) case
   - _Boundary: Encoder_
@@ -167,3 +167,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 2.1: every error names its `[[program]]`/`[[rule]]` header line via a second pass with go-toml's `unstable` parser (document order matches the decoded slices); the inline form `program = [{...}]` is rejected with an error, not supported. Value conversion (prefix, proto, ports ≤ 256, verdict, no zoned addresses) lives in `decode.go`; `validate.go` (2.2) does names, references and ids.
 - 2.2: decision for 4.1: a rule with ports and proto any is encoded as TCP and UDP entries per port (the kernel never probes (proto 0, port); a bare (0, port) key would be a silent dead rule). `paths = []` stays legal: learned files use it for executables whose path was unknown; 3.2 reports such a program as unresolved.
 - 3.1/3.2: `rules.DevOf` gives the kernel's device (ext4 root here: 8388609 where stat says 2049). The mountinfo source is the unexported `openMountinfo` variable, swapped by internal tests; those tests must stay serial (no `t.Parallel`). `OSFS(warn)` takes the warning sink as a delegate. Literal paths skip Glob so a missing file reports the OS error; a program with no paths is reported as unresolved "no paths".
+- 4.1/4.2: two rules that encode to the same key (same program, prefix, proto, port after the any-proto expansion) are rejected by the validator naming both lines; `Encode` itself has no error path and would otherwise keep the later rule silently. `Diff` puts changed values (never delete+put); "identical → empty" is pinned by a test, not a runtime contract.
