@@ -88,7 +88,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Requirements: 4.1, 4.3_
 
 - [ ] 5. Learning aggregation
-- [ ] 5.1 (P) Aggregate observations and write them as a rules file
+- [x] 5.1 (P) Aggregate observations and write them as a rules file
   - Observations (executable path or kernel identity, configured program name if any, address, proto, port, time) merge by key with count, first and last seen; dirty flag for the writer
   - Projection to the file model: one program per executable (basename, "-2" suffix on collision, "unknown-<ino>-<dev>" with empty paths when the path is unknown), one allow rule per destination/proto/port with the learned fields
   - Atomic write (temp file + rename) with a header comment; seeding from an existing file continues the counts
@@ -168,3 +168,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 2.2: decision for 4.1: a rule with ports and proto any is encoded as TCP and UDP entries per port (the kernel never probes (proto 0, port); a bare (0, port) key would be a silent dead rule). `paths = []` stays legal: learned files use it for executables whose path was unknown; 3.2 reports such a program as unresolved.
 - 3.1/3.2: `rules.DevOf` gives the kernel's device (ext4 root here: 8388609 where stat says 2049). The mountinfo source is the unexported `openMountinfo` variable, swapped by internal tests; those tests must stay serial (no `t.Parallel`). `OSFS(warn)` takes the warning sink as a delegate. Literal paths skip Glob so a missing file reports the OS error; a program with no paths is reported as unresolved "no paths".
 - 4.1/4.2: two rules that encode to the same key (same program, prefix, proto, port after the any-proto expansion) are rejected by the validator naming both lines; `Encode` itself has no error path and would otherwise keep the later rule silently. `Diff` puts changed values (never delete+put); "identical → empty" is pinned by a test, not a runtime contract.
+- 5.1: learned entries are keyed by the executable (path, else ExeKey), never by the program name; a configured name is a display preference. A pathless program carries its identity in its `note` ("exe ino=N dev=N", with the `unknown-<ino>-<dev>` name as fallback). Observation times are truncated to seconds (what the file carries). Residual: a configured name shaped exactly `<base>-<digits>` reads back as derived and reverts to `<base>` on the next write. A configured program with several executables is written as one program per executable (`tooling`, `tooling-2`); the operator merges. For 6.6: `Dirty()` + `File()` + `WriteFile`; `File()` clears dirty.
