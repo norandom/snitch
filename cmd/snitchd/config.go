@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -44,6 +45,9 @@ func parseFlagsTo(args []string, usage io.Writer) (config, error) {
 	fs.StringVar(&cfg.mode, "mode", modeMonitor, "monitor (allow + report) or enforce (deny what no rule allows; needs -duration)")
 	fs.DurationVar(&cfg.duration, "duration", 0, "exit after this long (0: run until signalled)")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return cfg, err
+		}
 		return cfg, &usageError{err.Error()}
 	}
 	return cfg, check(cfg)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"strings"
 	"testing"
 	"time"
@@ -65,5 +66,13 @@ func TestChecksAcceptSafeCombinations(t *testing.T) {
 func TestUsageErrorExitCodeIsTwo(t *testing.T) {
 	if (&usageError{"x"}).exitCode() != 2 {
 		t.Fatal("usage errors exit 2, before any kernel object is loaded")
+	}
+}
+
+func TestHelpIsNotAUsageError(t *testing.T) {
+	_, err := parseFlags([]string{"-h"})
+	var ue *usageError
+	if !errors.Is(err, flag.ErrHelp) || errors.As(err, &ue) {
+		t.Fatalf("-h must surface flag.ErrHelp (exit 0), got %v", err)
 	}
 }
