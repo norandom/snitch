@@ -18,6 +18,19 @@ jobs:
       - name: ruff (settings in pyproject.toml)
         run: uvx ruff@0.16.10 check --output-format github snitch
 
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build + vet (the BPF object and its Go bindings are committed; no clang needed)
+        run: |
+          gofmt -l . | tee /dev/stderr | wc -l | grep -qx 0
+          go build ./...
+          go vet ./...
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
