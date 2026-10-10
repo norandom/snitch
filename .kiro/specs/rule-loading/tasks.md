@@ -111,14 +111,14 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Boundary: state.go, main.go (startup sequence)_
   - _Depends: 1.2, 2.2, 3.2, 4.2_
   - _Requirements: 1.3, 1.4, 2.3, 3.1, 3.6, 6.4_
-- [ ] 6.3 Assemble the daemon from jobs
+- [x] 6.3 Assemble the daemon from jobs
   - The entry point parses flags, runs the startup sequence, builds the job list and runs it under one context: heartbeat (timestamp, mode and the flags word from startup config), deadline, stop signals, and a provisional pump job holding today's ring-buffer read-and-print loop moved unchanged into its own file (6.5 replaces it); later tasks add their jobs to this list only
   - A contract violation anywhere is logged with a stack and exits 70; the `cmd/` tree joins the caps in CI
   - Done when: `main()` is ≤ 60 lines, the daemon exits on its deadline and on SIGTERM with no snitch programs attached (`bpftool prog show`), heartbeat still beats every 2 s (control map timestamp advances), and the caps tooling is green for `cmd/`
   - _Boundary: main.go, events.go (provisional pump), CI caps scope_
   - _Depends: 1.3, 6.2_
   - _Requirements: 6.2, 6.3, 6.1_
-- [ ] 6.4 Reload jobs
+- [x] 6.4 Reload jobs
   - File watch job (2 s stat of mtime/size/inode) does a full reload; re-resolve job (10 s) refreshes executables only; SIGHUP does a full reload; each publishes a new snapshot only after a successful apply and prints the summary
   - Failures (parse, conflict, map error) are logged with file:line:reason and keep the previous snapshot
   - Done when: in a monitor run, editing the file changes the summary within 5 s, breaking it logs the error while rules stay effective, copying an executable into a globbed directory is matched within 10 s, and SIGHUP reloads at once
@@ -170,3 +170,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 4.1/4.2: two rules that encode to the same key (same program, prefix, proto, port after the any-proto expansion) are rejected by the validator naming both lines; `Encode` itself has no error path and would otherwise keep the later rule silently. `Diff` puts changed values (never delete+put); "identical → empty" is pinned by a test, not a runtime contract.
 - 5.1: learned entries are keyed by the executable (path, else ExeKey), never by the program name; a configured name is a display preference. A pathless program carries its identity in its `note` ("exe ino=N dev=N", with the `unknown-<ino>-<dev>` name as fallback). Observation times are truncated to seconds (what the file carries). Residual: a configured name shaped exactly `<base>-<digits>` reads back as derived and reverts to `<base>` on the next write. A configured program with several executables is written as one program per executable (`tooling`, `tooling-2`); the operator merges. For 6.6: `Dirty()` + `File()` + `WriteFile`; `File()` clears dirty.
 - 6.1/6.2: Go flags cannot take an optional value, so learning is `-learn` (bool) plus `-learned <path>`. Flags and checks live in `config.go`, the snapshot/apply/summary in `state.go`, the ExeKey→kernel key helper in `keys.go`. Map operations are `putDel{put, del}` delegates built from `*ebpf.Map`, so `apply` is tested with a recorder. "rules effective" in the summary counts declared rules (entries land for unresolved programs too).
+- 6.3/6.4: every job runs behind `guard()`: a contract violation on a job goroutine becomes the run's error and exits 70 with the goroutine's stack (main's recover only sees startup). A heartbeat write error now ends the run (exit 1, hooks detach: the fail-safe direction). Reloads are serialized by a mutex and `Invariant` that the base snapshot did not move. A failed `apply` on reload (realistically only E2BIG/ENOMEM) can leave the puts that succeeded before the error in the maps; the snapshot stays old and a later Diff never deletes those strays until a file names the same keys. The daemon source split: main.go (entry), daemon.go (startup, jobs, guard), state.go, reload.go, events.go, config.go, keys.go.
