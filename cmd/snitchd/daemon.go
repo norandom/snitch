@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -19,6 +23,7 @@ import (
 	"github.com/norandom/snitch/internal/contract"
 	"github.com/norandom/snitch/internal/jobs"
 	"github.com/norandom/snitch/internal/rules"
+	"github.com/norandom/snitch/internal/trial"
 )
 
 const (
@@ -30,32 +35,36 @@ const (
 var errStop = errors.New("stop requested")
 
 // daemon is the running state: kernel objects, the current snapshot, and what the heartbeat
-// writes. Built once by startup; the jobs read it.
+// writes. Built once by startup; the jobs read it. mode is written by setMode (startup, the
+// follow job) and read by every heartbeat; reason is the last mode-change log line.
 type daemon struct {
-	cfg   config
-	objs  snitchbpf.SnitchObjects
-	links []link.Link
-	rd    *ringbuf.Reader
-	st    state
-	mode  uint32
-	flags uint32
-	log   func(string)
-	sink  func(rules.Observation) // learning; nil = off
-	learn *learner
+	cfg    config
+	objs   snitchbpf.SnitchObjects
+	links  []link.Link
+	rd     *ringbuf.Reader
+	st     state
+	mode   atomic.Uint32
+	modeMu sync.Mutex // serializes setMode: mode and reason change together
+	reason string
+	flags  uint32
+	log    func(string)
+	sink   func(rules.Observation) // learning; nil = off
+	learn  *learner
 }
 
 // startup: rules first (a bad file is reported before anything touches the kernel), then the
-// objects, the first heartbeat, the maps, and only then the hooks.
+// mode (from the flag or the files: a kept enforce or an old trial is decided before the first
+// heartbeat), the objects, the first heartbeat, the maps, and only then the hooks.
 func startup(cfg config) (*daemon, error) {
 	d := &daemon{cfg: cfg, log: func(m string) { fmt.Fprintln(os.Stderr, "snitchd:", m) }}
-	if cfg.mode == modeEnforce {
-		d.mode = 1
-	}
 	snap, err := loadRules(cfg.rules, d.log)
 	if err != nil {
 		return nil, fmt.Errorf("rules: %w", err)
 	}
 	if err := d.setupLearning(); err != nil {
+		return nil, err
+	}
+	if err := d.startMode(); err != nil {
 		return nil, err
 	}
 	if err := d.loadObjects(); err != nil {
@@ -72,8 +81,83 @@ func startup(cfg config) (*daemon, error) {
 	if err := d.attach(); err != nil {
 		return nil, err
 	}
-	fmt.Printf("snitchd: mode %s, hooks lsm/socket_connect + lsm/socket_sendmsg, maps pinned in %s\n", cfg.mode, pinDir)
+	fmt.Printf("snitchd: mode %s (%s), hooks lsm/socket_connect + lsm/socket_sendmsg, maps pinned in %s\n",
+		modeName(trial.Mode(d.mode.Load())), cfg.source, pinDir)
 	return d, nil
+}
+
+// startMode sets the mode once before the first heartbeat. Source flag: the flag, and the
+// files are never read (Req 3.6). Source files: the state directory is created when missing
+// (a hand-started daemon has no StateDirectory), then one decision from the files, so a kept
+// enforce enforces from the first beat and a trial from another boot is gone before any hook
+// is attached (Req 4.2, 5.3).
+func (d *daemon) startMode() error {
+	if d.cfg.source == sourceFlag {
+		d.setMode(flagMode(d.cfg.mode), "-mode "+d.cfg.mode)
+		return nil
+	}
+	if err := os.MkdirAll(d.cfg.stateDir, 0o700); err != nil {
+		return fmt.Errorf("state dir: %w", err)
+	}
+	boot, err := trial.BootID(os.ReadFile)
+	if err != nil {
+		return err
+	}
+	d.decideOnce(trial.OSStore(d.cfg.stateDir), boot, time.Now())
+	return nil
+}
+
+// decideOnce reads the files, applies the decision, and removes what it spent: a trial that
+// ended (at boot, at its deadline) and a malformed kept file, which Decide reports as a Problem
+// naming the path. Learning ignores the files and so removes nothing. A failed removal is
+// logged; the mode is already the safe one, and the next decision sees the file again.
+func (d *daemon) decideOnce(store trial.Store, bootID string, now time.Time) {
+	st := store.Read()
+	dec := trial.Decide(now, bootID, st, d.cfg.learn)
+	d.setMode(dec.Mode, dec.Reason)
+	if d.cfg.learn {
+		return
+	}
+	if dec.ClearTrial {
+		d.clear(store.ClearTrial, store.TrialPath())
+	}
+	if slices.ContainsFunc(st.Problems, func(p string) bool { return strings.HasPrefix(p, store.KeptPath()+":") }) {
+		d.clear(store.ClearKept, store.KeptPath())
+	}
+}
+
+func (d *daemon) clear(remove func() error, path string) {
+	if err := remove(); err != nil {
+		d.log("remove " + path + ": " + err.Error())
+	}
+}
+
+// setMode is the one place the mode changes: it stores the value the next heartbeat carries
+// and logs "mode: <monitor|enforce> (<reason>)" once per change of mode or reason (Req 1.4);
+// the same decision again is silent.
+func (d *daemon) setMode(m trial.Mode, reason string) {
+	d.modeMu.Lock()
+	defer d.modeMu.Unlock()
+	if trial.Mode(d.mode.Load()) == m && d.reason == reason {
+		return
+	}
+	d.mode.Store(uint32(m))
+	d.reason = reason
+	d.log(fmt.Sprintf("mode: %s (%s)", modeName(m), reason))
+}
+
+func modeName(m trial.Mode) string {
+	if m == trial.Enforce {
+		return modeEnforce
+	}
+	return modeMonitor
+}
+
+func flagMode(s string) trial.Mode {
+	if s == modeEnforce {
+		return trial.Enforce
+	}
+	return trial.Monitor
 }
 
 // setupLearning: seed the learned set, feed the pump's sink into it, and ask the kernel for the
@@ -126,7 +210,7 @@ func (d *daemon) beat() error {
 	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
 		return err
 	}
-	c := snitchbpf.SnitchControlState{HeartbeatNs: uint64(ts.Nano()), Mode: d.mode, Flags: d.flags}
+	c := snitchbpf.SnitchControlState{HeartbeatNs: uint64(ts.Nano()), Mode: d.mode.Load(), Flags: d.flags}
 	return d.objs.Control.Put(uint32(0), &c)
 }
 

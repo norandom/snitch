@@ -12,8 +12,19 @@ const (
 	modeMonitor = "monitor"
 	modeEnforce = "enforce"
 
-	defaultRules   = "/etc/snitch/rules.toml"
-	defaultLearned = "/var/lib/snitch/learned.toml"
+	defaultRules    = "/etc/snitch/rules.toml"
+	defaultLearned  = "/var/lib/snitch/learned.toml"
+	defaultStateDir = "/var/lib/snitch"    // the trial and kept-enforce files (systemd StateDirectory)
+	defaultStatus   = "/run/snitch/status" // the daemon's facts for the command line (RuntimeDirectory)
+)
+
+// modeSource says where the daemon's mode comes from: the -mode flag, fixed for the run (the
+// bounded enforce test), or the trial and kept files under the state directory (the service).
+type modeSource string
+
+const (
+	sourceFlag  modeSource = "flag"
+	sourceFiles modeSource = "files"
 )
 
 // config is everything the command line decides. Checked before any kernel object is loaded.
@@ -22,6 +33,9 @@ type config struct {
 	learned  string
 	learn    bool
 	mode     string
+	source   modeSource
+	stateDir string
+	status   string
 	duration time.Duration
 }
 
@@ -43,6 +57,8 @@ func parseFlagsTo(args []string, usage io.Writer) (config, error) {
 	fs.BoolVar(&cfg.learn, "learn", false, "learning mode: monitor and record connections no rule covers")
 	fs.StringVar(&cfg.learned, "learned", defaultLearned, "where learning mode writes its rules file")
 	fs.StringVar(&cfg.mode, "mode", modeMonitor, "monitor (allow + report) or enforce (deny what no rule allows; needs -duration)")
+	fs.StringVar(&cfg.stateDir, "state-dir", defaultStateDir, "directory of the trial and kept-enforce files that decide the mode when -mode is not given")
+	fs.StringVar(&cfg.status, "status", defaultStatus, "status file the daemon writes for the command line")
 	fs.DurationVar(&cfg.duration, "duration", 0, "exit after this long (0: run until signalled)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -50,7 +66,20 @@ func parseFlagsTo(args []string, usage io.Writer) (config, error) {
 		}
 		return cfg, &usageError{err.Error()}
 	}
+	cfg.source = sourceOf(fs)
 	return cfg, check(cfg)
+}
+
+// sourceOf: a -mode flag on the command line fixes the mode for the run; without one the
+// files decide (Req 3.6: the bounded run never reads them).
+func sourceOf(fs *flag.FlagSet) modeSource {
+	src := sourceFiles
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "mode" {
+			src = sourceFlag
+		}
+	})
+	return src
 }
 
 // check is fail-safe 5 in this phase: enforce only bounded, and learning can never deny.

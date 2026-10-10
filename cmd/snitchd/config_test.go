@@ -77,3 +77,44 @@ func TestHelpIsNotAUsageError(t *testing.T) {
 		t.Fatalf("-h must surface flag.ErrHelp (exit 0), got %v", err)
 	}
 }
+
+func TestSourceIsFlagOnlyWhenModeIsGiven(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want modeSource
+	}{
+		{"no -mode: the files decide", nil, sourceFiles},
+		{"-mode monitor", []string{"-mode", "monitor"}, sourceFlag},
+		{"-mode enforce bounded", []string{"-mode", "enforce", "-duration", "10s"}, sourceFlag},
+		{"other flags keep the files", []string{"-learn", "-duration", "10s", "-state-dir", "/tmp/s"}, sourceFiles},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := parseFlags(c.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.source != c.want {
+				t.Fatalf("want source %q, got %q", c.want, cfg.source)
+			}
+		})
+	}
+}
+
+func TestSourcePathsHaveTheDesignDefaultsAndTakeFlags(t *testing.T) {
+	cfg, err := parseFlags(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.stateDir != "/var/lib/snitch" || cfg.status != "/run/snitch/status" {
+		t.Fatalf("defaults wrong: state dir %q, status %q", cfg.stateDir, cfg.status)
+	}
+	cfg, err = parseFlags([]string{"-state-dir", "/tmp/x/state", "-status", "/tmp/x/status"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.stateDir != "/tmp/x/state" || cfg.status != "/tmp/x/status" {
+		t.Fatalf("values wrong: state dir %q, status %q", cfg.stateDir, cfg.status)
+	}
+}
