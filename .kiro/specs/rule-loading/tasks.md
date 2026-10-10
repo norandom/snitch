@@ -11,7 +11,7 @@ command succeeds and `gofmt -l .` and `go vet ./...` are clean. Never run enforc
 task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share the
 `internal/rules` package, so they run one at a time.
 
-- [ ] 1. Foundation: dependency, CI gates, contracts, jobs, kernel types
+- [x] 1. Foundation: dependency, CI gates, contracts, jobs, kernel types
 - [x] 1.1 Add the TOML dependency and the CI quality gates
   - Add `github.com/pelletier/go-toml/v2` (v2.4.x) to the module; `go mod tidy`
   - CI workflow: run the Go tests; `gocyclo -over 10` and `funlen` (40 lines) over `internal/` except `internal/bpf` (the `cmd/` tree joins the caps in task 6.3); a file-length check (≤ 300 lines, same exclusions); shellcheck over `snitch-trial` and, when the directory exists, `scripts/*.sh` (nullglob)
@@ -39,7 +39,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Boundary: BPF additions, bindings_
   - _Requirements: 5.3, 9.9, 5.2_
 
-- [ ] 2. Rules file model and parser
+- [x] 2. Rules file model and parser
 - [x] 2.1 File model and strict decode
   - Immutable model: programs (name, paths, note) and rules (program or "any", prefix or bare address, proto tcp/udp/any, port integer or "a-b" range, verdict, note, optional learned fields count/first/last); strict TOML decode that rejects unknown keys
   - Syntax errors carry file, line and reason from the decoder; a missing file surfaces as not-exist so the caller can start empty
@@ -58,7 +58,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Boundary: examples, file_test.go_
   - _Requirements: 1.1, 1.5_
 
-- [ ] 3. Resolving programs to the kernel's executable identity
+- [x] 3. Resolving programs to the kernel's executable identity
 - [x] 3.1 Device identity from mountinfo
   - Compute a file's inode and the superblock device the kernel reports: mount id via statx, major:minor from the mountinfo row for that mount, encoded as the kernel does (major shifted by 20, or'ed with minor)
   - Fallback to the stat device's major/minor with a one-time warning when mountinfo is unreadable or has no row
@@ -73,7 +73,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Boundary: Resolver_
   - _Requirements: 2.1, 2.3, 2.4, 2.5, 2.6_
 
-- [ ] 4. Encoding rules for the kernel maps
+- [x] 4. Encoding rules for the kernel maps
 - [x] 4.1 Encode resolved rules into map entries
   - One entry per rule and port: prefix length = 64 + address bits, family 2 or 10, v4 address in the first four bytes, program id or 0 for any, proto 0/6/17, port host order or 0; value carries verdict and rule id using the generated kernel types from 1.4
   - Contracts: prefix length ≥ 64, address bytes beyond the prefix are zero
@@ -87,7 +87,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Boundary: Encoder_
   - _Requirements: 4.1, 4.3_
 
-- [ ] 5. Learning aggregation
+- [x] 5. Learning aggregation
 - [x] 5.1 (P) Aggregate observations and write them as a rules file
   - Observations (executable path or kernel identity, configured program name if any, address, proto, port, time) merge by key with count, first and last seen; dirty flag for the writer
   - Projection to the file model: one program per executable (basename, "-2" suffix on collision, "unknown-<ino>-<dev>" with empty paths when the path is unknown), one allow rule per destination/proto/port with the learned fields
@@ -98,7 +98,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Depends: 2.2, 3.2_
   - _Requirements: 9.3, 9.4, 9.6, 9.8_
 
-- [ ] 6. Daemon wiring (integration)
+- [x] 6. Daemon wiring (integration)
 - [x] 6.1 Flags and startup checks
   - Flags for the rules file (default `/etc/snitch/rules.toml`) and the learning file (default `/var/lib/snitch/learned.toml` when given without a value); enforce without a duration and learning together with enforce are refused before any kernel load, exit code 2 with the reason
   - Done when: `snitchd -mode enforce` exits 2 with a message, `snitchd -mode enforce -learn` exits 2 with "learning never denies", and `-h` lists the new flags
