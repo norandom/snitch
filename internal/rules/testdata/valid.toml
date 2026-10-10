@@ -1,0 +1,33 @@
+# a small, valid rules file used by the parser tests
+
+[[program]]
+name  = "curl"
+paths = ["/usr/bin/curl"]
+note  = "general purpose"
+
+[[program]]
+name  = "claude"
+paths = ["/home/*/.local/share/claude/versions/*", "/opt/claude/bin/claude"]
+
+[[rule]]
+program = "curl"
+to      = "1.1.1.1/32"
+proto   = "tcp"
+port    = 443
+verdict = "allow"
+note    = "the one address the test allows"
+
+[[rule]]
+program = "claude"
+to      = "::/0"
+verdict = "allow"
+
+[[rule]]
+program = "any"
+to      = "9.9.9.9"          # bare address: /32
+proto   = "udp"
+port    = "67-68"            # a range
+verdict = "deny"
+count   = 12
+first   = 2026-10-10T06:00:00Z
+last    = 2026-10-10T06:30:00Z

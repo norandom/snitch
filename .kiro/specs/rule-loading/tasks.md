@@ -40,7 +40,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Requirements: 5.3, 9.9, 5.2_
 
 - [ ] 2. Rules file model and parser
-- [ ] 2.1 File model and strict decode
+- [x] 2.1 File model and strict decode
   - Immutable model: programs (name, paths, note) and rules (program or "any", prefix or bare address, proto tcp/udp/any, port integer or "a-b" range, verdict, note, optional learned fields count/first/last); strict TOML decode that rejects unknown keys
   - Syntax errors carry file, line and reason from the decoder; a missing file surfaces as not-exist so the caller can start empty
   - Done when: `go test ./internal/rules -run Decode` loads a valid fixture into the expected model and reports the line of a syntax error and of an unknown key
@@ -164,3 +164,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 1.1: `funlen`'s standalone command has no line-limit flag, so the function and file caps are enforced by the in-repo `tools/caps` (go/ast, tests included in scope); gocyclo v0.6.0 does complexity. `scripts/caps.sh` is the single entry point for CI and developers. Do not run `go mod tidy` before task 2.1 imports go-toml, it would drop the require.
 - 1.3: `jobs.Run` ends when the FIRST job returns, nil included (that is how `After` ends a run). Consequences: the event pump (6.5) must never return nil by accident (today's loop returns on `ringbuf.ErrClosed`), or the daemon exits early; other jobs' errors are discarded, so the learned-file writer (6.6) must log its own shutdown write failure. `Every` does not tick before the first period: main writes the first heartbeat before `Run` (design order heartbeat → apply → attach → Run).
 - 1.4: `bpf_d_path` needs a trusted pointer; a walk `task->mm->exe_file` is untrusted (verifier: "R1 type=scalar"). The program acquires the exe with the kfuncs `bpf_get_task_exe_file` / `bpf_put_file` (Linux ≥ 6.12, a new runtime prerequisite; dev kernel is 7.2). The event's `path` bytes after the NUL are uninitialised ring-buffer memory: the Go decoder (6.5) must stop at the first NUL. `flags` stays 0 until the daemon sets WANT_PATH (6.6).
+- 2.1: every error names its `[[program]]`/`[[rule]]` header line via a second pass with go-toml's `unstable` parser (document order matches the decoded slices); the inline form `program = [{...}]` is rejected with an error, not supported. Value conversion (prefix, proto, ports ≤ 256, verdict, no zoned addresses) lives in `decode.go`; `validate.go` (2.2) does names, references and ids.
