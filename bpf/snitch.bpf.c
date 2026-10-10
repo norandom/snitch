@@ -46,6 +46,8 @@ struct event {
 	__u8  verdict;
 	__u8  hook;        // 0 connect, 1 sendmsg (unconnected UDP)
 	char  comm[16];
+	__u32 rule;        // id of the rule that decided, 0 = none
+	char  path[256];   // exe path (bpf_d_path): only for unknown programs or with WANT_PATH
 };
 
 struct exe_key {
@@ -65,16 +67,26 @@ struct rule_key {
 	__u8  addr[16];
 };
 
+// Trie value: the verdict and which rule it came from (for the event stream).
+struct rule_val {
+	__u8  verdict;     // 1 allow, 2 deny
+	__u8  pad[3];
+	__u32 id;
+};
+
+#define FLAG_WANT_PATH 1  // daemon asks for the exe path on every event (learning mode)
+
 struct control_state {
 	__u64 heartbeat_ns;
 	__u32 mode;
-	__u32 pad;
+	__u32 flags;
 };
 
 const struct event *unused_event __attribute__((unused));
 const struct rule_key *unused_rule_key __attribute__((unused));
 const struct exe_key *unused_exe_key __attribute__((unused));
 const struct control_state *unused_control __attribute__((unused));
+const struct rule_val *unused_rule_val __attribute__((unused));
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -92,7 +104,7 @@ struct {
 	__uint(type, BPF_MAP_TYPE_LPM_TRIE);
 	__uint(max_entries, 65536);
 	__type(key, struct rule_key);
-	__type(value, __u8);
+	__type(value, struct rule_val);
 	__uint(map_flags, BPF_F_NO_PREALLOC);
 } rules SEC(".maps");
 
@@ -129,7 +141,7 @@ static __always_inline int local_v6(const __u8 *a)
 	return z == 0 && a[15] == 1;                          // ::1
 }
 
-static __always_inline __u8 lookup(__u32 program, __u8 family, __u8 proto, __u16 port, const __u8 *addr)
+static __always_inline struct rule_val *lookup(__u32 program, __u8 family, __u8 proto, __u16 port, const __u8 *addr)
 {
 	struct rule_key k = {};
 	k.prefixlen = 64 + (family == AF_INET ? 32 : 128);
@@ -141,16 +153,16 @@ static __always_inline __u8 lookup(__u32 program, __u8 family, __u8 proto, __u16
 		if (p == 1 && program == 0) break;
 		k.program = progs[p];
 		k.proto = proto; k.port = port;
-		__u8 *v = bpf_map_lookup_elem(&rules, &k);
-		if (v) return *v;
+		struct rule_val *v = bpf_map_lookup_elem(&rules, &k);
+		if (v) return v;
 		k.port = 0;
 		v = bpf_map_lookup_elem(&rules, &k);
-		if (v) return *v;
+		if (v) return v;
 		k.proto = 0;
 		v = bpf_map_lookup_elem(&rules, &k);
-		if (v) return *v;
+		if (v) return v;
 	}
-	return 0;
+	return NULL;
 }
 
 static __always_inline int decide(struct socket *sock, struct sockaddr *address, __u8 hook)
@@ -183,15 +195,20 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	}
 
 	__u8 verdict;
+	__u32 rule = 0;
 	__u32 zero = 0;
 	__u32 *k = bpf_map_lookup_elem(&kill, &zero);
 	struct control_state *c = bpf_map_lookup_elem(&control, &zero);
 	__u64 now = bpf_ktime_get_ns();
+	// the exe file as a trusted, acquired reference (kfunc): bpf_d_path needs a trusted
+	// pointer, a walk through task->mm->exe_file is untrusted. Released at the end.
 	struct task_struct *t = bpf_get_current_task_btf();
-	struct file *exe = BPF_CORE_READ(t, mm, exe_file);
+	struct file *exe = bpf_get_task_exe_file(t);
 	struct exe_key ek = {};
-	ek.ino = BPF_CORE_READ(exe, f_inode, i_ino);
-	ek.dev = BPF_CORE_READ(exe, f_inode, i_sb, s_dev);
+	if (exe) {
+		ek.ino = BPF_CORE_READ(exe, f_inode, i_ino);
+		ek.dev = BPF_CORE_READ(exe, f_inode, i_sb, s_dev);
+	}
 	__u32 *pid_p = bpf_map_lookup_elem(&programs, &ek);
 	__u32 program = pid_p ? *pid_p : 0;
 	__u8 proto = BPF_CORE_READ(sock, sk, sk_protocol);
@@ -203,9 +220,10 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	else if (family == AF_INET ? local_v4(*(__u32 *)addr) : local_v6(addr))
 		verdict = V_ALLOW_LOCAL;
 	else {
-		__u8 r = lookup(program, family, proto, dport, addr);
-		if (r == 1) verdict = V_ALLOW_RULE;
-		else if (r == 2) verdict = V_DENY_RULE;
+		struct rule_val *r = lookup(program, family, proto, dport, addr);
+		if (r) rule = r->id;
+		if (r && r->verdict == 1) verdict = V_ALLOW_RULE;
+		else if (r && r->verdict == 2) verdict = V_DENY_RULE;
 		else verdict = c->mode == MODE_ENFORCE ? V_DENY_DEFAULT : V_ALLOW_MONITOR;
 	}
 
@@ -223,8 +241,16 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 		e->verdict = verdict;
 		e->hook = hook;
 		bpf_get_current_comm(&e->comm, sizeof(e->comm));
+		e->rule = rule;
+		e->path[0] = 0;
+		// the path costs a d_path walk: only where the daemon needs it
+		if (exe && (program == 0 || (c && (c->flags & FLAG_WANT_PATH))))
+			if (bpf_d_path(&exe->f_path, e->path, sizeof(e->path)) < 0)
+				e->path[0] = 0;
 		bpf_ringbuf_submit(e, 0);
 	}
+	if (exe)
+		bpf_put_file(exe);
 	return (verdict == V_DENY_RULE || verdict == V_DENY_DEFAULT) ? -EPERM : 0;
 }
 

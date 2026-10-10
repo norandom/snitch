@@ -113,8 +113,11 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   actionlint. Commit as `git -c user.name=marius -c user.email=wishinet@gmail.com commit`.
   Before every push: no secrets in the diff.
 - Rule maps (see the C): `programs` hash (exe inode+dev -> program id), `rules` LPM trie
-  (prefixlen | program | family | proto | port | addr[16] -> 1 allow / 2 deny; 0 = any for
-  program/proto/port), `control` array (heartbeat_ns, mode 0 monitor / 1 enforce), `kill`.
+  (prefixlen | program | family | proto | port | addr[16] -> rule_val {verdict 1 allow / 2 deny,
+  rule id}; 0 = any for program/proto/port), `control` array (heartbeat_ns, mode 0 monitor /
+  1 enforce, flags bit 0 = want exe path in events), `kill`. Events carry the rule id and the
+  exe path (bpf_d_path via the bpf_get_task_exe_file kfunc, Linux >= 6.12; only for unknown
+  programs or with the flag).
   Lookup order: program-specific then any-program; exact proto+port, proto, any.
 
 ## Status (2026-10-10) and next steps

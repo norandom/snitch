@@ -31,7 +31,7 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - Done when: `go test ./internal/jobs/...` proves cancellation on first error, ticker stop with the context, deadline behaviour and signal delivery
   - _Boundary: jobs_
   - _Requirements: 6.2, 4.4_
-- [ ] 1.4 Kernel types: rule id and gated executable path in events
+- [x] 1.4 Kernel types: rule id and gated executable path in events
   - Trie value becomes verdict plus rule id; the event gains the rule id and a 256-byte path; the control state's pad becomes flags with bit 0 "want path"
   - The path is produced only for unknown programs or when the flag is set; a failed lookup leaves it empty; the decision order and every fail-safe check stay byte-for-byte the same (show this in the diff)
   - Add the value type to the bindings generator, regenerate with clang on the dev VM, commit the output; struct names stay distinct from map names
@@ -163,3 +163,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 ## Implementation Notes
 - 1.1: `funlen`'s standalone command has no line-limit flag, so the function and file caps are enforced by the in-repo `tools/caps` (go/ast, tests included in scope); gocyclo v0.6.0 does complexity. `scripts/caps.sh` is the single entry point for CI and developers. Do not run `go mod tidy` before task 2.1 imports go-toml, it would drop the require.
 - 1.3: `jobs.Run` ends when the FIRST job returns, nil included (that is how `After` ends a run). Consequences: the event pump (6.5) must never return nil by accident (today's loop returns on `ringbuf.ErrClosed`), or the daemon exits early; other jobs' errors are discarded, so the learned-file writer (6.6) must log its own shutdown write failure. `Every` does not tick before the first period: main writes the first heartbeat before `Run` (design order heartbeat → apply → attach → Run).
+- 1.4: `bpf_d_path` needs a trusted pointer; a walk `task->mm->exe_file` is untrusted (verifier: "R1 type=scalar"). The program acquires the exe with the kfuncs `bpf_get_task_exe_file` / `bpf_put_file` (Linux ≥ 6.12, a new runtime prerequisite; dev kernel is 7.2). The event's `path` bytes after the NUL are uninitialised ring-buffer memory: the Go decoder (6.5) must stop at the first NUL. `flags` stays 0 until the daemon sets WANT_PATH (6.6).

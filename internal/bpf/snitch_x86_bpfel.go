@@ -17,7 +17,7 @@ type SnitchControlState struct {
 	_           structs.HostLayout
 	HeartbeatNs uint64
 	Mode        uint32
-	Pad         uint32
+	Flags       uint32
 }
 
 type SnitchEvent struct {
@@ -35,6 +35,9 @@ type SnitchEvent struct {
 	Hook    uint8
 	Comm    [16]int8
 	_       [2]byte
+	Rule    uint32
+	Path    [256]int8
+	_       [4]byte
 }
 
 type SnitchExeKey struct {
@@ -54,6 +57,13 @@ type SnitchRuleKey struct {
 	Addr      [16]uint8
 }
 
+type SnitchRuleVal struct {
+	_       structs.HostLayout
+	Verdict uint8
+	Pad     [3]uint8
+	Id      uint32
+}
+
 // Names of all BPF objects in the ELF.
 //
 // Used for safe lookups in a Collection or CollectionSpec.
@@ -69,6 +79,7 @@ const (
 	SnitchVarUnusedEvent    = "unused_event"
 	SnitchVarUnusedExeKey   = "unused_exe_key"
 	SnitchVarUnusedRuleKey  = "unused_rule_key"
+	SnitchVarUnusedRuleVal  = "unused_rule_val"
 )
 
 // LoadSnitch returns the embedded CollectionSpec for Snitch.
@@ -136,6 +147,7 @@ type SnitchVariableSpecs struct {
 	UnusedEvent   *ebpf.VariableSpec `ebpf:"unused_event"`
 	UnusedExeKey  *ebpf.VariableSpec `ebpf:"unused_exe_key"`
 	UnusedRuleKey *ebpf.VariableSpec `ebpf:"unused_rule_key"`
+	UnusedRuleVal *ebpf.VariableSpec `ebpf:"unused_rule_val"`
 }
 
 // SnitchObjects contains all objects after they have been loaded into the kernel.
@@ -183,6 +195,7 @@ type SnitchVariables struct {
 	UnusedEvent   *ebpf.Variable `ebpf:"unused_event"`
 	UnusedExeKey  *ebpf.Variable `ebpf:"unused_exe_key"`
 	UnusedRuleKey *ebpf.Variable `ebpf:"unused_rule_key"`
+	UnusedRuleVal *ebpf.Variable `ebpf:"unused_rule_val"`
 }
 
 // SnitchPrograms contains all programs after they have been loaded into the kernel.

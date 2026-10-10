@@ -519,10 +519,13 @@ existing learned file via `Load` (9.6).
 struct rule_val { __u8 verdict; __u8 pad[3]; __u32 id; };   // trie value (was __u8)
 struct event { ...; __u32 rule; char path[256]; };          // rule 0 = none
 struct control_state { __u64 heartbeat_ns; __u32 mode; __u32 flags; };  // flags bit 0: want_path
-// in decide(), after the verdict:
+// in decide(): the exe as a trusted, acquired reference (kfuncs, Linux >= 6.12); a walk
+// through task->mm->exe_file is untrusted and the verifier rejects it for bpf_d_path.
+//   struct file *exe = bpf_get_task_exe_file(t);        ... ino/dev via BPF_CORE_READ(exe, ...)
 //   e->path[0] = 0;
-//   if (program == 0 || (c && (c->flags & 1)))
+//   if (exe && (program == 0 || (c && (c->flags & 1))))
 //       if (bpf_d_path(&exe->f_path, e->path, sizeof(e->path)) < 0) e->path[0] = 0;
+//   ...; if (exe) bpf_put_file(exe);   // single exit after acquisition
 ```
 - `lookup()` returns `struct rule_val *`; verdict mapping unchanged (1 allow, 2 deny).
 - The path is produced only for unknown programs or when the daemon sets `want_path`
