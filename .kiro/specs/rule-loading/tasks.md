@@ -59,13 +59,13 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - _Requirements: 1.1, 1.5_
 
 - [ ] 3. Resolving programs to the kernel's executable identity
-- [ ] 3.1 Device identity from mountinfo
+- [x] 3.1 Device identity from mountinfo
   - Compute a file's inode and the superblock device the kernel reports: mount id via statx, major:minor from the mountinfo row for that mount, encoded as the kernel does (major shifted by 20, or'ed with minor)
   - Fallback to the stat device's major/minor with a one-time warning when mountinfo is unreadable or has no row
   - Done when: `go test ./internal/rules -run Dev` passes against a sample mountinfo fixture (ext4 and a btrfs-style row) and the fallback case; the live comparison with a kernel event is task 7.2's pre-check
   - _Boundary: Resolver_
   - _Requirements: 2.2, 8.2_
-- [ ] 3.2 Resolve every program's paths and globs
+- [x] 3.2 Resolve every program's paths and globs
   - Glob, symlink and identity access injected as function values so tests use fakes; several matches map to one program; non-regular files skipped
   - Unresolved paths or globs reported by program name while the program's rules stay loaded; one executable in two programs is a configuration error naming both
   - Output includes id→name and id→rule lookups for the event printer; contracts ensure no executable maps to two ids
@@ -166,3 +166,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 1.4: `bpf_d_path` needs a trusted pointer; a walk `task->mm->exe_file` is untrusted (verifier: "R1 type=scalar"). The program acquires the exe with the kfuncs `bpf_get_task_exe_file` / `bpf_put_file` (Linux ≥ 6.12, a new runtime prerequisite; dev kernel is 7.2). The event's `path` bytes after the NUL are uninitialised ring-buffer memory: the Go decoder (6.5) must stop at the first NUL. `flags` stays 0 until the daemon sets WANT_PATH (6.6).
 - 2.1: every error names its `[[program]]`/`[[rule]]` header line via a second pass with go-toml's `unstable` parser (document order matches the decoded slices); the inline form `program = [{...}]` is rejected with an error, not supported. Value conversion (prefix, proto, ports ≤ 256, verdict, no zoned addresses) lives in `decode.go`; `validate.go` (2.2) does names, references and ids.
 - 2.2: decision for 4.1: a rule with ports and proto any is encoded as TCP and UDP entries per port (the kernel never probes (proto 0, port); a bare (0, port) key would be a silent dead rule). `paths = []` stays legal: learned files use it for executables whose path was unknown; 3.2 reports such a program as unresolved.
+- 3.1/3.2: `rules.DevOf` gives the kernel's device (ext4 root here: 8388609 where stat says 2049). The mountinfo source is the unexported `openMountinfo` variable, swapped by internal tests; those tests must stay serial (no `t.Parallel`). `OSFS(warn)` takes the warning sink as a delegate. Literal paths skip Glob so a missing file reports the OS error; a program with no paths is reported as unresolved "no paths".
