@@ -11,7 +11,7 @@ put this VM into enforce mode: the trial flow is observed only in task 6.2, afte
 go. Tasks in one package run one at a time.
 
 - [ ] 1. Trial logic, pure and file-backed
-- [ ] 1.1 The mode decision and its bounds
+- [x] 1.1 The mode decision and its bounds
   - A mode decision from (now, boot id, state, learning): with learning the decision is always monitor and the files are logged as ignored; otherwise kept wins; no trial is monitor; a trial from another boot ends at boot; a passed deadline or a trial older than the maximum ends at its deadline; otherwise enforce until the deadline; a malformed trial file counts as none and is cleared. Each decision carries the log reason and whether the trial file is spent
   - Bounds: durations from 1 to 60 minutes, default 10; the boot id read through a delegate
   - Contracts: the decision requires a non-zero time and a boot id; a spent trial is only reported when a trial or a problem exists
@@ -93,3 +93,6 @@ go. Tasks in one package run one at a time.
   - _Boundary: `*_test.go` of this spec's packages, design.md contract list_
   - _Depends: 3.2, 4.3_
   - _Requirements: 8.4_
+
+## Implementation Notes
+- 1.1: `trial.Decide` follows the decision table (a trial is over when now ≥ End or now − Start > MaxTrial; exactly MaxTrial is still active); reasons are the log lines later tasks grep for, "enforce kept" is a prefix when a broken trial file is also present. Implementers: end the status report with the dash form `- STATUS:` exactly as the template shows.
