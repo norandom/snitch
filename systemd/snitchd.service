@@ -1,0 +1,26 @@
+# snitchd: egress control in the kernel, always on, always starting in monitor mode. The unit
+# never passes -mode: the daemon reads the trial and kept-enforce files under /var/lib/snitch
+# (fail-safe 5: deny only as a timed trial with a boot revert). snitchd-trial-boot.service
+# runs first and ends an open trial, so a reboot never comes back enforcing. While the daemon
+# is down the kernel program fails open (no heartbeat), and the kill switch map survives
+# restarts. Not installed or enabled by this repo: the VM repo's pyinfra flow deploys it.
+[Unit]
+Description=snitch: egress control in the kernel (monitor unless a trial or kept enforce says otherwise)
+Wants=snitchd-trial-boot.service
+After=snitchd-trial-boot.service
+
+[Service]
+ExecStart=/usr/local/sbin/snitchd -rules /etc/snitch/rules.toml
+Restart=on-failure
+RestartSec=2
+# SIGTERM (the default KillSignal) makes the daemon detach its hooks and exit.
+TimeoutStopSec=10
+# The trial and kept-enforce files (0700: the daemon leaves an existing directory's mode alone).
+StateDirectory=snitch
+StateDirectoryMode=0700
+# The status file for `snitchd status`.
+RuntimeDirectory=snitch
+RuntimeDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

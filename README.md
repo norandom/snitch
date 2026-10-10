@@ -35,6 +35,24 @@ sudo scripts/enforce-test.sh --check-only                            # the enfor
 * Enforce (deny by default) runs only bounded (`-mode enforce -duration …`) and only through
   `scripts/enforce-test.sh`, which resets everything in a trap. Needs Linux >= 6.12.
 
+**Service.** `systemd/snitchd.service` runs the daemon as root from boot with the default rules
+file (`/etc/snitch/rules.toml`), restarts it on failure and never passes `-mode`: the daemon
+starts in monitor mode and follows the trial and kept-enforce files under `/var/lib/snitch`.
+`systemd/snitchd-trial-boot.service` is a oneshot ordered before it that runs
+`snitchd end -at-boot`, so a trial that was open at shutdown is gone before anything can
+enforce. Neither unit is installed or enabled here: the VM repo's pyinfra flow deploys them
+once the trial phase of the enforce test has passed. By hand it would be:
+
+```sh
+sudo install -m 755 /tmp/snitchd /usr/local/sbin/snitchd
+sudo install -m 644 systemd/snitchd.service systemd/snitchd-trial-boot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now snitchd-trial-boot.service snitchd.service
+```
+
+`systemd/snitch-trial*.service`, `snitch-trial.timer` and `snitch-watch.service` belong to the
+Little Snitch client below, not to snitchd.
+
 ## Install
 
 Needs Little Snitch for Linux (tested with 1.1.0, web UI on its default `127.0.0.1:3031`) and

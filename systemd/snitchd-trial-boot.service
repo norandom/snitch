@@ -1,0 +1,18 @@
+# snitchd-trial-boot: a deny-by-default trial that was open at shutdown is ended before snitchd
+# starts (fail-safe 5: a reboot is the recovery of last resort and must come back in monitor
+# mode). `snitchd end -at-boot` removes only the trial file, leaves a kept enforce alone and
+# exits 0 when there is nothing to do, also on a first boot with an empty state directory.
+# It needs no network, no rules file and no running daemon. Not installed or enabled by this
+# repo: the VM repo's pyinfra flow deploys it next to snitchd.service.
+[Unit]
+Description=snitch: an open deny-by-default trial at boot is ended before the daemon starts
+Before=snitchd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/snitchd end -at-boot
+StateDirectory=snitch
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

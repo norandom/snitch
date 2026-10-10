@@ -372,12 +372,16 @@ Absent pinned maps = daemon never ran since boot = not running, kill clear.
 [Unit]
 Description=snitch: egress control in the kernel (monitor unless a trial or kept enforce says otherwise)
 After=snitchd-trial-boot.service
+Wants=snitchd-trial-boot.service
 [Service]
 ExecStart=/usr/local/sbin/snitchd -rules /etc/snitch/rules.toml
 Restart=on-failure
 RestartSec=2
+TimeoutStopSec=10
 StateDirectory=snitch
+StateDirectoryMode=0700
 RuntimeDirectory=snitch
+RuntimeDirectoryMode=0700
 [Install]
 WantedBy=multi-user.target
 
@@ -389,6 +393,7 @@ Before=snitchd.service
 Type=oneshot
 ExecStart=/usr/local/sbin/snitchd end -at-boot
 StateDirectory=snitch
+StateDirectoryMode=0700
 [Install]
 WantedBy=multi-user.target
 ```
