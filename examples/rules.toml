@@ -1,0 +1,69 @@
+# snitch rules: who may talk to where. Loaded by snitchd (-rules), reloaded when it changes.
+#
+# Programs name executables; rules bind a program (or "any") to a destination.
+# Precedence, decided in the kernel, most specific first:
+#   1. a rule for the program before a rule for "any"
+#   2. within that: exact proto + port, then proto only, then any proto/port
+#   3. within that: the longest address prefix
+# The local network (RFC 1918, link-local, loopback, fc00::/7, fe80::/10, ::1) is always
+# allowed inside the kernel program; no rule here can change that.
+
+# --- programs -------------------------------------------------------------------------------
+
+[[program]]
+name  = "curl"
+paths = ["/usr/bin/curl"]            # absolute paths; the file's inode+device is what matches
+note  = "general purpose: allowed only where a rule says so"
+
+[[program]]
+name  = "claude"
+paths = ["/home/*/.local/share/claude/versions/*"]   # filepath.Glob patterns (* ? [..], no **)
+note  = "Claude Code: the session tooling"
+
+[[program]]
+name  = "apt"
+paths = ["/usr/lib/apt/methods/http", "/usr/lib/apt/methods/https"]
+
+# --- rules ----------------------------------------------------------------------------------
+
+[[rule]]
+program = "curl"
+to      = "1.1.1.1/32"               # an IPv4 or IPv6 prefix, or a bare address (/32, /128)
+proto   = "tcp"                      # tcp | udp | any (default: any)
+port    = 443                        # a number, a range "a-b" (<= 256 ports), or absent = any;
+                                     # with proto any, a port applies to tcp and udp
+verdict = "allow"                    # allow | deny
+note    = "the enforce test's allowed address"
+
+[[rule]]
+program = "claude"
+to      = "0.0.0.0/0"
+verdict = "allow"
+
+[[rule]]
+program = "claude"
+to      = "::/0"
+verdict = "allow"
+
+[[rule]]
+program = "apt"
+to      = "0.0.0.0/0"
+proto   = "tcp"
+port    = 80                         # a range like "80-443" would be 364 ports: too wide (max 256)
+verdict = "allow"
+
+[[rule]]
+program = "apt"
+to      = "0.0.0.0/0"
+proto   = "tcp"
+port    = 443
+verdict = "allow"
+
+[[rule]]
+program = "any"                      # applies to every program, after program-specific rules
+to      = "203.0.113.0/24"
+verdict = "deny"                     # an explicit deny also denies in monitor mode
+note    = "TEST-NET-3: an example of blocking a network for everything"
+
+# Learned files (snitchd -learn) use the same format and add, per rule:
+#   count = 12   first = 2026-10-10T06:00:00Z   last = 2026-10-10T06:30:00Z

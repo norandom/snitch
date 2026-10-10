@@ -25,16 +25,16 @@ func load(t *testing.T, name string) *rules.File {
 func TestDecodeValidFixture(t *testing.T) {
 	f := load(t, "valid.toml")
 	wantPrograms := []rules.Program{
-		{Name: "curl", Paths: []string{"/usr/bin/curl"}, Note: "general purpose", Line: 3},
-		{Name: "claude", Paths: []string{"/home/*/.local/share/claude/versions/*", "/opt/claude/bin/claude"}, Line: 8},
+		{Name: "curl", Paths: []string{"/usr/bin/curl"}, Note: "general purpose", ID: 1, Line: 3},
+		{Name: "claude", Paths: []string{"/home/*/.local/share/claude/versions/*", "/opt/claude/bin/claude"}, ID: 2, Line: 8},
 	}
 	utc := func(h, m int) time.Time { return time.Date(2026, 10, 10, h, m, 0, 0, time.UTC) }
 	wantRules := []rules.Rule{
 		{Program: "curl", To: netip.MustParsePrefix("1.1.1.1/32"), Proto: rules.TCP, Ports: []uint16{443},
-			Verdict: rules.Allow, Note: "the one address the test allows", Line: 12},
-		{Program: "claude", To: netip.MustParsePrefix("::/0"), Verdict: rules.Allow, Line: 20},
+			Verdict: rules.Allow, Note: "the one address the test allows", ID: 1, Line: 12},
+		{Program: "claude", To: netip.MustParsePrefix("::/0"), Verdict: rules.Allow, ID: 2, Line: 20},
 		{Program: "any", To: netip.MustParsePrefix("9.9.9.9/32"), Proto: rules.UDP, Ports: []uint16{67, 68},
-			Verdict: rules.Deny, Count: 12, First: utc(6, 0), Last: utc(6, 30), Line: 25},
+			Verdict: rules.Deny, Count: 12, First: utc(6, 0), Last: utc(6, 30), ID: 3, Line: 25},
 	}
 	if !reflect.DeepEqual(f.Programs, wantPrograms) {
 		t.Fatalf("programs:\n got %+v\nwant %+v", f.Programs, wantPrograms)
@@ -100,5 +100,20 @@ func TestDecodeRejectsZonedAddress(t *testing.T) {
 	var e *rules.Error
 	if !errors.As(err, &e) || e.Line != 5 || !strings.Contains(e.Msg, "fe80::1%eth0") {
 		t.Fatalf("want a line-5 error naming the zoned address, got %v", err)
+	}
+}
+
+// The documented example (examples/rules.toml) must stay loadable: it is the operator's
+// reference and the enforce test's template.
+func TestExampleRulesFileLoads(t *testing.T) {
+	f, err := rules.Load(filepath.Join("..", "..", "examples", "rules.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Programs) != 3 || len(f.Rules) != 6 {
+		t.Fatalf("want 3 programs and 6 rules, got %d and %d", len(f.Programs), len(f.Rules))
+	}
+	if f.Rules[5].Program != rules.AnyProgram || f.Rules[5].Verdict != rules.Deny {
+		t.Fatalf("the last example rule should be the any-program deny, got %+v", f.Rules[5])
 	}
 }

@@ -46,13 +46,13 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
   - Done when: `go test ./internal/rules -run Decode` loads a valid fixture into the expected model and reports the line of a syntax error and of an unknown key
   - _Boundary: File model and parser_
   - _Requirements: 1.1, 1.3, 1.5, 8.1_
-- [ ] 2.2 Semantic validation with line numbers and ids
+- [x] 2.2 Semantic validation with line numbers and ids
   - Checks: unique program names, rules reference declared programs or "any", canonical prefixes, ports 1–65535 and ranges ≤ 256 ports, known protocols and verdicts; ids assigned 1..n in declaration order; contracts ensure ids are dense
   - Semantic errors name the table's line: take positions from a second pass with go-toml's `unstable` parser (table index → line) and keep the typed decode for the values
   - Done when: `go test ./internal/rules -run Validate` reports the expected line for each invalid case (duplicate name, undeclared program, bad prefix, port 0 and 70000, range too wide, bad proto, bad verdict) and learned fields are accepted and kept on the model
   - _Boundary: File model and parser_
   - _Requirements: 1.4, 9.8_
-- [ ] 2.3 Documented example rules file
+- [x] 2.3 Documented example rules file
   - An example with curl, the session tooling glob, apt, an any-program deny, and comments explaining precedence and every field; used as a parser fixture
   - Done when: the example loads in the parser test with the expected program and rule counts
   - _Boundary: examples, file_test.go_
@@ -165,3 +165,4 @@ task 7.3. Tasks 1.2 and 1.3 may run in parallel; all tasks in group 2 to 4 share
 - 1.3: `jobs.Run` ends when the FIRST job returns, nil included (that is how `After` ends a run). Consequences: the event pump (6.5) must never return nil by accident (today's loop returns on `ringbuf.ErrClosed`), or the daemon exits early; other jobs' errors are discarded, so the learned-file writer (6.6) must log its own shutdown write failure. `Every` does not tick before the first period: main writes the first heartbeat before `Run` (design order heartbeat → apply → attach → Run).
 - 1.4: `bpf_d_path` needs a trusted pointer; a walk `task->mm->exe_file` is untrusted (verifier: "R1 type=scalar"). The program acquires the exe with the kfuncs `bpf_get_task_exe_file` / `bpf_put_file` (Linux ≥ 6.12, a new runtime prerequisite; dev kernel is 7.2). The event's `path` bytes after the NUL are uninitialised ring-buffer memory: the Go decoder (6.5) must stop at the first NUL. `flags` stays 0 until the daemon sets WANT_PATH (6.6).
 - 2.1: every error names its `[[program]]`/`[[rule]]` header line via a second pass with go-toml's `unstable` parser (document order matches the decoded slices); the inline form `program = [{...}]` is rejected with an error, not supported. Value conversion (prefix, proto, ports ≤ 256, verdict, no zoned addresses) lives in `decode.go`; `validate.go` (2.2) does names, references and ids.
+- 2.2: decision for 4.1: a rule with ports and proto any is encoded as TCP and UDP entries per port (the kernel never probes (proto 0, port); a bare (0, port) key would be a silent dead rule). `paths = []` stays legal: learned files use it for executables whose path was unknown; 3.2 reports such a program as unresolved.
