@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2329  # the step helpers are invoked through step(), cleanup through the trap
+# shellcheck disable=SC2329,SC2317  # the step helpers are invoked through step(), cleanup through the trap (SC2317 on older shellcheck)
 # enforce-test: the first deny-by-default run of snitchd, on this machine, under a trap.
 #
 # Phase 1 (always, monitor mode, nothing is blocked): the generated rules file loads, a curl
