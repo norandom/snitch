@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"net/netip"
 
 	"github.com/norandom/snitch/internal/contract"
 )
@@ -25,8 +26,49 @@ func validate(f *File, name string) error {
 		}
 		r.ID = uint32(i + 1)
 	}
+	if err := checkDuplicateKeys(f, name); err != nil {
+		return err
+	}
 	assertDenseIDs(f)
 	return nil
+}
+
+// ruleKey is what two rules must not share: they would encode to the same trie entry and the
+// later one would silently replace the earlier (the kernel keeps one value per key).
+type ruleKey struct {
+	program string
+	to      netip.Prefix
+	proto   Proto
+	port    uint16
+}
+
+// checkDuplicateKeys expands each rule the way the encoder does (any proto with ports → tcp
+// and udp) and rejects a key declared twice, naming both rules.
+func checkDuplicateKeys(f *File, name string) error {
+	seen := map[ruleKey]int{}
+	for i := range f.Rules {
+		r := &f.Rules[i]
+		for _, proto := range protosOf(r) {
+			for _, port := range portsOf(r) {
+				k := ruleKey{r.Program, r.To, proto, port}
+				if line, dup := seen[k]; dup {
+					return &Error{File: name, Line: r.Line, Msg: fmt.Sprintf("rule duplicates the rule at line %d (%s %s %s port %d)", line, r.Program, r.To, protoName(proto), port)}
+				}
+				seen[k] = r.Line
+			}
+		}
+	}
+	return nil
+}
+
+func protoName(p Proto) string {
+	switch p {
+	case TCP:
+		return "tcp"
+	case UDP:
+		return "udp"
+	}
+	return "any"
 }
 
 func checkProgramName(n string, seen map[string]int) error {

@@ -359,7 +359,8 @@ func Load(path string) (*File, error)                 // fs.ErrNotExist passes t
 ```
 - Preconditions: UTF-8 TOML. Postconditions: names unique, every rule's program declared or
   "any", prefix canonical (`Masked()`), ports 1–65535, ≤ 256 ports per rule, `verdict` valid,
-  unknown keys rejected. IDs assigned in declaration order.
+  unknown keys rejected, no two rules encode to the same trie key (after the any-proto
+  expansion). IDs assigned in declaration order.
 - Invariant: `Parse` is pure and deterministic; the same input gives identical IDs.
 
 #### Resolver (`resolve.go`)

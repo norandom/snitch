@@ -86,3 +86,31 @@ func TestValidateAcceptsARangeOfExactly256Ports(t *testing.T) {
 		t.Fatalf("want 256 ports accepted, got %v, %v", err, f)
 	}
 }
+
+func TestValidateRejectsRulesThatShareAKey(t *testing.T) {
+	cases := []struct{ name, second, msg string }{
+		{"same rule twice", "program = \"curl\"\nto = \"1.1.1.1\"\nproto = \"tcp\"\nport = 53\nverdict = \"deny\"\n", "duplicates the rule at line 5"},
+		{"any proto overlaps tcp", "program = \"curl\"\nto = \"1.1.1.1\"\nport = 53\nverdict = \"deny\"\n", "tcp port 53"},
+		{"bare address equals /32", "program = \"curl\"\nto = \"1.1.1.1/32\"\nproto = \"tcp\"\nport = \"53-54\"\nverdict = \"allow\"\n", "line 5"},
+	}
+	first := "[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.1\"\nproto = \"tcp\"\nport = 53\nverdict = \"allow\"\n\n"
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := parseErr(t, okProgram+first+"[[rule]]\n"+c.second)
+			if e.Line != 12 || !strings.Contains(e.Msg, c.msg) {
+				t.Fatalf("want line 12 containing %q, got %v", c.msg, e)
+			}
+		})
+	}
+}
+
+func TestValidateAllowsDifferentTiersForOnePrefix(t *testing.T) {
+	src := okProgram +
+		"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.0/24\"\nproto = \"tcp\"\nport = 443\nverdict = \"allow\"\n\n" +
+		"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.0/24\"\nproto = \"tcp\"\nverdict = \"deny\"\n\n" +
+		"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.0/24\"\nverdict = \"allow\"\n\n" +
+		"[[rule]]\nprogram = \"any\"\nto = \"1.1.1.0/24\"\nverdict = \"deny\"\n"
+	if _, err := rules.Parse(strings.NewReader(src), "tiers.toml"); err != nil {
+		t.Fatalf("distinct tiers are not duplicates: %v", err)
+	}
+}
