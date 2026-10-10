@@ -1,0 +1,10 @@
+[Unit]
+Description=snitch: an open deny-by-default trial at boot goes back to allow (lockout safety)
+Before=littlesnitch.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/snitch-trial boot
+
+[Install]
+WantedBy=multi-user.target

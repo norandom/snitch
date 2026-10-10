@@ -1,0 +1,10 @@
+[Unit]
+Description=snitch: check the deny-by-default trial every 30 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=snitch: end a deny-by-default trial once its deadline has passed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/snitch-trial

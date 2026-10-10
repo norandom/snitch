@@ -1,0 +1,9 @@
+# Lint settings only: snitch is a single uv script (dependencies inline, see its header)
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "RUF"]
+# compact style (one-line ifs) is deliberate; typographic characters in UI text are intended
+ignore = ["E501", "E701", "E702", "E731", "E741", "RUF001", "RUF002", "RUF003", "RUF005", "RUF012"]

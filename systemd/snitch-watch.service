@@ -1,0 +1,12 @@
+[Unit]
+Description=snitch: alert popups for connections Little Snitch denies by default
+PartOf=graphical-session.target
+After=graphical-session.target littlesnitch.service
+
+[Service]
+ExecStart=%h/.local/bin/snitch watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

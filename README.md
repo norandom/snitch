@@ -1,20 +1,50 @@
-# snitch: network control for a thin client
+# snitch
 
-This VM is a thin client for day-to-day work: reached over RDP, updated often, with agents
-that keep working on a task while you're away. It should stay that easy to work on without
-handing your data and your work to a mistake or a poisoned package. `snitch` and the away
-lock are the two pieces for that:
+[Little Snitch for Linux](https://obdev.at/littlesnitch-linux) in the terminal: every connection
+as process › host › address, block or unblock with one key, an egress graph of who sends how
+much to where, and popups for connections nobody has decided on yet, with a trace of the process
+behind them.
 
-* **snitch** puts [Little Snitch for Linux](https://obdev.at/littlesnitch-linux) in the
-  terminal: see every connection, block it with one key, and get a popup for anything new.
-* **hypr-away** locks the box while you're not connected: no passwordless sudo, no rule
-  changes, no reading other processes' memory.
+It talks to the Little Snitch daemon over the same WebSocket its web UI uses
+(`ws://127.0.0.1:3031/stream`), so everything it does is an ordinary Little Snitch rule: listed,
+editable and deletable in the web UI. It started as part of a
+[Hyprland thin client over RDP](https://github.com/norandom/hyperland-forky-worker-vm), where it
+runs with deny by default.
+
+## Install
+
+Needs Little Snitch for Linux (tested with 1.1.0, web UI on its default `127.0.0.1:3031`) and
+[uv](https://docs.astral.sh/uv/): `snitch` is a single script that declares its dependencies
+(Textual, websockets) inline, uv fetches them on the first start.
+
+```sh
+install -m 755 snitch ~/.local/bin/snitch
+snitch                       # the overview
+```
+
+Alert popups (`snitch watch`, a user service) and the deny-by-default trial (`snitch-trial`,
+root) are optional:
+
+```sh
+install -m 644 systemd/snitch-watch.service ~/.config/systemd/user/
+systemctl --user enable --now snitch-watch.service
+
+sudo install -m 755 snitch-trial /usr/local/sbin/snitch-trial
+sudo install -d -m 700 /var/lib/snitch-trial
+sudo install -m 644 systemd/snitch-trial*.service systemd/snitch-trial.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable snitch-trial-boot.service && sudo systemctl enable --now snitch-trial.timer
+```
+
+Popups open in `foot`; another terminal goes in `~/.config/snitch/config.toml` (`terminal = ...`,
+see `snitch --help` for all options). On Hyprland, `~/.local/bin/hypr-launch` is used if present,
+so a popup starts like a keybinding.
 
 ## The overview
 
-![snitch: connections](list.png)
+![snitch: connections](docs/list.png)
 
-`snitch` (or a click on the shield in the bar) shows the daemon's own tree: process ›
+`snitch` (or a click on the shield in the bar, see below) shows the daemon's own tree: process ›
 host › address, with the details of the selected row below and the log at the bottom.
 
 | key | |
@@ -27,11 +57,11 @@ host › address, with the details of the selected row below and the log at the 
 | `/` | search |
 | `e` | egress graph |
 
-Blocking `hypr-rdp` (your session) takes a second `x`.
+Blocking a protected process (`protect` in the config: `hypr-rdp`, `sshd`, `littlesnitch`) takes a second `x`.
 
 ## Where does the data go?
 
-![snitch: egress graph](egress.png)
+![snitch: egress graph](docs/egress.png)
 
 `e` (or a right-click on the shield) shows what each program sends, and where to: btop-style
 bars on a log scale, so 12 GB and 50 KB are both visible, plus the live rate. The sender is the
@@ -39,7 +69,7 @@ program that really talks (`ktop`), with the one that started it in brackets.
 
 ## Alerts
 
-![snitch: alert popup](popup.png)
+![snitch: alert popup](docs/popup.png)
 
 With **deny by default**, a connection no rule covers is blocked and a popup asks:
 
@@ -68,7 +98,7 @@ snitch default deny --keep   # keep it
 snitch default allow         # back
 ```
 
-**Deny by default locked this box out once** (2026-10-09): RDP and SSH were cut, it took a
+**Deny by default locked the author's VM out once** (2026-10-09): RDP and SSH were cut, it took a
 reboot and the Proxmox console. Right after Little Snitch (1.1.0) starts, and for connections
 that already exist when it restarts, its per-program rules don't apply yet, so everything is
 denied, the RDP session included. Hence:
@@ -80,10 +110,10 @@ denied, the RDP session included. Hence:
   and an open trial at boot is ended before Little Snitch starts
 * recommended: stay on allow, watch the overview and the egress graph, block with `x`
 
-In the bar, the shield is solid for deny, an outline for allow, and red when the
+In waybar (`snitch status`, JSON for a custom module), the shield is solid for deny, an outline for allow, and red when the
 popups aren't running (`snitch-watch.service`).
 
-![the shield in the bar](bar.png)
+![the shield in the bar](docs/bar.png)
 
 ### Dev tools and overnight jobs
 
@@ -105,28 +135,15 @@ the rules survive updates. Each tool gets a rule for "started in the session" an
 everything. General-purpose tools such as `curl` are left out on purpose: they get a popup.
 Running it again only adds what's missing.
 
-## The away lock
-
-You are the pro while you're connected: nothing changes. When the RDP session is gone for
-10 minutes (`away_grace_seconds`), `hypr-away` (root) locks:
-
-* `sudo` asks for your password: agents still running on lose root
-* nothing running as you can reach the Little Snitch UI: no rule changes, no "filter off"
-* `ptrace_scope=1`: processes can't read each other's memory
-
-Reconnect and it unlocks within seconds. "Connected" means a session from another machine,
-served by the real `/usr/bin/hypr-rdp`, with picture data flowing, so a bare TCP connect
-without the password, or a connection a local process makes itself, doesn't count.
-`sudo journalctl -u hypr-away` shows every lock and unlock.
-
 ## What this does and doesn't stop
 
 | | |
 |---|---|
 | ⚠️ a package phoning home | only with deny by default (popups); on allow you see it in the overview and block it with `x` |
-| ✅ unattended agents doing something unplanned while you're away | no sudo, no new rules |
-| ✅ malware adding allow rules while you're away | the UI is closed to your processes |
-| ⚠️ malware while you're connected | you have passwordless sudo then, and that is root. Watch the popups and the egress graph |
 | ⚠️ deny by default | cut RDP and SSH once (rules don't apply right after Little Snitch starts): only as a 10-minute trial |
 | ⚠️ wildcards in rule paths | Little Snitch expands them on disk: `/**` hung its web server once. `snitch` refuses paths without two fixed leading components |
-| ⚠️ the RDP password | stored in plain text in `~/.config/hypr-rdp/password`. Keep it different from your login password |
+
+## License
+
+MIT, see [LICENSE](LICENSE). Little Snitch is a product of Objective Development; this is an
+independent client of its web UI protocol.
