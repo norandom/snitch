@@ -19,9 +19,10 @@ TimeoutStopSec=10
 # The trial and kept-enforce files (0700: the daemon leaves an existing directory's mode alone).
 StateDirectory=snitch
 StateDirectoryMode=0700
-# The status file for `snitchd status`.
+# The status file for `snitchd status` and the API socket: 0755 so every local user reaches the
+# socket (0666, the daemon sets it); the status file itself is 0600, the daemon's own.
 RuntimeDirectory=snitch
-RuntimeDirectoryMode=0700
+RuntimeDirectoryMode=0755
 
 [Install]
 WantedBy=multi-user.target

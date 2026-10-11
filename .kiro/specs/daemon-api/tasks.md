@@ -190,7 +190,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Requirements: 3.2, 3.3, 3.4_
 
 - [ ] 4. Schema, verification, closing
-- [ ] 4.1 (P) The schema document and the README
+- [x] 4.1 (P) The schema document and the README
   - `examples/api.md`: envelope, every request with its reply, every unsolicited type, the
     field-name table against the Python client, the limits and windows, authorization, and the
     `nc -U` and python3 one-liners; README: an API paragraph and the Service paragraph gains the
@@ -205,8 +205,8 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
 - [ ] 4.2 (P) The API check script
   - `scripts/api-check.sh`, run as the desktop user: status reply, subscription with a curl
     event within 1 s, bytes growing within 5 s when counting is on, rule add refused for a
-    non-operator, as the operator a deny rule for curl shows the next event as deny-rule in
-    monitor mode and remove restores, trial refused for a non-operator, heartbeat age in status
+    non-operator, as the operator a deny rule for curl makes the next curl fail with EPERM and
+    its event deny-rule (a deny rule is enforced in every mode), and remove restores, trial refused for a non-operator, heartbeat age in status
     ≤ 2 s throughout; PASS/FAIL per step, exit 1 on failure; shellcheck clean
   - Done when: `uvx --from shellcheck-py shellcheck scripts/api-check.sh` is clean and the script
     against a daemon without the API (today's service) fails at the connect step with a clear line
@@ -245,3 +245,4 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
 - 1.3: `RoleFor(cred *unix.Ucred, operator)` (the type is `Role`); drops travel as their own `{"type":"dropped","id":0,"count":n}` line before the next delivered message (shared message bytes stay immutable; `Reply.Dropped` removed); `Event.Time` is `time.Time`; line limit inclusive at 64 KiB. Two review rounds went to one test that assumed a scheduling order: queue tests must accept every legal interleaving (read until N replies under a deadline; check sums, not positions) and be run with `GOMAXPROCS=1 -race -count=300`.
 - 3.1: server.go + dispatch.go (verb table keyed by type; `IsWrite` checked before any handler; audit line `api: <type> by uid <n> <json> -> ok|error` logged before the reply for every write); the reader refusal text is `<type>: write requires the operator`; `Job(l)` runs the accept loop and the 2 s summary tick under `jobs.Run` and ends only with the daemon's ctx (an accept error is logged once per streak and retried after 100 ms); `snapshot` requires `window` (no default). Parent follow-ups after review: fan-out encodes outside the server lock (design rule), and a test pins that the verb table and the codec's request types have the same key set. Open suggestion: audit refused writes too (readers probing), for 4.4.
 - 3.3: daemon.go gained four fields (`emit`, `onMode`, `counting`, `api apiState`), the nil-safe hook in `setMode`, the attach result and one job-list line (the design's one-field rule was superseded by its own hooks section; recorded). `facts()` mirrors the status writer (trial deadline in UTC); a `-mode` daemon reports source flag, trial "". This VM's `nc` is netcat-traditional without `-U`: the API check uses python3 sockets. Follow-ups routed to 3.4: the operator file is read once at startup (the server gained `SetOperator`; re-read it on the 2 s stamp), and the "trial ended" state event is sent before the file is cleared, so it carries the spent deadline once.
+- 4.1: examples/api.md (37 parsing examples) documents the `dropped` line, `Summary.Dropped` as reserved, port ranges as `port: 0`, `snitchd check` validating the base alone, and python3/socat clients (no `nc -U` here). Review caught two spec errors: an event's `time` is Go's RFC 3339 (fractional digits trimmed, none at whole seconds), and a `deny-rule` verdict is enforced in EVERY mode (the kernel returns -EPERM for V_DENY_RULE without a mode gate): the design's "not denied in monitor mode" was wrong and is corrected; 4.2 must expect curl to fail after the deny rule.

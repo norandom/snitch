@@ -41,16 +41,21 @@ file (`/etc/snitch/rules.toml`), restarts it on failure and never passes `-mode`
 starts in monitor mode and follows the trial and kept-enforce files under `/var/lib/snitch`.
 `systemd/snitchd-trial-boot.service` is a oneshot ordered before it that runs
 `snitchd end -at-boot`, so a trial that was open at shutdown is gone before anything can
-enforce. Neither unit is installed or enabled here: the `snitchd` task of the
+enforce. The runtime directory `/run/snitch` is 0755 so that the API socket in it is
+reachable by every local user (the status file there stays 0600, the daemon's own); the
+operator file `/etc/snitch/operator` names the one user besides root who may write over the
+API (see **API** below). Neither unit is installed or enabled here: the `snitchd` task of the
 [hyperland-forky-worker-vm](https://github.com/norandom/hyperland-forky-worker-vm) repo deploys
-the binary (a release asset, pinned by version and sha256) and the two units; that repo carries
-a copy of the two unit files, marked as copies of these. By hand it would be:
+the binary (a release asset, pinned by version and sha256), the two units and the operator file
+with the desktop user; that repo carries a copy of the two unit files, marked as copies of
+these. By hand it would be:
 
 ```sh
 sudo install -m 755 /tmp/snitchd /usr/local/sbin/snitchd
 sudo install -m 644 systemd/snitchd.service systemd/snitchd-trial-boot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now snitchd-trial-boot.service snitchd.service
+echo "$USER" | sudo install -m 644 /dev/stdin /etc/snitch/operator     # who may write over the API
 ```
 
 **Trial.** With the service running (any daemon started without `-mode`), `sudo snitchd trial
@@ -67,6 +72,18 @@ runs the whole flow as its phase 3 (`--skip-trial` leaves it out). On a deployed
 `sudo scripts/deploy-check.sh` checks the service read-only (active, version, status, a rule
 event and a monitor event in the journal) and `--trial` adds a prompted two-minute trial with a
 trap that ends it.
+
+**API.** The daemon listens on `/run/snitch/api.sock` (`-api`; `-api ""` turns it off), JSON
+lines in both directions: one request per line with an `id`, one reply or error with the same
+`id`, and for subscribers the kernel's decisions as events (deduplicated within 10 s), a
+summary of the changed connection-table rows every 2 s with bytes sent per socket, and a
+`state` line on every mode, trial or rules change. Every local user reads (status, rules,
+programs, learned, the table over a window of 15m to 7d); root and the user named in
+`/etc/snitch/operator` also write: the four trial verbs, and rules added to or removed from
+the overlay `/etc/snitch/rules.d/local.toml`, which is merged over the deployed file with
+precedence. `examples/api.md` is the schema, with one example per message type, the limits
+and the client one-liners; `scripts/api-check.sh`, run as the desktop user, proves it against
+the running service.
 
 **Release.** A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lint.yml`, the same jobs
 as on every push) and then one static amd64 build with the tag linked in

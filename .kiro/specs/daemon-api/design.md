@@ -568,8 +568,9 @@ func WriteWith(path string, f *File, header string) error // the overlay writer;
   within 1 s with `verdict: allow-monitor`; `curl -o /dev/null https://1.1.1.1/` → bytes for
   that entry grow within 5 s (when `counting`); `rule.add` as the user → refused unless the user
   is the operator (the script says which it expects from `/etc/snitch/operator`); as the
-  operator: `rule.add` deny curl → 9.9.9.9, the next curl event shows `verdict: deny-rule` in
-  monitor mode (not denied), `rule.remove` restores; `trial` as a non-operator → refused; the
+  operator: `rule.add` deny curl → 9.9.9.9, the next curl fails with EPERM and its event shows
+  `verdict: deny-rule` (a deny rule is enforced in every mode: the kernel returns -EPERM for
+  `V_DENY_RULE` without a mode gate), `rule.remove` restores; `trial` as a non-operator → refused; the
   heartbeat age in `status` stays ≤ 2 s throughout.
 
 ## Implementation Rules (binding)

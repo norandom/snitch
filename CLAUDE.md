@@ -141,13 +141,17 @@ this VM by the VM repo's `tasks/snitchd.py` (switches `snitchd_enabled`, `snitch
 18 programs, 13 rules, domain rules deferred as comments). The service runs from boot in monitor
 mode; `sudo scripts/deploy-check.sh [--trial]` verified it incl. a reboot and a 2-minute trial.
 Open there: the learning run after a working day (task 4.5).
+In progress (spec `daemon-api`, see `.kiro/specs/daemon-api/`, not validated yet): the local API
+on `/run/snitch/api.sock` (`-api`), JSON lines documented in `examples/api.md` (every local user
+reads status, rules, programs, learned, a windowed connection table, and subscribes to events,
+2 s summaries and state lines; root and the user in `/etc/snitch/operator` run the trial verbs and
+edit the overlay `/etc/snitch/rules.d/local.toml`, merged over the rules file), event dedupe,
+per-socket byte counting by socket cookie; `scripts/api-check.sh` is its check.
 Not done yet, in order:
 
-1. Daemon API over a unix socket (JSON lines, same shapes the Python TUI consumes), event
-   dedupe, per-socket byte counting (cgroup skb programs, socket cookie) for the egress graph.
-2. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.
-3. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
-4. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
+1. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.
+2. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
+3. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
    CrowdStrike-style graph (process tree -> socket -> destination) behind a verdict. OpenObserve
    (http://10.0.0.54:40002, org default; OTLP gateway in k3s :4317/:4318) gets one batch per
    host every 10 min and shows that graph as a (limited) Sankey: process -> destination -> verdict.
