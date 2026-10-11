@@ -1,6 +1,9 @@
 package api
 
 import (
+	"golang.org/x/sys/unix"
+	"time"
+
 	"fmt"
 	"os"
 	"strings"
@@ -210,7 +213,7 @@ func TestServerOneReplyPerRequestAndWindows(t *testing.T) {
 func TestServerPeerCredentials(t *testing.T) {
 	me := uint32(os.Getuid())
 	f := newFixture(t)
-	f.s.d.Operator = me
+	f.s.SetOperator(me)
 	f.s.creds = peerCreds
 	f.listen(nil)
 	p := f.dial()
@@ -221,7 +224,7 @@ func TestServerPeerCredentials(t *testing.T) {
 		t.Skip("root writes regardless")
 	}
 	g := newFixture(t)
-	g.s.d.Operator = 0
+	g.s.SetOperator(0)
 	g.s.creds = peerCreds
 	g.listen(nil)
 	q := g.dial()
@@ -242,5 +245,24 @@ func TestServerVerbTableMatchesTheRequestTypes(t *testing.T) {
 		if !requestTypes[typ] {
 			t.Errorf("handler %q is not a request type", typ)
 		}
+	}
+}
+
+// SetOperator changes who is a writer for connections from now on (the daemon follows the
+// operator file); the uid from Deps is the starting value.
+func TestServerSetOperatorFollowsTheFile(t *testing.T) {
+	s := New(Deps{Operator: 1000, Table: NewTable(time.Now), Facts: func() Status { return Status{} },
+		Log: func(string) {}, Now: time.Now})
+	user := &unix.Ucred{Uid: 1000}
+	if s.roleOf(user) != Writer || s.roleOf(&unix.Ucred{Uid: 1001}) != Reader {
+		t.Fatal("the Deps operator is not the writer")
+	}
+	s.SetOperator(1001)
+	if s.roleOf(user) != Reader || s.roleOf(&unix.Ucred{Uid: 1001}) != Writer {
+		t.Fatal("SetOperator did not move the writer role")
+	}
+	s.SetOperator(0)
+	if s.roleOf(user) != Reader || s.roleOf(&unix.Ucred{Uid: 0}) != Writer {
+		t.Fatal("no operator: only root writes")
 	}
 }

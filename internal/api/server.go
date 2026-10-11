@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/norandom/snitch/internal/contract"
@@ -42,9 +43,17 @@ type Server struct {
 	deadline time.Duration              // per-client write deadline
 	mu       sync.RWMutex               // guards clients and gone
 	clients  map[*client]struct{}
-	gone     int64     // drops of clients that have left
-	since    time.Time // last summary; the summary job's own
+	gone     int64         // drops of clients that have left
+	since    time.Time     // last summary; the summary job's own
+	operator atomic.Uint32 // the operator uid; SetOperator follows the operator file
 }
+
+// SetOperator replaces the operator uid for connections from now on (the daemon re-reads the
+// operator file on change); clients already connected keep the role they were given.
+func (s *Server) SetOperator(uid uint32) { s.operator.Store(uid) }
+
+// roleOf is the role a new connection gets from its peer credentials.
+func (s *Server) roleOf(cred *unix.Ucred) Role { return RoleFor(cred, s.operator.Load()) }
 
 // New checks the required delegates and returns a server with no clients.
 func New(d Deps) *Server {
@@ -52,8 +61,10 @@ func New(d Deps) *Server {
 	contract.Require(d.Facts != nil, "api: Facts is required")
 	contract.Require(d.Log != nil, "api: Log is required")
 	contract.Require(d.Now != nil, "api: Now is required")
-	return &Server{d: d, creds: peerCreds, every: SummaryEvery, deadline: WriteDeadline,
+	s := &Server{d: d, creds: peerCreds, every: SummaryEvery, deadline: WriteDeadline,
 		clients: map[*client]struct{}{}, since: d.Now()}
+	s.operator.Store(d.Operator)
+	return s
 }
 
 // Job serves l until ctx ends: the accept loop and the summary ticker under one run. It
@@ -128,7 +139,7 @@ func (s *Server) admit(conn net.Conn, cred *unix.Ucred) *client {
 	if len(s.clients) >= MaxClients {
 		return nil
 	}
-	c := &client{Client: NewClient(conn, RoleFor(cred, s.d.Operator), s.deadline)}
+	c := &client{Client: NewClient(conn, s.roleOf(cred), s.deadline)}
 	if cred != nil {
 		c.uid = cred.Uid
 	}
