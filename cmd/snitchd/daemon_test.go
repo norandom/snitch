@@ -167,3 +167,15 @@ func TestStartupDecisionWithTheFlagNeverReadsTheFiles(t *testing.T) {
 		t.Fatal("the bounded run must not create the state directory")
 	}
 }
+
+// The startup journal line names the build (Req 1.2): the operator and the deploy check read
+// which version attached the hooks.
+func TestStartupLineCarriesTheVersion(t *testing.T) {
+	want := "snitchd v9.9.9: mode enforce (flag), hooks lsm/socket_connect + lsm/socket_sendmsg, maps pinned in /sys/fs/bpf/snitch"
+	if got := startupLine("v9.9.9", modeEnforce, sourceFlag); got != want {
+		t.Fatalf("want %q\n got %q", want, got)
+	}
+	if got := startupLine("dev", modeMonitor, sourceFiles); !strings.HasPrefix(got, "snitchd dev: mode monitor (files), ") {
+		t.Fatalf("got %q", got)
+	}
+}

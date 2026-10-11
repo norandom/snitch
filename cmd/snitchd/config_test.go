@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
+	"io"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/norandom/snitch/internal/contract"
+	"github.com/norandom/snitch/internal/contract/contracttest"
 )
 
 func TestParseFlagsDefaults(t *testing.T) {
@@ -117,4 +122,49 @@ func TestSourcePathsHaveTheDesignDefaultsAndTakeFlags(t *testing.T) {
 	if cfg.stateDir != "/tmp/x/state" || cfg.status != "/tmp/x/status" {
 		t.Fatalf("values wrong: state dir %q, status %q", cfg.stateDir, cfg.status)
 	}
+}
+
+// -version is answered on the command line like -h: printed to stdout, main exits 0, and the
+// configuration check is never reached (Req 1.2).
+func TestVersionFlagPrintsAndExitsBeforeTheCheck(t *testing.T) {
+	for _, args := range [][]string{{"-version"}, {"-version", "-mode", "bogus"}, {"-mode", "enforce", "-version"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var out bytes.Buffer
+			defer swapStdout(&out)()
+			_, err := parseFlagsTo(args, io.Discard)
+			var ue *usageError
+			if !errors.Is(err, errVersion) || !errors.Is(err, flag.ErrHelp) || errors.As(err, &ue) {
+				t.Fatalf("want errVersion on main's exit-0 path (flag.ErrHelp), got %v", err)
+			}
+			if out.String() != version+"\n" {
+				t.Fatalf("want %q on stdout, got %q", version+"\n", out.String())
+			}
+		})
+	}
+}
+
+func TestVersionIsDevUnlessLinked(t *testing.T) {
+	if version != "dev" {
+		t.Fatalf("a plain go build carries %q, got %q", "dev", version)
+	}
+	var out bytes.Buffer
+	printVersion(&out, "v9.9.9")
+	if out.String() != "v9.9.9\n" {
+		t.Fatalf("want the linked value and a newline, got %q", out.String())
+	}
+}
+
+// A link with -X main.version= would print an empty line: the contract trips instead.
+func TestVersionContractRefusesAnEmptyVersion(t *testing.T) {
+	v := contracttest.Panics(t, contract.Postcondition, func() { printVersion(io.Discard, "") })
+	if v.Msg != "version: empty" {
+		t.Fatalf("want message %q, got %q", "version: empty", v.Msg)
+	}
+	contracttest.Panics(t, contract.Postcondition, func() { startupLine("", modeMonitor, sourceFiles) })
+}
+
+func swapStdout(w io.Writer) func() {
+	old := stdout
+	stdout = w
+	return func() { stdout = old }
 }

@@ -77,8 +77,7 @@ func startup(cfg config) (*daemon, error) {
 	if err := d.attach(); err != nil {
 		return nil, err
 	}
-	fmt.Printf("snitchd: mode %s (%s), hooks lsm/socket_connect + lsm/socket_sendmsg, maps pinned in %s\n",
-		modeName(trial.Mode(d.mode.Load())), cfg.source, pinDir)
+	fmt.Println(startupLine(version, modeName(trial.Mode(d.mode.Load())), cfg.source))
 	return d, nil
 }
 

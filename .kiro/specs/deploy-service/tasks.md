@@ -19,7 +19,7 @@ diff. Tasks that edit files in the same Go package run one at a time. The spec c
 validated with task 4.5 (the learning run) still open: it needs a working day of monitor mode.
 
 - [ ] 1. The binary says what it is and checks what it loads
-- [ ] 1.1 The version in the binary
+- [x] 1.1 The version in the binary
   - One version variable, "dev" unless set at link time; `-version` prints it and exits 0
     before the configuration check, so `-version` alone is valid; the startup journal line
     carries it (`snitchd <version>: mode …`)
@@ -214,3 +214,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Requirements: 3.5_
 
 ## Implementation Notes
+- 1.1: `-version` returns `errVersion`, which wraps `flag.ErrHelp`, so main's silent exit-0 branch handles it without touching main.go; the print goes through the package-level `stdout io.Writer` seam (swapped in tests, no `t.Parallel` in the package); `startupLine(version, mode, source)` and `mustVersion` (the single Ensure) are the helpers 1.2 should reuse. An empty linked version panics before `run`'s recover (raw exit 2, not 70): harmless, nothing attached yet.

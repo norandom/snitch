@@ -37,6 +37,7 @@ type config struct {
 	stateDir string
 	status   string
 	duration time.Duration
+	version  bool // -version: print the build and exit, nothing else is checked
 }
 
 // usageError is an operator mistake on the command line: exit 2, nothing was touched.
@@ -60,11 +61,16 @@ func parseFlagsTo(args []string, usage io.Writer) (config, error) {
 	fs.StringVar(&cfg.stateDir, "state-dir", defaultStateDir, "directory of the trial and kept-enforce files that decide the mode when -mode is not given")
 	fs.StringVar(&cfg.status, "status", defaultStatus, "status file the daemon writes for the command line")
 	fs.DurationVar(&cfg.duration, "duration", 0, "exit after this long (0: run until signalled)")
+	fs.BoolVar(&cfg.version, "version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return cfg, err
 		}
 		return cfg, &usageError{err.Error()}
+	}
+	if cfg.version {
+		printVersion(stdout, version)
+		return cfg, errVersion
 	}
 	cfg.source = sourceOf(fs)
 	return cfg, check(cfg)
