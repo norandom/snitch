@@ -166,10 +166,12 @@ internal/rules/
 ├── decode.go                    # + Source = name
 ├── validate.go                  # expandedKeys extracted; duplicate error names both sources
 ├── resolve.go                   # conflict error names Source
-├── write.go                     # WriteFile gains a header parameter; neutral temp prefix
+├── write.go                     # WriteFile gains a header parameter; WriteLearned keeps the learned header; neutral temp prefix
+├── learn.go                     # side-effect-free Observations() projection (File() clears dirty, the view must not)
 └── merge_test.go                # NEW
 cmd/snitchd/
-├── api.go                       # NEW wiring: operator file, listener, getters, emit delegate, state hooks, job
+├── api.go                       # NEW wiring: operator file, listener, getters, emit delegate, state hooks, apiJobs (server, sweep)
+├── apievent.go                  # NEW kernel event → api.Event, rule and program views
 ├── apiwrite.go                  # NEW the API's write handlers: trial seam calls, overlay add/remove with pre-checks, audit log
 ├── counting.go                  # NEW cgroup root detection, attach, sweep job (2 s), cookie join feed
 ├── trialops.go                  # NEW trialOps: start/keep/unkeep/end on the store with the verbs' texts and refusals
@@ -558,7 +560,7 @@ func WriteFile(path string, f *File, header string) error
 ## Implementation Rules (binding)
 
 - Code shape per `tech.md`; `internal/api` files ≤ 300 lines each; `daemon.go` gains at most the
-  `emit` field and one job-list line.
+  `emit` field, one attach line for the counting link and one job-list line (`d.apiJobs()`).
 - `internal/api` never imports `internal/bpf` or `cmd/`; the daemon converts events.
 - The counting program's only return value is 1; the sweep never writes the map.
 - The API holds no handle to the control or kill maps or to the trial store except through

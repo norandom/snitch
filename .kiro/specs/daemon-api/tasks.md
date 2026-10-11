@@ -11,18 +11,27 @@ Go task is done when its "Done when" command succeeds and `gofmt -l .`, `go vet 
 nothing in groups 1 to 3 may stop, restart or reconfigure it except task 1.1's gate run, which
 stops it for under a minute in monitor mode and starts it again (the kernel fails open meanwhile;
 no mode is switched). Pushes happen only in the tasks that name them, after the no-secrets check.
-Tasks that edit files in the same Go package run one at a time; `(P)` tasks touch disjoint files.
+Tasks that edit files in the same Go package run one at a time unless the controller accepts
+the shared-package risk explicitly (1.2 and 1.3 were run together with a types.go handshake);
+`(P)` tasks touch disjoint files. Bounded root runs in groups 1 to 3 (`-mode monitor -duration
+5-12s`) are allowed next to the deployed service: the pinned `control` and `kill` maps are shared
+with identical monitor values, double LSM decisions in monitor are harmless, a `-mode` daemon
+builds no follower and writes no status or trial files; every such run passes `-overlay <temp>`
+and, where it listens, `-api <temp socket>`, so it never reads a half-written overlay or clashes
+with the service's socket. The counting map `bytes` and its link are not pinned (read it by name
+with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/sbin).
 
 - [ ] 1. The kernel side and the pure data structures
 - [ ] 1.1 The socket cookie and the counting program (feasibility gate)
   - The kernel event carries the socket's cookie, taken in the decision hook from the direct
     BTF walk `sock->sk` (trusted pointer; a CO-RE read would be a scalar the helper rejects); a new counting
-    program on egress adds each packet's length to a per-cookie entry in a bounded map and always
-    allows; the daemon's decoder reads the new field; the generated bindings carry the new value
-    type
-  - Gate on this VM (operator's go given for the spec): stop the service, run the new binary for
-    10 s in monitor mode with the counting attached (a new flag or the default), `curl` once,
-    start the service again, `deploy-check.sh` phase A still passes. If the verifier rejects the
+    program on egress adds each packet's length to a per-cookie entry in a bounded, unpinned map
+    and always allows; attached by default with a soft failure logged (no new flag); the
+    daemon's decoder reads the new field; the generated bindings carry the new value type
+  - Gate on this VM (operator's go given for the spec): stop the service (not strictly needed,
+    see the header; done for a clean journal record), run the new binary for 12 s in monitor mode,
+    `curl` once, read the `bytes` map by name during the run, start the service again,
+    `deploy-check.sh` phase A still passes. If the verifier rejects the
     cookie helper, record the exact message in research.md, keep the cookie field at 0, and the
     spec continues with counting off
   - Done when: `go generate ./internal/bpf/` succeeds, `go test ./cmd/snitchd -run Decode` proves
@@ -67,21 +76,22 @@ Tasks that edit files in the same Go package run one at a time; `(P)` tasks touc
     overlay programs (a same-name program is an error naming both files), base rules shadowed by
     an overlay rule's expanded keys dropped, overlay rules appended, validation re-run with dense
     ids; duplicate errors name both sources; the resolver's conflict error names the source; the
-    file writer takes a header
+    file writer takes a header, and `WriteLearned(path, f)` keeps the learned header so the
+    learner's reference in daemon.go stays untouched
   - Done when: `go test ./internal/rules -run 'Merge|Source|Write'` proves precedence for the
     same key (incl. an any-proto overlay rule shadowing only the tcp half of a base pair), the
     same-name error, sources on every record, dense ids, duplicate naming both files, the header
     in the written file and a round trip; the learner's write still produces its header
   - _Boundary: internal/rules/merge.go, merge_test.go, file.go, decode.go, validate.go,
-    resolve.go, write.go, write_test.go, learn.go (header argument), learn_test.go_
+    resolve.go, write.go, write_test.go (cmd/snitchd keeps calling a learned writer by value)_
   - _Requirements: 4.2, 5.4_
 - [ ] 2.2 The daemon loads base plus overlay
   - Flags: `-overlay` (default `/etc/snitch/rules.d/local.toml`) and `-api` (default
-    `/run/snitch/api.sock`, empty disables), with the configuration checks (overlay ≠ rules ≠
-    learned); the loader merges when the overlay exists, falls back to base only with a recorded
+    `/run/snitch/api.sock`, empty disables; parsed and checked here, unused until the wiring
+    task), with the configuration checks (overlay ≠ rules ≠ learned); the loader merges when the overlay exists, falls back to base only with a recorded
     error when the overlay is invalid at startup, and keeps the previous snapshot with a recorded
-    error on a bad reload (cleared on success); the file watch stamps both files; the status
-    writer and the summary unchanged
+    error on a bad reload (cleared on success); the file watch takes a list of paths (rules,
+    overlay, and later the operator file); the status writer and the summary unchanged
   - Done when: `go test ./cmd/snitchd -run 'Load|Reload|Config'` proves base only, base plus
     overlay, invalid overlay at startup (base effective, error recorded), invalid overlay on
     reload (previous kept, error recorded then cleared), and the flag checks; `go run` of the
@@ -122,24 +132,37 @@ Tasks that edit files in the same Go package run one at a time; `(P)` tasks touc
   - _Boundary: internal/api/server.go, server_test.go_
   - _Depends: 1.2, 1.3_
   - _Requirements: 1.4, 1.5, 1.7, 2.3, 2.4, 2.5, 4.5, 5.6, 6.3_
-- [ ] 3.2 Wiring the daemon to the server
+- [ ] 3.2 Event conversion and the read projections
+  - The pump's conversion of a kernel event to the wire event (verdict and hook names, program
+    name or unknown, path, pid, ppid, comm, destination, rule reference with note and source,
+    time); rule and program views from the snapshot with their source file; a side-effect-free
+    projection of the learned observations (the learner's file projection clears its dirty flag;
+    the new view must not)
+  - Done when: `go test ./cmd/snitchd ./internal/rules -run 'Event|View|Observations'` proves
+    every verdict and hook name, the rule reference, the views' sources, and that the projection
+    leaves the learner's dirty flag alone (mutation: a projection that clears it fails)
+  - _Boundary: cmd/snitchd/apievent.go, apievent_test.go, internal/rules/learn.go, learn_test.go
+    (the projection), .kiro/specs/daemon-api/design.md (file plan: learn.go added)_
+  - _Depends: 1.3, 2.2_
+  - _Requirements: 2.1, 2.6, 4.2, 4.3, 4.4_
+- [ ] 3.3 Operator, listener, facts, hooks and the wiring
   - The operator file read at startup and re-read on change (ignored with a log unless root-owned
-    and not group/other-writable); the listener (directory 0755,
-    stale socket removed, socket 0666, unlinked on close, failure logged and skipped); the
-    facts from memory (mode, trial, kept, kill, learning, rules counts and error, version, pid,
-    start time, API counters, counting on/off); rules and programs with source; learned
-    observations through a side-effect-free projection; the pump's conversion of a kernel event
-    to the wire event (verdict and hook names, rule reference, time) and the emit call; mode and
-    publish hooks sending state events
-  - Done when: `go test ./cmd/snitchd -run 'Api|Event|Facts|Operator'` proves the conversion
-    of every verdict and hook, the facts' fields, the operator file cases (missing, bad name,
-    valid), and a monitor run as root with `-duration 5s` serves `status` to `nc -U` as the user
-    (the service keeps running; the hand-started daemon uses a temp socket path via `-api`)
-  - _Boundary: cmd/snitchd/api.go, api_test.go, events.go, events_test.go, daemon.go (emit field,
-    job line), follow.go (hooks), learn.go, learn_test.go, state.go (publish hook)_
-  - _Depends: 2.2, 3.1_
-  - _Requirements: 1.1, 1.2, 1.9, 2.1, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
-- [ ] 3.3 Writes over the API
+    and not group/other-writable); the listener (directory 0755, stale socket removed, socket
+    0666, unlinked on close, failure logged and skipped); the facts from memory (mode, trial,
+    kept, kill, learning, rules counts and error, version, pid, start time, API counters,
+    counting on/off; a `-mode` daemon has no follower: trial none, source flag); mode and publish
+    hooks sending state events; `d.apiJobs()` returning the server job (and later the sweep) so
+    daemon.go gains one job-list line and the emit field; the write delegates wired to stubs that
+    answer "not available" until task 3.4 fills them
+  - Done when: `go test ./cmd/snitchd -run 'Api|Facts|Operator'` proves the facts' fields in
+    both modes, the operator file cases (missing, bad name, wrong owner or mode, valid), the
+    listener's soft failure, and a monitor run as root with `-duration 5s -api <temp socket>
+    -overlay <temp>` serves `status` to `nc -U` as the user while the service keeps running
+  - _Boundary: cmd/snitchd/api.go, api_test.go, daemon.go (emit field, one job-list line),
+    follow.go (hook), state.go (publish hook), events.go (emit call), reload.go (operator stamp)_
+  - _Depends: 3.1, 3.2_
+  - _Requirements: 1.1, 1.2, 1.9, 2.1, 4.1, 4.5, 4.6_
+- [ ] 3.4 Writes over the API
   - Trial, keep, unkeep and end through the seam with the daemon's store, learning flag, kill
     reader, `following` (false for a daemon started with `-mode`: refused with the CLI's sentence)
     and the rule count (zero without `yes`: the confirm sentence as the error); rule add (program by name or an unclaimed executable's path, address or prefix,
@@ -150,10 +173,10 @@ Tasks that edit files in the same Go package run one at a time; `(P)` tasks touc
     equals the CLI's, the add and remove flows on temp files incl. the claimed-executable error,
     the deployed-rule refusal, the invalid-merge refusal with the file untouched, the
     not-following and zero-rules refusals, and the audit lines
-  - _Boundary: cmd/snitchd/apiwrite.go, apiwrite_test.go_
-  - _Depends: 2.1, 2.3, 3.2_
+  - _Boundary: cmd/snitchd/apiwrite.go, apiwrite_test.go, api.go (the two delegate lines)_
+  - _Depends: 2.1, 2.3, 3.3_
   - _Requirements: 5.1, 5.2, 5.3, 5.5, 5.6, 5.7_
-- [ ] 3.4 Byte counting attached and swept
+- [ ] 3.5 Byte counting attached and swept
   - The cgroup v2 root found from the mounts table; the counting program attached with a link
     (not pinned) or counting switched off with one log line; a sweep every 2 s reading the
     bytes map in batches, feeding deltas by cookie to the table, forgetting cookies idle for ten
@@ -161,8 +184,8 @@ Tasks that edit files in the same Go package run one at a time; `(P)` tasks touc
   - Done when: `go test ./cmd/snitchd -run 'Counting|Sweep'` proves root detection from a fake
     mounts table, the delta logic against a fake map reader, the soft failure, and a monitor run
     as root with `-duration 10s` shows bytes for a curl download in a `snapshot` reply
-  - _Boundary: cmd/snitchd/counting.go, counting_test.go, daemon.go (job line)_
-  - _Depends: 1.1, 1.2, 3.2_
+  - _Boundary: cmd/snitchd/counting.go, counting_test.go, api.go (the sweep added to apiJobs)_
+  - _Depends: 1.1, 1.2, 3.3_
   - _Requirements: 3.2, 3.3, 3.4_
 
 - [ ] 4. Schema, verification, closing
@@ -176,7 +199,7 @@ Tasks that edit files in the same Go package run one at a time; `(P)` tasks touc
     parses (`python3 -c json.loads` over the fenced examples), and `systemd-analyze verify` passes
     on the unit copy with its path rewritten
   - _Boundary: examples/api.md, README.md, systemd/snitchd.service, CLAUDE.md_
-  - _Depends: 3.3_
+  - _Depends: 3.4_
   - _Requirements: 6.1, 6.5_
 - [ ] 4.2 (P) The API check script
   - `scripts/api-check.sh`, run as the desktop user: status reply, subscription with a curl
@@ -187,18 +210,20 @@ Tasks that edit files in the same Go package run one at a time; `(P)` tasks touc
   - Done when: `uvx --from shellcheck-py shellcheck scripts/api-check.sh` is clean and the script
     against a daemon without the API (today's service) fails at the connect step with a clear line
   - _Boundary: scripts/api-check.sh_
-  - _Depends: 3.3_
+  - _Depends: 3.4_
   - _Requirements: 6.4, 6.5_
 - [ ] 4.3 Release, VM follow-up and the verification on the dev VM
-  - Only with the operator's go: snitch `main` pushed (no-secrets check), tag `v0.3.0`, release
-    verified; in the VM repo: the unit copy with the new directory mode, an operation deploying
+  - Only with the operator's go: snitch `main` pushed (no-secrets check), lint green, then tag
+    `v0.3.0` (a local binary copied over the pinned one would break the as-code pin, so the
+    release is the honest path; a failed verification means a second tag), release verified; in the VM repo: the unit copy with the new directory mode, an operation deploying
     `/etc/snitch/operator` with the desktop user, pins bumped to v0.3.0, deploy; then
-    `scripts/api-check.sh` as the desktop user and `deploy-check.sh` phase A; results recorded
+    `scripts/api-check.sh` as the desktop user and `deploy-check.sh` phase A; results recorded;
+    the design's Modified Files line and deploy-service's revalidation note updated
   - Done when: both scripts pass, the state line is monitor with no trial and nothing kept, the
     VM repo `main` is pushed and its CI green, research.md holds the record
   - _Boundary: git (push, tag), hyperland-forky-worker-vm (unit copy, tasks/snitchd.py,
     group_data/all.py), .kiro/specs/daemon-api/research.md, the dev VM_
-  - _Depends: 3.4, 4.1, 4.2_
+  - _Depends: 3.5, 4.1, 4.2_
   - _Requirements: 6.4, 1.1, 1.3, 5.2_
 - [ ] 4.4 Caps, contracts and CI
   - Every documented contract has a violation test; caps green; no exported identifier without a
