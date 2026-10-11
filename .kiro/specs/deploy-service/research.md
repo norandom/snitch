@@ -305,3 +305,15 @@ must have run once this boot only.
 | off (2.5) | `snitchd_enabled = False`, deploy | 3 ops: off op ran; service inactive, both units disabled; binary, rules, units, links present; `/var/lib/snitch` empty; second off run 3/3 no change |
 | on | `snitchd_enabled = True`, deploy | 11 ops: boot unit enabled, service running; install op no change (no download); active, both enabled |
 | merge (4.2) | VM repo `main` pushed, branch `snitchd` deleted | see the run id in tasks.md |
+
+## Trial on the deployed service (task 4.3, part 1, 2026-10-11, serial console open)
+
+`echo y | sudo scripts/deploy-check.sh --trial -l 10.0.0.1:53`: phase A 15/15, phase B 9/9
+(T1 trial 2m accepted and enforce within 5 s; T2 curl 9.9.9.9 EPERM, local probe ok, apt ok;
+T3 journal `mode: enforce (trial until`; T4 monitor within 130 s, `trial ended at its deadline`,
+curl connects again). Trap: `snitchd end (no trial left)`. Final line:
+`state: service active mode monitor trial none kept no kill clear`. The operator's RDP session
+and this Claude Code session (Anthropic ranges allowed by rule) stayed up.
+
+Order change: the trial ran before the reboot because a reboot ends the Claude Code session
+on this VM; the reboot and the post-reboot phase A are the operator's next step (part 2).
