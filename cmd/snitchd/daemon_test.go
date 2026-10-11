@@ -53,23 +53,25 @@ func TestGuardLetsOtherPanicsThrough(t *testing.T) {
 	guard(func(context.Context) error { panic("boom") })(context.Background())
 }
 
-func TestSetModeLogsAChangeAndIsSilentWithoutOne(t *testing.T) {
+// setMode logs every call: the follower owns the dedupe (TestFollowTransitionsLogOnce), so a
+// second spent file with the same reason still gets its line.
+func TestSetModeStoresAndLogsEveryCall(t *testing.T) {
 	var logs []string
 	d := &daemon{log: func(m string) { logs = append(logs, m) }}
 	d.setMode(trial.Monitor, "no trial")
-	d.setMode(trial.Monitor, "no trial") // the same decision again: silent
-	d.setMode(trial.Enforce, "trial until 2026-10-10T12:00:00Z")
 	d.setMode(trial.Enforce, "trial until 2026-10-10T12:00:00Z")
 	if d.mode.Load() != 1 {
 		t.Fatalf("want the control map's enforce value 1, got %d", d.mode.Load())
 	}
-	d.setMode(trial.Enforce, "enforce kept") // same mode, another reason: the journal says why
-	d.setMode(trial.Monitor, "trial ended at its deadline")
+	d.setMode(trial.Enforce, "enforce kept")
+	d.setMode(trial.Monitor, "trial ended at boot")
+	d.setMode(trial.Monitor, "trial ended at boot") // another foreign-boot file: another line
 	want := []string{
 		"mode: monitor (no trial)",
 		"mode: enforce (trial until 2026-10-10T12:00:00Z)",
 		"mode: enforce (enforce kept)",
-		"mode: monitor (trial ended at its deadline)",
+		"mode: monitor (trial ended at boot)",
+		"mode: monitor (trial ended at boot)",
 	}
 	if !slices.Equal(logs, want) {
 		t.Fatalf("want %q, got %q", want, logs)

@@ -106,6 +106,10 @@ func transitions() []transition {
 			},
 			[]string{"mode: enforce (enforce kept; trial file unreadable: " + badTrial + ", removed)",
 				"mode: monitor (enforce unkept: file removed)", "mode: monitor (trial ended at boot)"}, 0, nil},
+		// a second spent file of the same kind is a new event: removed and logged again, not deduped
+		{"two foreign-boot trials in a row: two lines", func(x *followFixture) { x.startTrial(5, "other-boot") },
+			func(x *followFixture) { x.startTrial(5, "other-boot") },
+			[]string{"mode: monitor (trial ended at boot)", "mode: monitor (trial ended at boot)"}, 0, nil},
 	}
 }
 

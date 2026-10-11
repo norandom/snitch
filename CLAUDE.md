@@ -133,13 +133,14 @@ loaded into the maps, reload on change / exe change / SIGHUP, learning mode (`-l
 Spec `persistent-trial` (2026-10-10, see `.kiro/specs/persistent-trial/`) implemented:
 `systemd/snitchd.service` plus the boot-revert oneshot, the daemon follows the trial and kept
 files under `/var/lib/snitch` when started without `-mode`, the verbs `snitchd trial | keep |
-unkeep | end | status`, and phase 3 of `scripts/enforce-test.sh`; its VM run (task 6.2) is
-pending, nothing is installed or enabled here yet.
+unkeep | end | status`, and phase 3 of `scripts/enforce-test.sh`, which passed 63/63 on this VM
+(2026-10-10, serial console open); validated GO on 2026-10-11. Nothing is installed or enabled
+here yet: spec `deploy-service` (release, pyinfra task, rules file) does that.
 Not done yet, in order:
 
-1. The persistent trial: implemented (spec `persistent-trial`), awaiting the trial run
-   (`scripts/enforce-test.sh` phase 3, task 6.2) and deployment via the VM repo; until then
-   enforce runs only through the test script.
+1. Deployment (spec `deploy-service`): GitHub release with sha256, the VM repo's snitchd task,
+   `/etc/snitch/rules.toml` translated from the Python client's rules; until then enforce runs
+   only through the test script.
 2. Daemon API over a unix socket (JSON lines, same shapes the Python TUI consumes), event
    dedupe, per-socket byte counting (cgroup skb programs, socket cookie) for the egress graph.
 3. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.

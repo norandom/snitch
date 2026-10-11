@@ -213,7 +213,7 @@ sequenceDiagram
 | 2.2 | 1–60 min, default 10 | `trial.Bounds`, `DefaultTrial` |
 | 2.3 | refuse when kill set | `ctl_maps.killSet` |
 | 2.4 | refuse when learning | `status.Record.Learning` |
-| 2.5 | refuse second trial; `-extend` | `ctl.go` with `Store.Read`; extend rewrites deadline within bound |
+| 2.5 | refuse second trial; `-extend` | `ctl.go` with `Store.Read`; extend rewrites start and deadline, so the 60 min cap counts from the extend, not from the first trial |
 | 2.6 | refuse when daemon not running | `ctl_maps.heartbeatAge ≤ 15 s` |
 | 2.7 | warn on zero rules, confirm | `status.Record.Rules == 0` → prompt (or `-y`) |
 | 2.8 | print deadline and the way out | `ctl.go` output |
@@ -326,7 +326,7 @@ func Read(path string) (Record, error)
 
 **daemon.go**: creates the status file's directory (0700) when missing, so a hand-started
 daemon works without systemd's `RuntimeDirectory`; `mode atomic.Uint32`; `source`; `setMode(m trial.Mode, reason string)` logs
-`"mode: <monitor|enforce> (<reason>)"` and stores; `beat()` reads the atomic. Startup with
+`"mode: <monitor|enforce> (<reason>)"` on every call and stores (the follower alone dedupes); `beat()` reads the atomic. Startup with
 source = files: `Decide` once before the first heartbeat so the first heartbeat already carries
 the right mode (a kept enforce starts enforcing; an old-boot trial is cleared). Jobs added when
 source = files: `follow` and `statusWriter`.

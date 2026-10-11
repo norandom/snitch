@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -34,7 +33,7 @@ var errStop = errors.New("stop requested")
 
 // daemon is the running state: kernel objects, the current snapshot, and what the heartbeat
 // writes. Built once by startup; the jobs read it. mode is written by setMode (startup, the
-// follow job) and read by every heartbeat; reason is the last mode-change log line.
+// follow job) and read by every heartbeat.
 type daemon struct {
 	cfg    config
 	objs   snitchbpf.SnitchObjects
@@ -42,8 +41,6 @@ type daemon struct {
 	rd     *ringbuf.Reader
 	st     state
 	mode   atomic.Uint32
-	modeMu sync.Mutex // serializes setMode: mode and reason change together
-	reason string
 	flags  uint32
 	log    func(string)
 	sink   func(rules.Observation) // learning; nil = off
@@ -115,16 +112,10 @@ func (d *daemon) decideOnce(store trial.Store, bootID string, now time.Time) {
 }
 
 // setMode is the one place the mode changes: it stores the value the next heartbeat carries
-// and logs "mode: <monitor|enforce> (<reason>)" once per change of mode or reason (Req 1.4);
-// the same decision again is silent.
+// and logs "mode: <monitor|enforce> (<reason>)" (Req 1.4). It logs every call: the follower
+// alone decides which decisions deserve a line, so a spent file is never removed silently.
 func (d *daemon) setMode(m trial.Mode, reason string) {
-	d.modeMu.Lock()
-	defer d.modeMu.Unlock()
-	if trial.Mode(d.mode.Load()) == m && d.reason == reason {
-		return
-	}
 	d.mode.Store(uint32(m))
-	d.reason = reason
 	d.log(fmt.Sprintf("mode: %s (%s)", modeName(m), reason))
 }
 

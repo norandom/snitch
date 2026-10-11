@@ -53,7 +53,7 @@ sudo systemctl enable --now snitchd-trial-boot.service snitchd.service
 
 **Trial.** With the service running (any daemon started without `-mode`), `sudo snitchd trial
 10m` turns deny-by-default on for a bounded time (default 10 min, 1 to 60; verb flags such as
-`-extend` go before the duration) and prints the deadline. `snitchd status` shows the daemon,
+`-extend` go before the duration) and prints the deadline; `-extend` restarts the 60 minute cap from now. `snitchd status` shows the daemon,
 mode, trial, kept, kill switch and rules, one line each (exit 1 when the daemon is not
 running); `snitchd end` ends a trial early; `snitchd keep`, only during a trial, makes enforce
 stay and prints the way back; `snitchd unkeep` takes it back. The daemon follows the two files
