@@ -167,7 +167,7 @@ internal/rules/
 ├── validate.go                  # expandedKeys extracted; duplicate error names both sources
 ├── resolve.go                   # conflict error names Source
 ├── write.go                     # WriteWith(path, f, header) for the overlay; WriteFile(path, f) stays the learned writer; neutral temp prefix
-├── learn.go                     # side-effect-free Observations() projection (File() clears dirty, the view must not)
+├── learn.go                     # side-effect-free Observations() []Observed projection (File() clears dirty, the view must not; Observation stays the sink input)
 └── merge_test.go                # NEW
 cmd/snitchd/
 ├── api.go                       # NEW wiring: operator file, listener, getters, emit delegate, state hooks, apiJobs (server, sweep)

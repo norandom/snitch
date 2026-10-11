@@ -48,6 +48,14 @@ func (l *learner) observe(o rules.Observation) {
 	l.set.Observe(o)
 }
 
+// observations is the API's read of the learned set (Req 4.4): under the mutex, through the
+// projection that leaves the dirty flag alone, so the next flush still writes.
+func (l *learner) observations() []rules.Observed {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.set.Observations()
+}
+
 // flush writes the file if anything changed; a failure is logged (the run goes on, the next
 // flush retries) and reported so the final flush can be checked.
 func (l *learner) flush() error {

@@ -129,3 +129,23 @@ func TestLearnerObserveAndFlushAreSafeTogether(t *testing.T) {
 		t.Fatal("observations lost under concurrent flushes")
 	}
 }
+
+// Req 4.4: the API's view of the learned set goes through the learner's mutex and never
+// disturbs the write cycle: the flush after a read still writes.
+func TestLearnerObservationsDoNotDisturbTheFlush(t *testing.T) {
+	w := &fakeWriter{}
+	l, _ := newLearner(filepath.Join(t.TempDir(), "none.toml"), w.write, func(string) {})
+	if got := l.observations(); len(got) != 0 {
+		t.Fatalf("nothing learned yet, got %+v", got)
+	}
+	l.observe(curlObs(time.Now()))
+	l.observe(curlObs(time.Now()))
+	got := l.observations()
+	if len(got) != 1 || got[0].Count != 2 || got[0].Path != "/usr/bin/curl" || got[0].Port != 443 {
+		t.Fatalf("want one curl entry counted twice, got %+v", got)
+	}
+	l.flush()
+	if len(w.files) != 1 {
+		t.Fatalf("the read must not clear the dirty flag: want one write, got %d", len(w.files))
+	}
+}

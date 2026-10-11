@@ -141,6 +141,37 @@ func subjectOf(o Observation) subject {
 // Dirty reports whether something was observed since the last File().
 func (l *Learned) Dirty() bool { return l.dirty }
 
+// Observed is one learned entry as a reader sees it: the program name the file would carry
+// (the configured name, else the derived one), the executable, the destination and the
+// counts. Observation is what goes in; Observed is what comes out.
+type Observed struct {
+	Program string
+	Path    string // "" when only the kernel identity is known
+	Exe     ExeKey // the kernel identity, kept only when Path is "" (a pathed subject is keyed by its path)
+	Addr    netip.Addr
+	Proto   Proto
+	Port    uint16
+	Count   uint64
+	First   time.Time
+	Last    time.Time
+}
+
+// Observations is the read-only projection for the API (Req 4.4): the same entries and order
+// as File(), without the file shape and without clearing the dirty flag, so a reader never
+// silences the learner's next write. Postcondition: the flag is what it was.
+func (l *Learned) Observations() []Observed {
+	was := l.dirty
+	names := l.programNames()
+	out := make([]Observed, 0, len(l.entries))
+	for _, k := range l.sortedKeys(names) {
+		e := l.entries[k]
+		out = append(out, Observed{Program: names[k.subject], Path: k.subject.path, Exe: k.subject.exe,
+			Addr: k.addr, Proto: k.proto, Port: k.port, Count: e.count, First: e.first, Last: e.last})
+	}
+	contract.Ensure(l.dirty == was, "a read projection leaves the dirty flag alone")
+	return out
+}
+
 // File projects the learned entries to a rules file: one program per subject, one allow rule
 // per destination. Deterministic (sorted) and valid for Parse; clears the dirty flag.
 func (l *Learned) File() *File {
