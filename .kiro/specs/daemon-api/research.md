@@ -266,3 +266,10 @@ Note for the validators' conduct: one probe as the operator added and removed a 
 Unreleased: these fixes are on `main` after v0.3.0; tag v0.3.1 before the next VM deploy.
 Cleanup candidates (not blocking): `windowNames` vs `Windows`, four proto-name mappers, three
 RFC 3339 stampers; ad hoc programs from `rule.add` outlive `rule.remove` (policy for the TUI).
+
+## Release v0.3.1 (2026-10-11)
+Tag v0.3.1 on d277ad6, release run 38152404748 green, asset digest
+`ff098a4b0e3b3b1c6e8c3ee36799e01cda4881029750f5801a2a753be5e8a92e`, `-version` v0.3.1. VM repo
+efa3832 pins it; deploy (`TARGET_HOSTS=@local TARGET_USER=mc`, the inventory needs it) ran one
+op: restart. After it: `snitchd -version` v0.3.1, `deploy-check.sh` 0 failures, `api-check.sh`
+one A2 miss inside the 10 s dedupe after deploy-check's curl, then 0 failures.
