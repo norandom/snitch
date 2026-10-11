@@ -257,7 +257,7 @@ flowchart TD
 | Request | reader | writer (uid 0 or operator) |
 |---|---|---|
 | status, rules, programs, learned, snapshot, subscribe, unsubscribe | allowed | allowed |
-| trial, keep, unkeep, end | `error: write requires the operator` | `trialOps` with the verbs' refusals |
+| trial, keep, unkeep, end | `error: write requires the operator` | `trialOps` with the verbs' refusals, incl. "not following the files" (daemon run with `-mode`) and "zero rules" without `yes` |
 | rule.add, rule.remove | same error | overlay flow; deployed rules refused with the file name |
 | anything else | `error: unknown type` | same |
 
@@ -383,7 +383,7 @@ func (s *Server) Job(l net.Listener) jobs.Job          // accept loop; returns c
 func (s *Server) Emit(e Event)                          // called by the pump; never blocks
 func (s *Server) StateChanged(st State)                 // called on mode/trial/rules change
 const LineLimit = 64 << 10; const Backlog = 1024; const WriteDeadline = 5 * time.Second
-const SummaryEvery = 2 * time.Second
+const SummaryEvery = 2 * time.Second; const MaxClients = 64
 ```
 - Preconditions: `Deps.Table`, `Facts`, `Log`, `Now` non-nil (`contract.Require`). `Emit` with a
   zero `Time` is a violation.
@@ -395,8 +395,14 @@ const SummaryEvery = 2 * time.Second
 - Queue: `chan []byte` of `Backlog`; `send` is `select { case q <- b: default: drops++ }`; the
   writer goroutine sets `SetWriteDeadline(now+WriteDeadline)` per write; a deadline error closes
   the client. The next successful message carries `dropped` and resets it.
-- Summary job: every `SummaryEvery`, entries changed since the last summary (the table's dirty
-  set) to subscribers with `summary: true`.
+- Summary job: every `SummaryEvery`, one pass under the table's lock builds the changed-entries
+  list and refreshes a cached `[]Entry` per window; subscribers get the summary; `snapshot`
+  replies are served from the cache without taking the table's lock, so a client in a request
+  loop cannot park the pump on the mutex. Encoding always happens outside any lock, on the
+  client's writer goroutine, from a message marshalled once in `Emit`.
+- Clients are capped (`MaxClients` = 64): the 65th connection is closed after one error line.
+  The accept loop never returns on an accept error other than the listener's close: it logs once,
+  sleeps 100 ms and continues (a local user exhausting descriptors must not end the daemon).
 - Subscribe options: `events` (default true), `local` (default false: local-net verdicts are
   filtered out), `summary` (default true).
 
@@ -414,8 +420,8 @@ type entry struct{ Entry; buckets window; lastEvent time.Time; lastVerdict strin
 type Table struct{ mu sync.Mutex; m map[Key]*entry; lru list; cookies map[uint64]Key; Max int; Dedupe time.Duration; evictions int }
 func (t *Table) Observe(e Event) (fresh bool)   // dedupe decision, counts, lastSeen/Allowed/Blocked, cookie→key
 func (t *Table) AddBytes(cookie uint64, delta uint64, at time.Time) // unknown cookie → Key{Program:"unknown"}
-func (t *Table) Changed(since time.Time) []Entry // dirty entries, clears dirty
-func (t *Table) Snapshot(window time.Duration) []Entry
+func (t *Table) Changed(since time.Time) []Entry // dirty entries, clears dirty; also refreshes the window caches
+func (t *Table) Snapshot(window time.Duration) []Entry // from the cache built by Changed: no table lock
 func (t *Table) Len() int; func (t *Table) Evictions() int
 ```
 - Dedupe: `fresh` is true when the key is new, the last event is older than `Dedupe` (10 s), or
@@ -428,8 +434,11 @@ func (t *Table) Len() int; func (t *Table) Evictions() int
 - Bound: `Max` = 4096 entries; insertion beyond `Max` evicts the least recently seen entry
   (`lru`) and increments `evictions`. Worst case memory ≈ 4096 × (228 buckets × 24 B + entry)
   ≈ 24 MB; the typical table is a few hundred entries.
-- Cookies: `cookies[cookie] = key` on `Observe` (cookie ≠ 0); entries removed drop their cookies;
-  `AddBytes` for an unknown cookie goes to the entry `Key{Program: "unknown"}`.
+- Cookies: `cookies[cookie] = key` on `Observe` (cookie ≠ 0); entries removed drop their cookies.
+  `AddBytes` for a cookie not yet seen by `Observe` parks the bytes in `pending[cookie]` for two
+  sweeps (the first packet can be counted before the pump has read the connect event); `Observe`
+  drains `pending` into the new entry; what is still pending after two sweeps moves to the entry
+  `Key{Program: "unknown"}` (sockets older than the daemon).
 - Invariants (contracts): `len(m) ≤ Max`; every cookie in `cookies` maps to a present key; a
   bucket index is within the ring.
 
@@ -441,8 +450,11 @@ func (t *Table) Len() int; func (t *Table) Evictions() int
 | Requirements | 3.2, 3.3, 3.4, 3.7 |
 
 - C: `struct event` gains `__u64 cookie` (after `rule`, before `path`; the Go decoder follows the
-  regenerated layout). In `decide()`: `e->cookie = bpf_get_socket_cookie(BPF_CORE_READ(sock, sk));`
-  (0 if the helper is unavailable: the gate task proves it is accepted). New map
+  regenerated layout). In `decide()`: `struct sock *sk = sock->sk; e->cookie = sk ?
+  bpf_get_socket_cookie(sk) : 0;` — the direct BTF walk from the trusted LSM argument is a
+  trusted pointer the helper accepts; a `BPF_CORE_READ(sock, sk)` would be a scalar and is
+  rejected (the `bpf_d_path` lesson). The gate task records the verifier's message if it still
+  refuses. New map
   `struct { __uint(type, BPF_MAP_TYPE_LRU_HASH); __uint(max_entries, 65536); __type(key, __u64); __type(value, struct byte_count); } bytes`
   with `struct byte_count { __u64 bytes; __u64 pkts; __u64 last_ns; }` (declared for BTF, `-type byte_count`).
   New program `SEC("cgroup_skb/egress") int count_egress(struct __sk_buff *skb)`: cookie from
@@ -454,8 +466,9 @@ func (t *Table) Len() int; func (t *Table) Evictions() int
   not extended. The link is not pinned: it dies with the daemon.
 - Sweep: `jobs.Every(2 s)`: `BatchLookup` (fallback `Iterate`) over `bytes`; for each cookie the
   delta against the last sweep's value (kept in a Go map with the last `last_ns`) is added via
-  `Table.AddBytes`; cookies not seen for 10 minutes are dropped from the Go map; the kernel LRU
-  evicts on its own.
+  `Table.AddBytes`; when the current value is below the last one the kernel LRU recreated the
+  entry, so the delta is the current value (never a negative or wrapped delta); cookies not seen
+  for 10 minutes are dropped from the Go map; the kernel LRU evicts on its own.
 - Gate (task 1.1): the C change compiles, `go generate` regenerates, a 10 s monitor run on this
   VM shows `cookie != 0` in a curl event and a `bytes` entry for that cookie, and the counting
   attach succeeds. On failure the task records the verifier message in research.md and the spec
@@ -466,18 +479,25 @@ func (t *Table) Len() int; func (t *Table) Evictions() int
 #### trialOps
 
 ```go
-type trialOps struct{ store trial.Store; now func() time.Time; boot func() (string, error); learning bool; kill func() bool }
-func (o trialOps) start(d time.Duration, extend bool) (string, error) // "enforce until …; end early: snitchd end"
+type trialOps struct{ store trial.Store; now func() time.Time; boot func() (string, error); learning bool; kill func() bool
+    following bool            // false when the daemon runs with -mode: nobody follows the files
+    rules func() int }        // effective rule count: zero needs the explicit yes
+func (o trialOps) start(d time.Duration, extend, yes bool) (string, error) // "enforce until …; end early: snitchd end"
 func (o trialOps) keep() (string, error)                              // "enforce kept …; rm …"
 func (o trialOps) unkeep() (string, error)
 func (o trialOps) end(atBoot bool) (string, error)
 ```
-- The refusals the verbs have today that depend only on the store, learning and kill move here
-  (kill set, learning, trial running without extend, nothing to keep, bounds); the CLI keeps the
-  checks that need its probes (daemon running, following the files, zero-rules prompt) and
+- The refusals the verbs have today that depend only on the store, learning, kill, following
+  and the rule count move here (kill set, learning, not following the files, trial running
+  without extend, nothing to keep, bounds, zero rules without yes); the CLI keeps the checks that
+  need its probes (daemon running, status record age) and its prompt (which sets `yes`), and
   prints the returned text. CLI outputs stay byte-identical (the existing tests pin them).
-- The API passes `learning = d.cfg.learn`, `kill` reading `d.objs.Kill`, the daemon's store and
-  boot id; "running" and "following" are true in-process.
+- The API passes `learning = d.cfg.learn`, `kill` reading `d.objs.Kill`, `following = d.follow !=
+  nil` (a daemon started with `-mode` does not follow the files, so a trial file nobody follows
+  would arm the next service start: refused with the CLI's sentence), `rules` from the snapshot,
+  the daemon's store and boot id. The `trial` request carries `yes`; with zero effective rules
+  and no `yes` the reply is the CLI's confirm sentence as an error, so the TUI asks the operator
+  the same question.
 
 #### Overlay (rules.Merge, apiwrite.go)
 
@@ -488,6 +508,10 @@ func Merge(base, overlay *File) (*File, error) // programs: base then overlay (s
 func WriteFile(path string, f *File, header string) error
 // Program and Rule gain Source string (the file path)
 ```
+- Precedence is per base rule: an overlay rule replaces every base rule whose expanded keys it
+  touches (an `any`-proto overlay rule for a port removes the base's tcp and udp rules for that
+  key alike); the `rules` listing shows what is effective with its source. Residual key
+  synthesis is deliberately not done (documented in `examples/api.md`).
 - `loadRules(base, overlay, notice)`: base missing → empty with notice (as today); overlay
   missing → no merge; overlay invalid at startup → base only, `rulesError` set, logged; on
   reload an invalid overlay keeps the previous snapshot (existing behaviour) and sets
@@ -509,7 +533,9 @@ func WriteFile(path string, f *File, header string) error
   kept), `d.cfg.learn`, `d.objs.Kill` lookup, snapshot counts (`counts()`), `version`, pid,
   start time, `reloader.lastErr`, `server.Clients/Dropped`, `table.Len/Evictions`, `Counting`.
 - Operator: `/etc/snitch/operator` holds one user name; read at startup (`os/user.Lookup` → uid)
-  and re-read on the 2 s file stamp like the rules file; missing file → no operator (root only).
+  and re-read on the 2 s file stamp like the rules file; missing file → no operator (root only);
+  a file not owned by root or writable by group or others is ignored with one log line (the
+  sudoers rule), so a loose mode cannot promote a user.
 - Hooks: `setMode` gains a delegate `onMode func(mode, reason)` (nil-safe) the API sets to send
   a `state` event; the reloader's publish gains `onPublish func()` for `rulesChanged`.
 - Listener: `-api` path; create or `chmod` the directory 0755, remove a stale socket, `Listen`,
@@ -545,13 +571,16 @@ func WriteFile(path string, f *File, header string) error
 ### Contracts
 - `api.New`: `Require` non-nil `Table`, `Facts`, `Log`, `Now` (`TestNewRequiresDeps`).
 - `Server.Emit`: `Require(!e.Time.IsZero())`; `Ensure` no blocking: the test fills a client's
-  queue and times `Emit` under 1 ms (`TestEmitNeverBlocks`).
+  queue and times `Emit` under 1 ms (`TestEmitNeverBlocks`); `TestObserveUnderSnapshotStorm`
+  keeps a hot `snapshot` loop running and requires `Observe` p99 under 1 ms;
+  `TestAcceptErrorDoesNotEndJob` injects accept errors and the job keeps running.
 - `Table`: `Invariant(len(m) <= Max)` after insert (`TestTableEvictsAtMax`); cookie map keys
   present (`TestCookiesFollowEntries`); window index in range (`TestWindowIndex`).
 - `auth.Role`: `Ensure` reader for unknown creds (`TestRoleUnknownIsReader`).
 - `rules.Merge`: `Require` non-nil files; `Ensure` dense ids after merge and every rule has a
   `Source` (`TestMergeContracts`).
-- `trialOps`: `Require` store dir non-empty; outputs equal the CLI's (`TestTrialOpsTextsMatchCLI`).
+- `trialOps`: `Require` store dir non-empty; outputs equal the CLI's incl. "not following" and
+  "zero rules" (`TestTrialOpsTextsMatchCLI`).
 - `WriteFile`: `Require(header != "")`.
 
 ## Error Handling

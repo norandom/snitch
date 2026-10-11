@@ -184,3 +184,14 @@
   7.2: the gate task.
 - The VM repo follow-up (unit mode 0755, operator file) is outside this spec's tasks and needs
   the operator's go before the on-VM verification.
+
+### Design validation (2026-10-11, independent reviewer): GO after three fixes
+1. `trialOps` gains `following` and `yes`: a daemon run with `-mode` does not follow the files, so
+   an API trial would have armed the next service start; zero rules need the explicit yes.
+2. The cookie must come from the direct BTF walk `sock->sk` (trusted), not `BPF_CORE_READ` (a
+   scalar the helper rejects); the byte join parks unknown cookies for two sweeps before the
+   "unknown" entry and treats a lower map value as a recreated entry.
+3. Snapshots are served from a cache built on the 2 s tick (no table lock on request); clients
+   capped at 64; the accept loop never ends the job on an accept error.
+Notes taken: an overlay rule replaces the whole base rule it touches (documented); the operator
+file must be root-owned and not group/other-writable.
