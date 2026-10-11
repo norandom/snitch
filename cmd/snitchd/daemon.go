@@ -16,6 +16,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 
+	"github.com/norandom/snitch/internal/api"
 	snitchbpf "github.com/norandom/snitch/internal/bpf"
 	"github.com/norandom/snitch/internal/contract"
 	"github.com/norandom/snitch/internal/jobs"
@@ -46,6 +47,13 @@ type daemon struct {
 	sink   func(rules.Observation) // learning; nil = off
 	learn  *learner
 	follow *follower // source files: decides the mode from the trial and kept files; nil = flag
+
+	// The API (api.go): emit hands the pump's events to the server, onMode is its state event
+	// on every setMode, counting is the attach result it reports; all nil or false without -api.
+	emit     func(api.Event)
+	onMode   func(trial.Mode, string)
+	counting bool
+	api      apiState
 }
 
 // startup: rules first (a bad file is reported before anything touches the kernel), then the
@@ -119,6 +127,9 @@ func (d *daemon) decideOnce(store trial.Store, bootID string, now time.Time) {
 func (d *daemon) setMode(m trial.Mode, reason string) {
 	d.mode.Store(uint32(m))
 	d.log(fmt.Sprintf("mode: %s (%s)", modeName(m), reason))
+	if d.onMode != nil {
+		d.onMode(m, reason)
+	}
 }
 
 func modeName(m trial.Mode) string {
@@ -176,7 +187,8 @@ func (d *daemon) attach() error {
 		}
 		d.links = append(d.links, l)
 	}
-	if l, ok := attachCounting(&d.objs, d.log); ok { // counting only; off is logged, never fatal
+	l, ok := attachCounting(&d.objs, d.log) // counting only; off is logged, never fatal
+	if d.counting = ok; ok {
 		d.links = append(d.links, l)
 	}
 	return nil
@@ -196,7 +208,7 @@ func (d *daemon) beat() error {
 func (d *daemon) serve() int { return runJobs(d.log, d.jobList()...) }
 
 // jobList: the heartbeat, the deadline, the stop signals, the event pump, the reloads, and,
-// when configured, the learned-file writer and the mode follower with its status writer.
+// when configured, the learned-file writer, the API and the mode follower with its status writer.
 func (d *daemon) jobList() []jobs.Job {
 	r := &reloader{path: d.cfg.rules, overlay: d.cfg.overlay, paths: []string{d.cfg.rules, d.cfg.overlay},
 		st: &d.st, programs: mapOps(d.objs.Programs), rules: mapOps(d.objs.Rules), load: loadRules, log: d.log}
@@ -210,6 +222,7 @@ func (d *daemon) jobList() []jobs.Job {
 	if d.learn != nil {
 		js = append(js, d.learn.job())
 	}
+	js = append(js, d.apiJobs(r)...)
 	return append(js, d.modeJobs()...)
 }
 

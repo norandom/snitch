@@ -25,13 +25,20 @@ type snapshot struct {
 	rulesErr error
 }
 
-// state hands the current snapshot to the event pump without locks.
-type state struct{ cur atomic.Pointer[snapshot] }
+// state hands the current snapshot to the event pump without locks. onPublish, set once
+// before the jobs start, is the API's state event on every publish after it (nil = none).
+type state struct {
+	cur       atomic.Pointer[snapshot]
+	onPublish func()
+}
 
 func (s *state) current() *snapshot { return s.cur.Load() }
 func (s *state) publish(snap *snapshot) {
 	contract.Require(snap != nil && snap.res != nil, "publish needs a built snapshot")
 	s.cur.Store(snap)
+	if s.onPublish != nil {
+		s.onPublish()
+	}
 }
 
 // putDel is the two map operations apply needs, as delegates so tests use a recorder.

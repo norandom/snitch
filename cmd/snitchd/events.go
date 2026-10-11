@@ -14,8 +14,9 @@ import (
 	"github.com/norandom/snitch/internal/rules"
 )
 
-// pump reads the kernel's events, names them from the current snapshot, prints them and hands
-// uncovered connections to the learning sink. It never returns nil: that would end the run.
+// pump reads the kernel's events, names them from the current snapshot, prints them, hands
+// them to the API (emit never blocks) and uncovered connections to the learning sink. It never
+// returns nil: that would end the run.
 func (d *daemon) pump(ctx context.Context) error {
 	go func() { <-ctx.Done(); d.rd.Close() }()
 	for {
@@ -29,6 +30,9 @@ func (d *daemon) pump(ctx context.Context) error {
 		e := decodeEvent(rec.RawSample)
 		snap := d.st.current()
 		fmt.Println(describe(&e, snap, exeOf))
+		if d.emit != nil {
+			d.emit(toEvent(&e, snap, exeOf, time.Now()))
+		}
 		if e.Verdict == verdictAllowMonitor && d.sink != nil {
 			d.sink(observation(&e, snap, exeOf, time.Now()))
 		}

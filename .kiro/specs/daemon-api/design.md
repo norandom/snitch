@@ -574,8 +574,9 @@ func WriteWith(path string, f *File, header string) error // the overlay writer;
 
 ## Implementation Rules (binding)
 
-- Code shape per `tech.md`; `internal/api` files ≤ 300 lines each; `daemon.go` gains at most the
-  `emit` field, one attach line for the counting link and one job-list line (`d.apiJobs()`).
+- Code shape per `tech.md`; `internal/api` files ≤ 300 lines each; `daemon.go` gains only what the
+  hooks need: the `emit`, `onMode`, `counting` and `api` fields, the nil-safe call in `setMode`, the
+  counting result in `attach` and one job-list line (`d.apiJobs()`).
 - `internal/api` never imports `internal/bpf` or `cmd/`; the daemon converts events.
 - The counting program's only return value is 1; the sweep never writes the map.
 - The API holds no handle to the control or kill maps or to the trial store except through
