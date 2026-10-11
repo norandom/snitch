@@ -33,11 +33,12 @@ const anyProgram = "any"
 
 // Program is one named set of executables.
 type Program struct {
-	Name  string
-	Paths []string // absolute paths or filepath.Glob patterns
-	Note  string
-	ID    uint32 // 1-based declaration order; 0 is reserved (any / unknown)
-	Line  int    // line of the [[program]] header
+	Name   string
+	Paths  []string // absolute paths or filepath.Glob patterns
+	Note   string
+	ID     uint32 // 1-based declaration order; 0 is reserved (any / unknown)
+	Line   int    // line of the [[program]] header
+	Source string // the file the program was parsed from (a merged File mixes sources)
 }
 
 // Rule allows or denies one program (or any) to a destination prefix, protocol and ports.
@@ -53,9 +54,11 @@ type Rule struct {
 	Last    time.Time // learned files only
 	ID      uint32    // 1-based declaration order
 	Line    int       // line of the [[rule]] header
+	Source  string    // the file the rule was parsed from (a merged File mixes sources)
 }
 
-// File is a parsed rules file. Name is what Parse was given, for error messages.
+// File is a parsed rules file. Name is what Parse was given (the base's name after a Merge);
+// errors name each record's Source.
 type File struct {
 	Name     string
 	Programs []Program
@@ -84,9 +87,29 @@ func Load(path string) (*File, error) {
 
 // Parse decodes a rules file; name is used in error messages.
 func Parse(r io.Reader, name string) (*File, error) {
+	return parseWith(r, name, true)
+}
+
+// LoadOverlay reads an overlay: a rules file whose rules may name programs another file
+// declares, so the undeclared-program check waits for Merge. Everything else is validated.
+func LoadOverlay(path string) (*File, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return ParseOverlay(f, path)
+}
+
+// ParseOverlay is Parse for an overlay (see LoadOverlay).
+func ParseOverlay(r io.Reader, name string) (*File, error) {
+	return parseWith(r, name, false)
+}
+
+func parseWith(r io.Reader, name string, declared bool) (*File, error) {
 	src, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	return decode(src, name)
+	return decode(src, name, declared)
 }

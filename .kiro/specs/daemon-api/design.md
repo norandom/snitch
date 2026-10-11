@@ -166,7 +166,7 @@ internal/rules/
 ├── decode.go                    # + Source = name
 ├── validate.go                  # expandedKeys extracted; duplicate error names both sources
 ├── resolve.go                   # conflict error names Source
-├── write.go                     # WriteFile gains a header parameter; WriteLearned keeps the learned header; neutral temp prefix
+├── write.go                     # WriteWith(path, f, header) for the overlay; WriteFile(path, f) stays the learned writer; neutral temp prefix
 ├── learn.go                     # side-effect-free Observations() projection (File() clears dirty, the view must not)
 └── merge_test.go                # NEW
 cmd/snitchd/
@@ -249,7 +249,7 @@ flowchart TD
     B -- ok --> C[load overlay, append rule]
     C --> D[Merge base plus overlay validates]
     D -- invalid --> Y[error, nothing written]
-    D -- valid --> E[WriteFile overlay]
+    D -- valid --> E[WriteWith overlay]
     E --> F[reloader picks it up within 2 s, applies Diff, publishes]
     F --> G[state event rules changed to subscribers]
 ```
@@ -296,7 +296,7 @@ flowchart TD
 | 4.5 | state events | api.go hooks on setMode/publish | State | |
 | 4.6 | 100 ms, no root | in-memory | | |
 | 5.1 | trial verbs via seam | trialops.go, apiwrite.go | `trialOps` | decision table |
-| 5.2-5.3 | overlay add/remove | apiwrite.go, rules.Merge, WriteFile | | rule edit flow |
+| 5.2-5.3 | overlay add/remove | apiwrite.go, rules.Merge, WriteWith | | rule edit flow |
 | 5.4 | overlay precedence, validation, survives deploy | merge.go, state.go, reload.go | | |
 | 5.5 | audit line | apiwrite.go | `d.log` | |
 | 5.6 | no other writes | server verb table | | decision table |
@@ -327,11 +327,12 @@ flowchart TD
 // Envelope: every line has Type; requests carry Id > 0, replies echo it, unsolicited use 0.
 type Request struct{ Type string; Id int; /* per type: */ Window string; Events, Local, Summary bool;
     Duration string; Extend bool; Program, Path, To, Proto, Note, Verdict string; Port int }
-type Reply  struct{ Type string `json:"type"` /* "reply" */; Id int; Ok bool; Text string; Dropped int; /* payload fields below */ }
+type Reply  struct{ Type string `json:"type"` /* "reply" */; Id int; Ok bool; Text string; /* payload fields below */ }
 type Error  struct{ Type string /* "error" */; Id int; Error string }
+type Dropped struct{ Type string /* "dropped" */; Id int /* 0 */; Count int } // sent before the next delivered message after drops
 
 type Event struct { // "event", id 0
-    Time string; Program string; Path string; Pid, Ppid uint32; Comm string
+    Time time.Time /* RFC 3339 on the wire */; Program string; Path string; Pid, Ppid uint32; Comm string
     Addr string; Port uint16; Protocol string // "tcp" | "udp"
     Verdict string // allow-local | allow-rule | deny-rule | allow-monitor | deny-default | allow-stale | allow-kill
     Rule *RuleRef // {Id, Note, Source} or null
@@ -348,6 +349,7 @@ type Summary struct{ Type string /* "summary" */; Id int; Since string; Entries 
 type State struct{ Type string /* "state" */; Id int; Mode, Trial string; Kept bool; RulesChanged bool; Reason string }
 type Status struct{ Running bool; Pid int; Version, Mode, Source, Trial string; Kept, Kill, Learning bool;
     Rules RulesSummary; RulesError string; Clients, Dropped, Entries, Evictions int; Started string; Counting bool }
+type RulesSummary struct{ Programs, Resolved, Executables, Rules int; File, Overlay string }
 type RuleView struct{ Id int; Program, To, Protocol string; Port int; Verdict, Note, Source string }
 type ProgramView struct{ Name string; Paths []string; Resolved bool; Executables int; Source string }
 type Observation struct{ Program, Path, Addr, Protocol string; Port int; Count int; First, Last string }
@@ -391,12 +393,15 @@ const SummaryEvery = 2 * time.Second; const MaxClients = 64
   zero `Time` is a violation.
 - Postconditions: every request line yields exactly one reply or error with the same `Id`; a
   subscriber receives each event at most once; `dropped` counts exactly the messages not sent.
-- Role: `auth.Role(ucred unix.Ucred, operator uint32) Role` → reader unless uid 0 or operator;
-  unknown creds (getsockopt error) → reader. The write set is the four verbs plus the two rule
-  requests; the dispatcher checks role before the handler.
+- Role: `RoleFor(cred *unix.Ucred, operator uint32) Role` (the type is `Role`, so the function
+  is `RoleFor`) → reader unless uid 0 or operator; nil creds (getsockopt error) → reader. The
+  write set `IsWrite(type)` is the four verbs plus the two rule requests; the dispatcher checks
+  the role before the handler.
 - Queue: `chan []byte` of `Backlog`; `send` is `select { case q <- b: default: drops++ }`; the
   writer goroutine sets `SetWriteDeadline(now+WriteDeadline)` per write; a deadline error closes
-  the client. The next successful message carries `dropped` and resets it.
+  the client. Messages are marshalled once and shared as immutable bytes, so drops are reported
+  as a separate `dropped` line (`{"type":"dropped","id":0,"count":n}`) sent before the next
+  delivered message, and the counter resets.
 - Summary job: every `SummaryEvery`, one pass under the table's lock builds the changed-entries
   list and refreshes a cached `[]Entry` per window; subscribers get the summary; `snapshot`
   replies are served from the cache without taking the table's lock, so a client in a request
@@ -426,12 +431,16 @@ func (t *Table) Changed(since time.Time) []Entry // dirty entries, clears dirty;
 func (t *Table) Snapshot(window time.Duration) []Entry // from the cache built by Changed: no table lock
 func (t *Table) Len() int; func (t *Table) Evictions() int
 ```
-- Dedupe: `fresh` is true when the key is new, the last event is older than `Dedupe` (10 s), or
-  the verdict differs from the last one; otherwise counts and times update only.
+- Dedupe: `fresh` is true when the key is new, the last *emitted* event is older than `Dedupe`
+  (10 s), or the verdict differs from the last one; otherwise counts and times update only. The
+  anchor is the last emitted event, so a steady duplicate stream re-emits once per window (Req
+  2.2 "already sent") instead of being silenced for good.
 - Windows: per entry, 60 minute buckets (bytes, allow, deny) for the last hour and 168 hourly
   buckets for 7 days, as fixed-size rings indexed by time (no allocation per event);
-  `Snapshot(window)` sums the buckets inside the window and drops entries with no activity in
-  it; entries idle longer than 7 days are removed on the sweep. Rate: bytes of the last 10 s
+  `Snapshot(window)` sums exactly window/step buckets (bucket-aligned: the oldest partial minute
+  or hour is excluded, so an entry active 59.5 min ago is in the 1 h window only when `now` is
+  minute-aligned) and drops entries with no activity in it; it returns an error for an unknown
+  window; entries idle longer than 7 days are removed by `Prune` on the sweep. Rate: bytes of the last 10 s
   from the minute ring's current and previous buckets, divided by 10.
 - Bound: `Max` = 4096 entries; insertion beyond `Max` evicts the least recently seen entry
   (`lru`) and increments `evictions`. Worst case memory ≈ 4096 × (228 buckets × 24 B + entry)
@@ -440,7 +449,11 @@ func (t *Table) Len() int; func (t *Table) Evictions() int
   `AddBytes` for a cookie not yet seen by `Observe` parks the bytes in `pending[cookie]` for two
   sweeps (the first packet can be counted before the pump has read the connect event); `Observe`
   drains `pending` into the new entry; what is still pending after two sweeps moves to the entry
-  `Key{Program: "unknown"}` (sockets older than the daemon).
+  `Key{Program: "unknown"}` (sockets older than the daemon). Cookie lifetime: a cookie idle for
+  10 minutes (no bytes, no event) is dropped from the index by `Prune` (the sweep's own policy),
+  so a live entry's cookie list stays bounded under a retry storm; the entry's totals stay. The
+  cookie invariant is checked per removed entry (O(k)), never by a whole-map scan on the pump
+  path.
 - Invariants (contracts): `len(m) ≤ Max`; every cookie in `cookies` maps to a present key; a
   bucket index is within the ring.
 
@@ -505,9 +518,11 @@ func (o trialOps) end(atBoot bool) (string, error)
 
 ```go
 // internal/rules
+func LoadOverlay(path string) (*File, error)   // like Load, but rules may name programs the overlay does not declare (the base does)
 func Merge(base, overlay *File) (*File, error) // programs: base then overlay (same name: error);
     // rules: base rules whose expanded keys intersect an overlay rule's keys are dropped, overlay appended; validate re-runs
-func WriteFile(path string, f *File, header string) error
+    // on the union, so an overlay rule for a program declared nowhere fails here
+func WriteWith(path string, f *File, header string) error // the overlay writer; WriteFile(path, f) stays the learned writer
 // Program and Rule gain Source string (the file path)
 ```
 - Precedence is per base rule: an overlay rule replaces every base rule whose expanded keys it
@@ -521,13 +536,13 @@ func WriteFile(path string, f *File, header string) error
 - `rule.add`: resolve `program` by name in the current snapshot, or `path` → `ExeKey` via the
   resolver; if that executable is already mapped to a program, error "executable is program X:
   use that name"; else the overlay declares a program named after the path's base name (suffix
-  on collision). Load overlay → append → `Merge(base, overlay)` → `WriteFile(overlay, header
+  on collision). Load overlay → append → `Merge(base, overlay)` → `WriteWith(overlay, header
   "local rules written by snitchd's API")` → the 2 s watch reloads → state event.
 - `rule.remove`: by key (`program`, `to`, `proto`, `port`); a matching rule with `Source` equal to
   the deployed file is refused with "edit <file>"; else removed from the overlay and written.
 - Audit: `d.log(fmt.Sprintf("api: uid %d %s: %s", who, req.Type, outcome))` for every write.
 - Precondition contracts: `Merge` requires non-nil files; `rule.add` requires a verdict in
-  {allow, deny}; `WriteFile` requires a non-empty header.
+  {allow, deny}; `WriteWith` requires a non-empty header.
 
 ### Facts and state hooks (cmd/snitchd/api.go)
 
@@ -583,7 +598,7 @@ func WriteFile(path string, f *File, header string) error
   `Source` (`TestMergeContracts`).
 - `trialOps`: `Require` store dir non-empty; outputs equal the CLI's incl. "not following" and
   "zero rules" (`TestTrialOpsTextsMatchCLI`).
-- `WriteFile`: `Require(header != "")`.
+- `WriteWith`: `Require(header != "")` (the overlay writer; `WriteFile` stays the learned writer).
 
 ## Error Handling
 
@@ -595,7 +610,7 @@ func WriteFile(path string, f *File, header string) error
 | Reader sends a write | `error: write requires the operator`, connection kept (1.4) |
 | Queue full | message dropped, `dropped` on the next sent message (1.6) |
 | Write deadline exceeded | client closed, logged once |
-| Cookie helper rejected by the verifier / attach fails | counting off, `Status.Counting=false`, bytes stay 0 and `bytesSent` is reported with `"countingOff": true` in status |
+| Cookie helper rejected by the verifier / attach fails | counting off, `Status.Counting=false` (`"counting": false` in the status reply), bytes stay 0 |
 | Unknown cookie bytes | entry "unknown" (3.4) |
 | Overlay invalid on write | `Merge` error returned, file untouched (5.4, 5.7) |
 | Overlay invalid on disk at reload | previous snapshot kept, `rulesError` in status (5.4) |
@@ -614,7 +629,7 @@ func WriteFile(path string, f *File, header string) error
 - table: dedupe window and verdict change, counts and times, windows across rings and
   boundaries, rate, eviction at Max with counter, cookie join and unknown bucket, idle removal.
 - rules: `Merge` precedence (base shadowed by overlay key), same-name program error, Source on
-  every record, dense ids, duplicate across files names both sources; `WriteFile` header and
+  every record, dense ids, duplicate across files names both sources; `WriteWith` header and
   round trip.
 - trialOps: texts equal the CLI's for every refusal and success (table shared with
   `ctl_verbs_test.go`); CLI tests unchanged and green.

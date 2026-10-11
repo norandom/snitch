@@ -146,15 +146,15 @@ func TestLearnWriteFileRoundTrips(t *testing.T) {
 	}
 }
 
-// strip removes what a parse legitimately changes: header lines.
+// strip removes what a parse legitimately changes: header lines and the source file.
 func strip(f *rules.File) *rules.File {
 	out := &rules.File{}
 	for _, p := range f.Programs {
-		p.Line = 0
+		p.Line, p.Source = 0, ""
 		out.Programs = append(out.Programs, p)
 	}
 	for _, r := range f.Rules {
-		r.Line = 0
+		r.Line, r.Source = 0, ""
 		out.Rules = append(out.Rules, r)
 	}
 	return out

@@ -71,7 +71,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Requirements: 1.3, 1.6, 1.7, 1.8, 2.6_
 
 - [ ] 2. Rules overlay and the trial seam
-- [ ] 2.1 (P) Merging a second rules file with precedence
+- [x] 2.1 (P) Merging a second rules file with precedence
   - Programs and rules know their source file; a merge of base and overlay: base programs then
     overlay programs (a same-name program is an error naming both files), base rules shadowed by
     an overlay rule's expanded keys dropped, overlay rules appended, validation re-run with dense
@@ -79,11 +79,12 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
     file writer takes a header, and `WriteLearned(path, f)` keeps the learned header so the
     learner's reference in daemon.go stays untouched
   - Done when: `go test ./internal/rules -run 'Merge|Source|Write'` proves precedence for the
-    same key (incl. an any-proto overlay rule shadowing only the tcp half of a base pair), the
+    same key (incl. an any-proto overlay rule removing both the tcp and the udp base rules), the
     same-name error, sources on every record, dense ids, duplicate naming both files, the header
     in the written file and a round trip; the learner's write still produces its header
   - _Boundary: internal/rules/merge.go, merge_test.go, file.go, decode.go, validate.go,
-    resolve.go, write.go, write_test.go (cmd/snitchd keeps calling a learned writer by value)_
+    resolve.go, write.go, write_test.go, file_test.go and learn_test.go (fixtures gain Source;
+    cmd/snitchd keeps calling a learned writer by value)_
   - _Requirements: 4.2, 5.4_
 - [ ] 2.2 The daemon loads base plus overlay
   - Flags: `-overlay` (default `/etc/snitch/rules.d/local.toml`) and `-api` (default
@@ -236,3 +237,4 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Requirements: 6.2_
 
 ## Implementation Notes
+- 2.1: `LoadOverlay`/`ParseOverlay` load an overlay whose rules name base programs (plain `Load` rejects them as undeclared); `Merge` re-validates the union so an unknown program still fails there. Overlay writer is `WriteWith(path, f, header)`; `WriteFile(path, f)` stays the learned writer (daemon.go passes it by value). Shadowing is per base rule over expanded keys (a proto overlay rule replaces an any-proto base rule whole; pinned by a test a mutant required). Fixtures comparing whole records (`file_test.go`, `learn_test.go`) gained `Source`. Later tasks: load the overlay with `LoadOverlay`, write it with `WriteWith`.

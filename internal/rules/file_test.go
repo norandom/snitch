@@ -24,17 +24,18 @@ func load(t *testing.T, name string) *rules.File {
 
 func TestDecodeValidFixture(t *testing.T) {
 	f := load(t, "valid.toml")
+	src := filepath.Join("testdata", "valid.toml") // every record names the file it came from
 	wantPrograms := []rules.Program{
-		{Name: "curl", Paths: []string{"/usr/bin/curl"}, Note: "general purpose", ID: 1, Line: 3},
-		{Name: "claude", Paths: []string{"/home/*/.local/share/claude/versions/*", "/opt/claude/bin/claude"}, ID: 2, Line: 8},
+		{Name: "curl", Paths: []string{"/usr/bin/curl"}, Note: "general purpose", ID: 1, Line: 3, Source: src},
+		{Name: "claude", Paths: []string{"/home/*/.local/share/claude/versions/*", "/opt/claude/bin/claude"}, ID: 2, Line: 8, Source: src},
 	}
 	utc := func(h, m int) time.Time { return time.Date(2026, 10, 10, h, m, 0, 0, time.UTC) }
 	wantRules := []rules.Rule{
 		{Program: "curl", To: netip.MustParsePrefix("1.1.1.1/32"), Proto: rules.TCP, Ports: []uint16{443},
-			Verdict: rules.Allow, Note: "the one address the test allows", ID: 1, Line: 12},
-		{Program: "claude", To: netip.MustParsePrefix("::/0"), Verdict: rules.Allow, ID: 2, Line: 20},
+			Verdict: rules.Allow, Note: "the one address the test allows", ID: 1, Line: 12, Source: src},
+		{Program: "claude", To: netip.MustParsePrefix("::/0"), Verdict: rules.Allow, ID: 2, Line: 20, Source: src},
 		{Program: "any", To: netip.MustParsePrefix("9.9.9.9/32"), Proto: rules.UDP, Ports: []uint16{67, 68},
-			Verdict: rules.Deny, Count: 12, First: utc(6, 0), Last: utc(6, 30), ID: 3, Line: 25},
+			Verdict: rules.Deny, Count: 12, First: utc(6, 0), Last: utc(6, 30), ID: 3, Line: 25, Source: src},
 	}
 	if !reflect.DeepEqual(f.Programs, wantPrograms) {
 		t.Fatalf("programs:\n got %+v\nwant %+v", f.Programs, wantPrograms)

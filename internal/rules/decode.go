@@ -40,7 +40,9 @@ type rawRule struct {
 
 const maxPortsPerRule = 256
 
-func decode(src []byte, name string) (*File, error) {
+// decode parses and validates; declared false defers the undeclared-program check to Merge
+// (an overlay's rules name the base's programs).
+func decode(src []byte, name string, declared bool) (*File, error) {
 	var raw rawFile
 	d := toml.NewDecoder(bytes.NewReader(src))
 	d.DisallowUnknownFields()
@@ -57,16 +59,17 @@ func decode(src []byte, name string) (*File, error) {
 	}
 	f := &File{Name: name}
 	for i, p := range raw.Program {
-		f.Programs = append(f.Programs, Program{Name: p.Name, Paths: p.Paths, Note: p.Note, Line: lines["program"][i]})
+		f.Programs = append(f.Programs, Program{Name: p.Name, Paths: p.Paths, Note: p.Note, Line: lines["program"][i], Source: name})
 	}
 	for i, r := range raw.Rule {
 		rule, err := convertRule(r, lines["rule"][i])
 		if err != nil {
 			return nil, &Error{File: name, Line: rule.Line, Msg: err.Error()}
 		}
+		rule.Source = name
 		f.Rules = append(f.Rules, rule)
 	}
-	if err := validate(f, name); err != nil {
+	if err := validate(f, declared); err != nil {
 		return nil, err
 	}
 	return f, nil

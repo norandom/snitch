@@ -6,17 +6,27 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/norandom/snitch/internal/contract"
 )
 
-// WriteFile writes f as a rules file Parse reads back unchanged: a temp file in the same
-// directory, then rename, so a reader never sees a partial file.
+// WriteFile writes f as a learned-rules file: WriteWith under the learner's header. The daemon
+// hands it to the learner by value, so its shape is part of that contract.
 func WriteFile(path string, f *File) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".learned-*.toml")
+	return WriteWith(path, f, learnedHeader(time.Now().UTC()))
+}
+
+// WriteWith writes f under header (each line becomes a comment) as a rules file Parse reads
+// back unchanged: a temp file in the same directory, then rename, so a reader never sees a
+// partial file. Source fields are not written: the path says where the records came from.
+func WriteWith(path string, f *File, header string) error {
+	contract.Require(header != "", "WriteWith needs a header")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".snitch-*.toml")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name()) // no-op after a successful rename
-	if _, err = tmp.WriteString(format(f, time.Now().UTC())); err == nil {
+	if _, err = tmp.WriteString(format(f, header)); err == nil {
 		err = tmp.Chmod(0o644)
 	}
 	if cerr := tmp.Close(); err == nil {
@@ -28,10 +38,16 @@ func WriteFile(path string, f *File) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-func format(f *File, now time.Time) string {
+func learnedHeader(now time.Time) string {
+	return fmt.Sprintf("snitch learned rules, written %s: what programs connected to while nothing was\n"+
+		"blocked. Review, then merge into the live rules file; snitchd never does that itself.", now.Format(time.RFC3339))
+}
+
+func format(f *File, header string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# snitch learned rules, written %s: what programs connected to while nothing was\n", now.Format(time.RFC3339))
-	b.WriteString("# blocked. Review, then merge into the live rules file; snitchd never does that itself.\n")
+	for _, line := range strings.Split(header, "\n") {
+		fmt.Fprintf(&b, "# %s\n", line)
+	}
 	for _, p := range f.Programs {
 		fmt.Fprintf(&b, "\n[[program]]\nname  = %s\npaths = [%s]\n", quote(p.Name), quoteList(p.Paths))
 		if p.Note != "" {
