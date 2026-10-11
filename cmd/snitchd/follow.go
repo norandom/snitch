@@ -149,11 +149,12 @@ func (w *statusWriter) tick(context.Context) error {
 }
 
 // record builds the status record from the current snapshot's numbers, the mode the heartbeat
-// carries, the run's source and learning flag, and the files as they are now.
+// carries, the run's source and learning flag, the files as they are now, and the build
+// (the version variable, through the same check that prints it: Req 1.2 of deploy-service).
 func (w *statusWriter) record() status.Record {
 	st := w.store.Read()
 	r := status.Record{PID: w.pid, Mode: modeName(w.mode()), Source: string(w.source), Learning: w.learn,
-		Kept: st.Kept, RulesFile: w.rulesFile, Written: w.now()}
+		Kept: st.Kept, RulesFile: w.rulesFile, Written: w.now(), Version: mustVersion(version)}
 	if st.Trial != nil {
 		r.Trial = st.Trial.End.UTC().Format(time.RFC3339)
 	}

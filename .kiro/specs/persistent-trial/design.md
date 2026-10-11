@@ -322,6 +322,9 @@ func Write(path string, r Record) error   // atomic temp+rename, key=value lines
 func Read(path string) (Record, error)
 ```
 
+Since spec deploy-service the record has a thirteenth key, `version` (last), and `snitchd status`
+a ninth line `version:`.
+
 ### cmd/snitchd
 
 **daemon.go**: creates the status file's directory (0700) when missing, so a hand-started

@@ -13,11 +13,11 @@ import (
 	"github.com/norandom/snitch/internal/trial"
 )
 
-var statusKeys = []string{"daemon:", "mode:", "trial:", "kept:", "kill:", "learning:", "rules:", "status:"}
+var statusKeys = []string{"daemon:", "mode:", "trial:", "kept:", "kill:", "learning:", "rules:", "status:", "version:"}
 
 // fullRecord is the record a daemon following the files with examples/rules.toml writes.
 var fullRecord = status.Record{PID: 1234, Mode: "monitor", Source: "files", RulesFile: "examples/rules.toml",
-	Programs: 3, Resolved: 3, Executables: 5, Rules: 6, Written: tNow}
+	Programs: 3, Resolved: 3, Executables: 5, Rules: 6, Written: tNow, Version: "v0.2.0"}
 
 // line is the output line that starts with key ("" when absent).
 func line(out, key string) string {
@@ -45,6 +45,7 @@ func TestStatusRunningShowsEveryFieldAndExitsZero(t *testing.T) {
 		"learning:": "learning:  no",
 		"rules:":    "rules:     3 programs (3 resolved), 5 executables mapped, 6 rules effective (examples/rules.toml)",
 		"status:":   "status:    /run/snitch/status written 0s ago",
+		"version:":  "version:   v0.2.0",
 	}
 	for _, key := range statusKeys {
 		if got := line(out, key); got != want[key] {
@@ -100,6 +101,7 @@ func TestStatusWithoutARecordSaysUnknown(t *testing.T) {
 		"learning:": "learning:  unknown (no status record)",
 		"rules:":    "rules:     unknown (no status record)",
 		"status:":   "status:    /run/snitch/status missing",
+		"version:":  "version:   unknown (no status record)",
 	} {
 		if got := line(out, key); got != want {
 			t.Errorf("%s line %q, want %q", key, got, want)
@@ -136,6 +138,9 @@ func TestStatusRunningButNotFollowingTheFilesExitsZero(t *testing.T) {
 			if got := line(out, "mode:"); got != "mode:      monitor (control map)" {
 				t.Errorf("mode line %q: the control map is the mode of a running daemon", got)
 			}
+			if want := versionLine(f.recErr == nil); line(out, "version:") != want {
+				t.Errorf("version line %q, want %q", line(out, "version:"), want)
+			}
 		})
 	}
 }
@@ -148,6 +153,15 @@ func TestStatusLearningFromTheRecord(t *testing.T) {
 	if got := line(out, "learning:"); got != "learning:  yes" {
 		t.Errorf("learning line %q", got)
 	}
+}
+
+// versionLine is the ninth line (spec deploy-service, Req 1.2): the record's version when it
+// could be read, the other lines' "unknown" form otherwise.
+func versionLine(readable bool) string {
+	if readable {
+		return "version:   v0.2.0"
+	}
+	return "version:   unknown (no status record)"
 }
 
 // facts builds the status facts of a running daemon over the given state files.

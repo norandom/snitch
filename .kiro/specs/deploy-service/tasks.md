@@ -30,7 +30,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
     `v9.9.9` for `-version`
   - _Boundary: cmd/snitchd/version.go, config.go, config_test.go, daemon.go, daemon_test.go_
   - _Requirements: 1.2_
-- [ ] 1.2 The version in the status record and in `snitchd status`
+- [x] 1.2 The version in the status record and in `snitchd status`
   - The status record gains a `version` key, last after `written`, written by the daemon's
     status writer from the version variable and required on read like every other key; the
     `status` verb prints a ninth line `version:` from the record, or the "unknown (no status
@@ -39,8 +39,9 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - Done when: `go test ./internal/status ./cmd/snitchd -run 'Status|Version'` proves the body
     with the key, the round trip, the missing-key error naming `version`, the newline
     precondition, and the status line in both forms
-  - _Boundary: internal/status/status.go, status_test.go, cmd/snitchd/follow.go, ctl_status.go,
-    ctl_status_test.go, .kiro/specs/persistent-trial/design.md (one sentence)_
+  - _Boundary: internal/status/status.go, status_test.go, cmd/snitchd/follow.go, follow_test.go
+    (the writer's record fixture), ctl_status.go, ctl_status_test.go,
+    .kiro/specs/persistent-trial/design.md (one sentence)_
   - _Depends: 1.1_
   - _Requirements: 1.2_
 - [ ] 1.3 The `check` verb
@@ -215,3 +216,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 
 ## Implementation Notes
 - 1.1: `-version` returns `errVersion`, which wraps `flag.ErrHelp`, so main's silent exit-0 branch handles it without touching main.go; the print goes through the package-level `stdout io.Writer` seam (swapped in tests, no `t.Parallel` in the package); `startupLine(version, mode, source)` and `mustVersion` (the single Ensure) are the helpers 1.2 should reuse. An empty linked version panics before `run`'s recover (raw exit 2, not 70): harmless, nothing attached yet.
+- 1.2: `version` is the thirteenth, last status key; `versionLine` follows `rulesLine`'s shape (`recErr != nil` → unknown). The task boundary missed `follow_test.go`, whose writer fixture compares the whole record: boundaries of tasks that add a record field must list every fixture building that record (`grep -rn 'status.Record{' cmd/snitchd`). Implementers: a one-line fix outside the boundary is a NEEDS_CONTEXT, handled by the parent, as here.

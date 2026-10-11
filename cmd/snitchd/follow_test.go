@@ -219,7 +219,7 @@ func TestStatusWriterRecordFromSnapshotModeAndStore(t *testing.T) {
 	x.m.files["/state/trial"] = "start=2026-10-10T11:55:00Z\nend=2026-10-10T12:05:00Z\nboot=this-boot\n"
 	x.m.files["/state/enforce"] = keptMarker
 	want := status.Record{PID: 42, Mode: "enforce", Source: "files", Learning: true, Trial: "2026-10-10T12:05:00Z", Kept: true,
-		RulesFile: "/etc/rules.toml", Programs: 2, Resolved: 1, Executables: 1, Rules: 3, Written: x.now}
+		RulesFile: "/etc/rules.toml", Programs: 2, Resolved: 1, Executables: 1, Rules: 3, Written: x.now, Version: "dev"}
 	if got := x.w.record(); got != want {
 		t.Fatalf("want %+v, got %+v", want, got)
 	}

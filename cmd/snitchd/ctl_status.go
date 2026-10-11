@@ -1,5 +1,5 @@
 // ctl_status.go: `snitchd status` (Req 7). One line per fact with a stable key, so a script
-// can grep it: daemon, mode, trial, kept, kill, learning, rules, status. Every source is read
+// can grep it: daemon, mode, trial, kept, kill, learning, rules, status, version. Every source is read
 // once (two map lookups, the two state files, the status record): nothing waits, nothing
 // retries, so the command is done well within a second. Exit 1 when the daemon is not running
 // (no pinned maps or a heartbeat older than 15 s); the files and the kill switch print anyway.
@@ -163,6 +163,15 @@ func (f statusFacts) rulesLine() string {
 		r.Programs, r.Resolved, r.Executables, r.Rules, r.RulesFile)
 }
 
+// versionLine is the record's build (spec deploy-service, Req 1.2): what runs, not what the
+// command line is (the binary is the same file).
+func (f statusFacts) versionLine() string {
+	if f.recErr != nil {
+		return "unknown (no status record)"
+	}
+	return f.rec.Version
+}
+
 func (f statusFacts) statusLine() string {
 	switch {
 	case f.recErr != nil && isNotExist(f.recErr):
@@ -180,13 +189,14 @@ func (f statusFacts) lines() [][2]string {
 	return [][2]string{
 		{"daemon", f.daemonLine()}, {"mode", f.modeLine()}, {"trial", f.trialLine()}, {"kept", f.keptLine()},
 		{"kill", f.killLine()}, {"learning", f.learningLine()}, {"rules", f.rulesLine()}, {"status", f.statusLine()},
+		{"version", f.versionLine()},
 	}
 }
 
 func statusUsage(f *flag.FlagSet) func() {
 	return func() {
 		fmt.Fprint(f.Output(), `usage: snitchd status [flags]
-  one line per fact, a stable key each: daemon: mode: trial: kept: kill: learning: rules: status:
+  one line per fact, a stable key each: daemon: mode: trial: kept: kill: learning: rules: status: version:
   exit 1 when the daemon is not running (no pinned maps or a heartbeat older than 15 s), 0 otherwise
 `)
 		f.PrintDefaults()

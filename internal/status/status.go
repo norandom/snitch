@@ -29,12 +29,14 @@ type Record struct {
 	Programs, Resolved, Executables, Rules int
 
 	Written time.Time // when the daemon wrote the file; read back in UTC to the second
+	Version string    // the daemon's build (spec deploy-service, Req 1.2); the record's last key
 }
 
 // keys is the file's line order, the same as the struct's, so a console `cat` reads top down
-// in the order the CLI prints. Read requires exactly these keys.
+// in the order the CLI prints. Read requires exactly these keys. version is last (added by
+// spec deploy-service) so the earlier lines keep their place.
 var keys = []string{"pid", "mode", "source", "learning", "trial", "kept", "rules_file",
-	"programs", "resolved", "executables", "rules", "written"}
+	"programs", "resolved", "executables", "rules", "written", "version"}
 
 // Write replaces the file at path with r as key=value lines, one per field, a trailing
 // newline, Written in UTC to the second. The write is atomic (a 0600 temp file in the same
@@ -43,7 +45,7 @@ var keys = []string{"pid", "mode", "source", "learning", "trial", "kept", "rules
 // RuntimeDirectory. Requires a path and values without newlines (one line per field).
 func Write(path string, r Record) error {
 	contract.Require(path != "", "status: empty path")
-	contract.Require(!strings.ContainsAny(r.Mode+r.Source+r.Trial+r.RulesFile, "\n"),
+	contract.Require(!strings.ContainsAny(r.Mode+r.Source+r.Trial+r.RulesFile+r.Version, "\n"),
 		"status: newline in a value")
 	return writeAtomic(path, []byte(format(r)))
 }
@@ -52,7 +54,7 @@ func format(r Record) string {
 	values := []string{strconv.Itoa(r.PID), r.Mode, r.Source, strconv.FormatBool(r.Learning),
 		r.Trial, strconv.FormatBool(r.Kept), r.RulesFile, strconv.Itoa(r.Programs),
 		strconv.Itoa(r.Resolved), strconv.Itoa(r.Executables), strconv.Itoa(r.Rules),
-		r.Written.UTC().Format(time.RFC3339)}
+		r.Written.UTC().Format(time.RFC3339), r.Version}
 	var b strings.Builder
 	for i, k := range keys {
 		b.WriteString(k + "=" + values[i] + "\n")
@@ -128,6 +130,7 @@ func recordOf(kv map[string]string) (Record, error) {
 		return r, err
 	}
 	r.Mode, r.Source, r.Trial, r.RulesFile = kv["mode"], kv["source"], kv["trial"], kv["rules_file"]
+	r.Version = kv["version"]
 	ints := []struct {
 		key string
 		dst *int

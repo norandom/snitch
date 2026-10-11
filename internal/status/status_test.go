@@ -19,7 +19,7 @@ var (
 	full     = Record{
 		PID: 4242, Mode: "enforce", Source: "files", Learning: false,
 		Trial: "2026-10-10T12:10:00Z", Kept: true, RulesFile: "/etc/snitch/rules.toml",
-		Programs: 3, Resolved: 2, Executables: 5, Rules: 7, Written: tWritten,
+		Programs: 3, Resolved: 2, Executables: 5, Rules: 7, Written: tWritten, Version: "v0.2.0",
 	}
 	fullBody = "pid=4242\n" +
 		"mode=enforce\n" +
@@ -32,7 +32,8 @@ var (
 		"resolved=2\n" +
 		"executables=5\n" +
 		"rules=7\n" +
-		"written=2026-10-10T12:00:00Z\n"
+		"written=2026-10-10T12:00:00Z\n" +
+		"version=v0.2.0\n"
 )
 
 // statusPath is a file in a directory that does not exist yet: a hand-started daemon has no
@@ -187,6 +188,34 @@ func TestWriteContracts(t *testing.T) {
 		if !strings.HasPrefix(v.Msg, "status:") {
 			t.Errorf("%s: violation %q does not start with the package name", c.name, v.Msg)
 		}
+	}
+}
+
+// TestVersionIsTheLastKey (spec deploy-service, Req 1.2): the record's thirteenth key is
+// `version`, last so an old record's lines keep their place; it round-trips, a body without
+// it is an error naming it, and a newline in it is the same precondition as the other strings.
+func TestVersionIsTheLastKey(t *testing.T) {
+	lines := strings.Split(strings.TrimSuffix(fullBody, "\n"), "\n")
+	if last := lines[len(lines)-1]; last != "version=v0.2.0" {
+		t.Errorf("last line %q, want the version", last)
+	}
+	path := statusPath(t)
+	if err := Write(path, full); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Read(path); err != nil || got.Version != "v0.2.0" {
+		t.Errorf("Read().Version = %q, %v; want v0.2.0", got.Version, err)
+	}
+	without := strings.Replace(fullBody, "version=v0.2.0\n", "", 1)
+	if err := os.WriteFile(path, []byte(without), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read(path); err == nil || !strings.Contains(err.Error(), "version") {
+		t.Errorf("Read(record without version) = %v, want an error naming version", err)
+	}
+	v := contracttest.Panics(t, contract.Precondition, func() { _ = Write(path, Record{Version: "v1\nv2"}) })
+	if !strings.HasPrefix(v.Msg, "status:") {
+		t.Errorf("violation %q does not start with the package name", v.Msg)
 	}
 }
 
