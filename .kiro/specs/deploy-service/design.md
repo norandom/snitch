@@ -580,13 +580,41 @@ reads the executed run's summary. A `_if` lambda runs before the op's sudo conte
   trial) waits for the operator's explicit go in the conversation, with the serial console open.
 
 ### Contracts
-- `version`: `Ensure(version != "")` where printed (`-version`, startup line); test with the
-  variable set to "" in a test binary (table-driven through a `printVersion(w, v)` helper).
-- `check`: `Require(path != "")`; exit codes 0/1/2 as specified; tests with a valid file, an
-  invalid file (file:line in stderr), a missing file, a bad flag, and a non-root euid.
-- `dispatch`: `check` runs with euid ≠ 0; every other verb still refuses with exit 2.
-- `status.Record`: `Write` then `Read` round-trips `Version`; a body without `version=` is an
-  error naming `version`; a `Version` with a newline trips the precondition.
+The `internal/contract` conventions of the rule-loading design apply (`Require` on the inputs
+of a function, `Ensure` before return; a violation is a bug, an operator error returns `error`
+or exits 1). The implemented set; every bullet names the `contracttest.Panics` test that trips
+exactly it (task 4.4 ran each test against a copy of the tree with the contract line disabled
+and saw it fail):
+- `mustVersion` (cmd/snitchd `version.go`) ensures `v != ""` ("version: empty"). It is the one
+  place the version is read for output: `printVersion` (`-version`), `startupLine` (the journal
+  line) and the status record's `Version` (`follow.go`) go through it, so a link with
+  `-X main.version=` trips the contract instead of printing an empty line. `config_test`:
+  `TestVersionContractRefusesAnEmptyVersion` (through `printVersion` and `startupLine`);
+  `TestVersionFlagPrintsAndExitsBeforeTheCheck` and `TestVersionIsDevUnlessLinked` cover the
+  printed value.
+- `(*ctl).checkRules` (`ctl_check.go`) requires `path != ""` ("check: empty rules path") and
+  the writers `out`, `errw` ("check: incomplete writers"). An empty `-rules` on the command
+  line is an operator error: `checkFlags` answers it with exit 2 before `checkRules` runs.
+  `ctl_check_test`: `TestContractCheckNeedsARulesPath`, `TestContractCheckNeedsItsWriters`.
+- `check`'s exit codes are behaviour, not contracts, all dispatched through the real table as
+  euid 1000 (`runCheckAs`): 0 `TestCheckValidFilePrintsTheSummaryAndTheUnresolvedPatterns`,
+  `TestCheckAcceptsAndIgnoresTheSharedFlags`, `TestCheckHelpExitsZero`; 1
+  `TestCheckInvalidFileExitsOneWithFileAndLine`, `TestCheckResolverConflictExitsOneWithFileAndLine`,
+  `TestCheckMissingFileExitsOneSayingDoesNotExist`; 2 `TestCheckUsageErrorsExitTwo` (a bad
+  flag, a positional word, an empty `-rules`). `TestCheckRulesDefaultsToTheServicePath`: the
+  default is `/etc/snitch/rules.toml`.
+- `dispatch` (`ctl.go`) keeps persistent-trial's precondition (a verb is required,
+  `TestContractDispatchNeedsAVerb`). The root gate is the table's `root` flag: `check` is the
+  only verb with `root: false` and runs with euid ≠ 0; every other verb refuses with exit 2
+  before its handler runs. `ctl_test`: `TestVerbNeedsRoot` (a stub table, both directions),
+  `TestVerbDispatchRootGateOnTheRealTable` (the real table: exactly one rootless verb, and it
+  is `check`).
+- `status.Write` (`internal/status`) requires no newline in `Version` like the other string
+  fields (persistent-trial's precondition extended). `status.Read` requires the `version` key
+  like every other key (`onlyKeys`): a body without `version=` is an error naming `version`
+  (an older daemon's record; the README names the remedy). `status_test`:
+  `TestVersionIsTheLastKey` (the last line of the body, the round trip, the missing key, the
+  newline), `TestWriteContracts` (the other strings), `TestReadRequiresAPath`.
 
 ## Error Handling
 
