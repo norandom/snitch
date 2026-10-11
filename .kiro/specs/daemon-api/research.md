@@ -242,3 +242,27 @@ Outcome: the spec continues with counting on (`Counting = true` when the attach 
   holds ~19 MB (sockets older than the daemon, e.g. the RDP session), as designed.
 - A note for the design: an ad hoc program declared by `rule.add` stays in the overlay after
   `rule.remove` (ruleless), so later events of that executable are keyed by the program name.
+
+---
+
+## Feature validation (2026-10-11): GO after fixes
+
+Mechanical: `go test -count=1 -race ./...` ok, caps ok, gofmt/vet clean, TODO grep clean (one
+`XXXXXX` mktemp template), secrets grep clean; smoke: the live v0.3.0 service answered `status`
+over the socket (running, counting on, 73 entries); CI 38146173147 (96ee585) and the run for
+32f7534 green; VM CI 38145170683 green. `go list -deps`: internal/api imports only contract and
+jobs. All 40 criteria covered; 4.1 and 6.4 amended (no status-file or heartbeat age in-process).
+Boundary: no unrecorded spillover; CLI texts byte-identical; fail-safe surface untouched
+(kill read-only, no control-map write, trial files only via trialOps, count_egress returns 1).
+
+Findings fixed in 32f7534: an operator could `rule.add program=any to=0.0.0.0/0 deny`, which is
+deny by default without a deadline (now refused with a pointer to `snitchd trial`); `-api` under
+`-state-dir` would have opened the 0700 directory (refused); the 10 s re-resolve republished an
+unchanged snapshot, so every subscriber got a `state` line every 10 s (now quiet unless the diff
+is non-empty; test `TestReloadReresolveWithoutAChangeIsQuiet`); api.md's rule texts, the
+spent-trial state line, and "nothing is logged" corrected; design file tree and traceability.
+Note for the validators' conduct: one probe as the operator added and removed a deny for
+9.9.9.9 (about 100 s, overlay byte-identical afterwards, both audit lines in the journal).
+Unreleased: these fixes are on `main` after v0.3.0; tag v0.3.1 before the next VM deploy.
+Cleanup candidates (not blocking): `windowNames` vs `Windows`, four proto-name mappers, three
+RFC 3339 stampers; ad hoc programs from `rule.add` outlive `rule.remove` (policy for the TUI).
