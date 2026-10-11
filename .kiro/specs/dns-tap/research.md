@@ -94,3 +94,89 @@
   entries in the trie, the cache bound (addresses, names per address), the question-tracking for
   Req 1.3 (query ids seen at egress by socket cookie: `count_egress` already runs there), the
   resolver list source (`/etc/resolv.conf` watch).
+
+---
+
+## Gap analysis (2026-10-11, after requirements approval)
+
+### Current state
+- The decision pipeline is rules file -> `Resolve` -> `Encode` -> `Diff` -> `apply` (one `Put`/`Delete`
+  per entry) -> LPM trie, with a snapshot behind an atomic pointer and a reloader that serialises
+  full reloads and 10 s re-resolves under one mutex. A rule has exactly one `To netip.Prefix`;
+  `encodeRule` has a contract that panics on an invalid prefix (the first thing a name rule hits
+  today, in `loadRules`, `reresolve` and `snitchd check`).
+- Rule ids are dense 1..n per snapshot and renumbered on every reload; the kernel copies the id
+  into events; `ruleOf` resolves it against the current snapshot.
+- The kernel side has no ingress program; `count_egress` already runs at the cgroup2 root on
+  egress with `multi`, which is the shape (attach, soft failure, `sweeper` job with delegates)
+  for the two DNS programs.
+- The API's `Event`/`Entry`/`Observation`/`RuleView`/`Status` have no name; the table key is the
+  address; `TestEventJSONNames` and friends pin the key sets; the status file has a fixed key
+  set with `version` last.
+- The dev VM: router resolver over single-datagram UDP, no stub, no DoH; tools resolve per
+  process (glibc, pure-Go); the answer-to-connect gap is 291 µs at the fastest.
+
+### Feasibility (verifier probe, this VM, kernel 7.2.6; reference source `dnsprobe.bpf.c` next to this file)
+- `cgroup_skb/ingress` program `dns_answer`: 26,212 processed instructions, 496 bytes of stack,
+  accepted; `cgroup_skb/egress` `dns_query`: 8,308, accepted. `bpf_map_update_elem` on the LPM
+  trie from cgroup_skb is accepted (inlined `trie_update_elem`). `bpf_get_socket_cookie(skb)` on
+  ingress is the receiving socket's cookie (`__cgroup_bpf_run_filter_skb` swaps `skb->sk` to the
+  socket the datagram is queued to): the same UDP socket sends the query and receives the
+  answer, so `(cookie, dns id) -> qname` recorded at egress joins the answer to its question.
+- The hook runs in `sk_filter_trim_cap()` from `udp_queue_rcv_one_skb()`, per receiving socket,
+  AF_INET/AF_INET6 only, `skb->data` at the network header, read-only; loopback deliveries take
+  the same path (a future local stub would be seen). Return 1 on every path; 0 would drop.
+- Shapes that failed: two consecutive `bpf_loop`s (884k instructions), byte-wise lowercase or
+  length state machines (states do not prune), nested compile loops inline (>1M). Shape that
+  works: one `bpf_loop` stepping one label or one RR per iteration, compiling each address where
+  it is found; SWAR lowercase over eight u64 words; the ring-buffer record reserved before the
+  walk so addresses never sit on the stack; `bpf_skb_load_bytes` (the dynptr variant verifies
+  too but at exactly 512 bytes of stack).
+- Domain key layout: the lowercase name with a `.` before every label, left aligned, zero padded
+  to 64 bytes (`.github.com`); the suffix at label k is the same buffer from `dots[k]`, so one
+  `bpf_map_lookup_elem(&domains, buf + dots[k])` serves every level without hashing.
+- Bounds: names up to 62 characters and 16 labels, 8 suffix levels, 4 rule slots per exact name,
+  32 answer RRs, 8 addresses per answer, 16 resolvers, 4096 outstanding questions (LRU).
+
+### Gaps
+| Need | Today | Gap |
+|---|---|---|
+| A name destination in `Rule` | `To netip.Prefix` only | `Name string`, `ParseName`, `Dest()`, identity in `ruleKey`, `formatRule`, `Encode` skipping names |
+| Compiled address entries | file entries only, `Diff` over one set | a second entry set owned by the daemon, written first by the kernel, re-put with the snapshot's ids, deleted on expiry, recompiled on reload |
+| Name match in the kernel | none | `domains` hash (64-byte key, 4 slots) rewritten on every reload |
+| Answer observation | none | two cgroup_skb programs, `resolvers`, `questions`, `dns_answers` ring buffer, `dns_stats` |
+| Cache | none | addr -> names + expiry, bounded 8192 x 4, evict closest expiry |
+| Names on events/table/learned/status | none | `Name` fields, a `nameOf` delegate for `toEvent`, status record key |
+| Resolver list | none | `/etc/resolv.conf` watch -> `resolvers` map |
+| Verification | api-check, deploy-check | a DNS phase and the dev-tool trial |
+| Deployed file | 16 deferred comment lines | name rules, after the release that reads them |
+
+### Options
+- **A. Extend in place**: `Name` on `Rule`, compile inside `reload`, cache inside `reloader`.
+  Rejected for shape: `reload.go`/`daemon.go`/`apiwrite_rules.go` are at or near the caps, and the
+  cache has its own lifecycle (per-answer updates, 2 s expiry) unrelated to file reloads.
+- **B. New package `internal/dns` + new daemon files**: a pure package for the cache, the
+  compiler (name rules x addresses -> trie keys with ids) and the kernel key encodings, with
+  tests without root; `cmd/snitchd/dns*.go` for attach, the ring-buffer reader, the expiry tick,
+  the resolver watch and the reload hook. Chosen.
+- **C. User-space-only compilation** (kernel emits records, daemon writes the trie). Rejected:
+  loses the first connect after an answer (291 µs vs the daemon's wakeup), which Req 4.1 forbids.
+- **D. Separate BPF object** `bpf/dns.bpf.c` loaded with `MapReplacements` for `rules`, vs adding
+  to `snitch.bpf.c` (316 lines). Chosen: separate object; the LSM program is untouched, the DNS
+  object fails soft on its own, and the shared trie is the only coupling.
+
+## Design decisions (synthesis)
+- **Generalisation**: a "compiled entry set" owned by the daemon next to the file's entry set is
+  the general shape; the DNS cache is its first producer (a later producer could be a popup's
+  temporary allow). The interface is `Compiled` with `Put`/`Expire`/`Recompile`; the
+  implementation stays DNS-only.
+- **Build vs adopt**: no Go DNS library (the kernel parses; the daemon only receives parsed
+  records); `golang.org/x/net/dns/dnsmessage` is used in tests to build answer datagrams for
+  `Program.Run`; cilium/ebpf for `MapReplacements` and `BPF_PROG_TEST_RUN`.
+- **Simplification**: names are allow-only, host-wide, one name per event, no persistence, no
+  PSL, no TCP 53, no per-process scoping; one `bpf_loop`; the daemon never parses packets.
+- **Consistency rule**: the kernel inserts with `BPF_NOEXIST` (never over a file key); the
+  daemon is the authority: on every record it re-puts the keys that are not file keys with the
+  current snapshot's ids, tracks them with their expiry, deletes on expiry, and recompiles all of
+  them inside `reload` after `publish` (the `domains` map is rewritten first). A kernel insert
+  with a stale id is corrected by the daemon's re-put of the same record.
