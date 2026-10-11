@@ -328,3 +328,9 @@ reboot: 15/15, `state: service active mode monitor trial none kept no kill clear
 ## Push state (task 4.4)
 - snitch `main`: lint run 38136576321 success 5271e17 (run id, conclusion, sha).
 - VM repo `main`: lint run 38136203738 success eea9699, snitchd-rules job included.
+
+## Checksum mismatch exercised (validation, 2026-10-11)
+Wrong pin `snitchd_sha256 = "0000000000…"` on the deployed host, one deploy: the install op ran
+(digest differs), printed `snitchd v0.2.0: sha256 a51cf6d6…5d291, expected 0000000000…5d291`
+and failed; pyinfra stopped for the host; binary digest and the daemon's PID unchanged, service
+active; pin restored (Req 2.3).

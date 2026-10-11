@@ -58,12 +58,13 @@ units changes.
 - snitch: no new Go module. `internal/rules` (`Load`, `Resolve`, `OSFS`) and the daemon's
   `summary` from the `check` verb; `internal/status` for the `version` key. GitHub Actions:
   `actions/checkout@v4`, `actions/setup-go@v5`, the runner's `gh` with `GH_TOKEN`.
-- VM repo: pyinfra 3.10.0 operations `files.put`, `files.directory`, `files.file`,
+- VM repo: pyinfra 3.10.0 operations `files.put`, `files.directory`, `files.file`, `files.link`,
   `server.shell` (with `_if`), `systemd.service`; facts `Sha256File`, `SystemdEnabled`,
   `SystemdStatus`. `curl` and `sha256sum` on the host. GitHub release URL
   `https://github.com/norandom/snitch/releases/download/v<ver>/snitchd`.
 - Host paths fixed by the units: `/usr/local/sbin/snitchd`, `/etc/snitch/rules.toml`,
-  `/var/lib/snitch`, `/run/snitch`.
+  `/var/lib/snitch`, `/run/snitch`; links `/usr/sbin/snitchd` and `/usr/local/bin/snitchd` (sudo's
+  `secure_path` and the user's PATH lack `/usr/local/sbin`).
 
 ### Revalidation Triggers
 - A change of the asset names, the tag scheme (`v*`) or the sha256 file format: the VM task
@@ -254,7 +255,7 @@ flowchart TD
 | 2.1 | switch and pins in group data | group_data/all.py | names below | |
 | 2.2 | download, verify, install, units, rules, enable | tasks/snitchd.py | ops table | tag flow |
 | 2.3 | mismatch fails before replacing, names the digest | tasks/snitchd.py install op | shell contract | |
-| 2.4 | new version → install + restart, back within 5 s | tasks/snitchd.py | `_if` on Sha256File, `restarted=` | |
+| 2.4 | new version → install + restart, back within 5 s | tasks/snitchd.py | `_if` on Sha256File, op 7b restart gated at execution time | |
 | 2.5 | off stops and disables, keeps files | tasks/snitchd.py off branch | | |
 | 2.6 | rules change → replaced, daemon reloads | tasks/snitchd.py rules op | no restart gate | |
 | 2.7 | never mode/duration/kill/trial/kept | tasks/snitchd.py, drop-in content | review item + CI grep | |
