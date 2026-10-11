@@ -195,3 +195,24 @@
    capped at 64; the accept loop never ends the job on an accept error.
 Notes taken: an overlay rule replaces the whole base rule it touches (documented); the operator
 file must be root-owned and not group/other-writable.
+
+## Gate (task 1.1, 2026-10-11): cookie and counting accepted on kernel 7.2.6+deb14-amd64
+Bounded run on this VM (service stopped for ~15 s, monitor mode, `-duration 12s`, counting
+attached at the cgroup2 root `/sys/fs/cgroup`), one `curl https://1.1.1.1/`:
+- The verifier accepted `bpf_get_socket_cookie(sock->sk)` in `lsm/socket_connect` (direct BTF
+  walk from the trusted hook argument; no verifier message, nothing in dmesg). `bpftool prog
+  show`: `1171: cgroup_skb name count_egress`, `1172: lsm name socket_connect`,
+  `1173: lsm name socket_sendmsg`.
+- The curl event (printed with a gate-only debug suffix, removed afterwards):
+  `allow (monitor) connect pid 22488 curl tcp -> 1.1.1.1:443 program /usr/bin/curl (unknown) cookie=8197`.
+- `bpftool map dump name bytes` entry for that cookie:
+  `{"key": 8197, "value": {"bytes": 2584, "pkts": 13, "last_ns": 2776264138045}}`; other
+  entries: cookie 1 (794536 bytes, 386 pkts: the RDP session's socket), systemd's `sd_fw_*`
+  cgroup_skb programs coexist on sub-cgroups (bpf_link attach at the root, multi semantics).
+- The `bytes` map is not pinned (`/sys/fs/bpf/snitch/bytes` does not exist): `MapOptions.PinPath`
+  pins only the maps declared `LIBBPF_PIN_BY_NAME`.
+- `struct event` grew from 328 to 336 bytes: `cookie` is the u64 at byte 72 (after `rule` and a
+  4-byte pad), `path` moved from 68 to 80; `eventSize` follows the regenerated binding.
+- Service restored (`systemctl is-active` → active); `deploy-check.sh` phase A tail recorded in
+  the task report.
+Outcome: the spec continues with counting on (`Counting = true` when the attach succeeds).

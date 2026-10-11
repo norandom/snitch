@@ -173,6 +173,9 @@ func (d *daemon) attach() error {
 		}
 		d.links = append(d.links, l)
 	}
+	if l, ok := attachCounting(&d.objs, d.log); ok { // counting only; off is logged, never fatal
+		d.links = append(d.links, l)
+	}
 	return nil
 }
 

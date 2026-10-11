@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net/netip"
 	"os"
@@ -28,7 +29,7 @@ func setC(dst []int8, s string) {
 }
 
 func sample() snitchbpf.SnitchEvent {
-	e := snitchbpf.SnitchEvent{Pid: 4242, ExeIno: 100, ExeDev: 8<<20 | 1, Program: 1, Dport: 443, Family: 2, Proto: 6, Verdict: 1, Rule: 1}
+	e := snitchbpf.SnitchEvent{Pid: 4242, ExeIno: 100, ExeDev: 8<<20 | 1, Program: 1, Dport: 443, Family: 2, Proto: 6, Verdict: 1, Rule: 1, Cookie: 77}
 	copy(e.Addr[:], []byte{1, 1, 1, 1})
 	setC(e.Comm[:], "curl")
 	setC(e.Path[:], "/usr/bin/curl")
@@ -51,13 +52,31 @@ func fakeSnap(t *testing.T) *snapshot {
 
 func TestDecodeEventIsAFixedLayoutCopy(t *testing.T) {
 	e := decodeEvent(rawOf(sample(), 8)) // records are padded to 8 bytes
-	if e.Pid != 4242 || e.Dport != 443 || e.Rule != 1 || addrOf(&e) != netip.MustParseAddr("1.1.1.1") {
+	if e.Pid != 4242 || e.Dport != 443 || e.Rule != 1 || e.Cookie != 77 || addrOf(&e) != netip.MustParseAddr("1.1.1.1") {
 		t.Fatalf("decoded wrong: %+v", e)
 	}
 	if pathOf(&e) != "/usr/bin/curl" || commOf(&e) != "curl" {
 		t.Fatalf("strings must stop at the NUL: %q %q", pathOf(&e), commOf(&e))
 	}
 	contracttest.Panics(t, contract.Precondition, func() { decodeEvent(rawOf(sample(), 0)[:eventSize-1]) })
+}
+
+// The kernel's struct event is the contract: rule is the u32 at byte 64, the socket cookie the
+// u64 at byte 72 (after rule and its alignment pad), the path starts at 80, and the whole
+// record is 336 bytes. A binding that puts the cookie anywhere else decodes garbage here.
+func TestDecodeEventReadsTheCookieAtTheKernelOffset(t *testing.T) {
+	const cookieOffset, pathOffset, size = 72, 80, 336
+	if eventSize != size {
+		t.Fatalf("struct event is %d bytes, the kernel layout says %d", eventSize, size)
+	}
+	raw := make([]byte, eventSize)
+	binary.LittleEndian.PutUint32(raw[64:], 9)
+	binary.LittleEndian.PutUint64(raw[cookieOffset:], 0x1122334455667788)
+	copy(raw[pathOffset:], "/usr/bin/curl\x00")
+	e := decodeEvent(raw)
+	if e.Rule != 9 || e.Cookie != 0x1122334455667788 || pathOf(&e) != "/usr/bin/curl" {
+		t.Fatalf("rule %d cookie %#x path %q", e.Rule, e.Cookie, pathOf(&e))
+	}
 }
 
 func TestDescribeMappedProgramWithRule(t *testing.T) {

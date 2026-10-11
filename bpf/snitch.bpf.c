@@ -47,6 +47,7 @@ struct event {
 	__u8  hook;        // 0 connect, 1 sendmsg (unconnected UDP)
 	char  comm[16];
 	__u32 rule;        // id of the rule that decided, 0 = none
+	__u64 cookie;      // socket cookie: joins the decision with the bytes counted on egress
 	char  path[256];   // exe path (bpf_d_path): only for unknown programs or with WANT_PATH
 };
 
@@ -82,7 +83,15 @@ struct control_state {
 	__u32 flags;
 };
 
+// Per-socket egress counters, keyed by the socket cookie; the daemon reads, never writes.
+struct byte_count {
+	__u64 bytes;
+	__u64 pkts;
+	__u64 last_ns;
+};
+
 const struct event *unused_event __attribute__((unused));
+const struct byte_count *unused_byte_count __attribute__((unused));
 const struct rule_key *unused_rule_key __attribute__((unused));
 const struct exe_key *unused_exe_key __attribute__((unused));
 const struct control_state *unused_control __attribute__((unused));
@@ -124,6 +133,15 @@ struct {
 	__type(value, __u32);
 	__uint(pinning, LIBBPF_PIN_BY_NAME);
 } kill SEC(".maps");
+
+// Not pinned: counters mean nothing without the daemon that reads them. LRU: a socket that
+// stops sending ages out on its own; the daemon tolerates a recreated entry.
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 65536);
+	__type(key, __u64);
+	__type(value, struct byte_count);
+} bytes SEC(".maps");
 
 static __always_inline int local_v4(__u32 be)
 {
@@ -242,6 +260,10 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 		e->hook = hook;
 		bpf_get_current_comm(&e->comm, sizeof(e->comm));
 		e->rule = rule;
+		// the direct BTF walk from the trusted hook argument is a trusted pointer the cookie
+		// helper accepts; a CO-RE read would hand it a scalar (the bpf_d_path lesson)
+		struct sock *sk = sock->sk;
+		e->cookie = sk ? bpf_get_socket_cookie(sk) : 0;
 		e->path[0] = 0;
 		// the path costs a d_path walk: only where the daemon needs it
 		if (exe && (program == 0 || (c && (c->flags & FLAG_WANT_PATH))))
@@ -268,4 +290,27 @@ int BPF_PROG(socket_sendmsg, struct socket *sock, struct msghdr *msg, int size)
 	if (!name)
 		return 0;  // connected socket: decided at connect()
 	return decide(sock, name, 1);
+}
+
+// Byte counting on egress, attached to the cgroup2 root. It only counts: every path returns 1
+// (pass). The verdict belongs to the LSM hooks above; a failure to attach this program leaves
+// them, the heartbeat and the events untouched (bytes are then unknown to the daemon).
+SEC("cgroup_skb/egress")
+int count_egress(struct __sk_buff *skb)
+{
+	__u64 c = bpf_get_socket_cookie(skb);
+	if (!c)
+		return 1;
+	struct byte_count *v = bpf_map_lookup_elem(&bytes, &c);
+	if (!v) {
+		struct byte_count z = {};
+		bpf_map_update_elem(&bytes, &c, &z, BPF_NOEXIST);
+		v = bpf_map_lookup_elem(&bytes, &c);
+		if (!v)
+			return 1;
+	}
+	__sync_fetch_and_add(&v->bytes, skb->len);
+	__sync_fetch_and_add(&v->pkts, 1);
+	v->last_ns = bpf_ktime_get_ns();
+	return 1;
 }
