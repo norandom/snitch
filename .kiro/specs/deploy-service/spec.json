@@ -1,0 +1,22 @@
+{
+  "feature_name": "deploy-service",
+  "created_at": "2026-10-11T06:04:29Z",
+  "updated_at": "2026-10-11T10:15:53Z",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
