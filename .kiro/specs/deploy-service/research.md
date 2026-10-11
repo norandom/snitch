@@ -271,3 +271,12 @@ them; pip's interpreter rule is scoped to pypi, a domain rule, so deferred).
   (3 programs, 6 rules).
 - **Pin for the VM repo**: `snitchd_version = "0.2.0"`,
   `snitchd_sha256 = "a51cf6d6c27e1af9de2487f0613cee1f0ef061e020a99e1065feb669dc45d291"`.
+
+### Unit fix found by the 3.2 review (2026-10-11)
+`Wants=snitchd-trial-boot.service` in `snitchd.service` meant every `systemctl restart
+snitchd.service` (the deploy's op 7b on a version bump) started the oneshot, which runs
+`snitchd end -at-boot` and removes an open trial file: fail-safe direction, but against the
+design's "the restart does not touch the trial file" and Req 2.7. Fixed by dropping `Wants=`
+(keeping `After=`) in snitch/systemd and the VM copy; persistent-trial's design records the
+deviation. 4.2 checks `journalctl -u snitchd-trial-boot -b` after the restart step: the oneshot
+must have run once this boot only.

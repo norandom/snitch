@@ -491,3 +491,5 @@ test that trips exactly it, named next to the bullet):
 - Files under `/var/lib/snitch` are root 0600 in a 0700 directory; the CLI requires root.
 - Nothing in this spec can set the kill switch; nothing can start enforce without a file the
   operator wrote through the CLI or by hand as root.
+
+> Deviation (deploy-service, 2026-10-11): `snitchd.service` no longer carries `Wants=snitchd-trial-boot.service`, only `After=`. systemd pulls Wants= start jobs in on every start and restart of the wanting unit, so a daemon restart (a version bump by the deploy) would have run `snitchd end -at-boot` and ended a live trial. The oneshot is enabled explicitly next to the service (README install section, the VM repo's task); the daemon still ends foreign-boot trials itself at startup, so the boot revert is doubled as before.
