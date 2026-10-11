@@ -413,6 +413,7 @@ snitchd_learn = False           # True: run with -learn, learned rules in /var/l
 | 1 | `files.directory` `/etc/snitch` mode 755 | always | pyinfra |
 | 2 | `files.put` `files/snitchd/rules.toml` → `/etc/snitch/rules.toml` mode 644 | always (on and off: the file stays current) | content |
 | 3 | `server.shell` download + verify + install | enabled | `_if=lambda: host.get_fact(Sha256File, path="/usr/local/sbin/snitchd") != host.data.snitchd_sha256` |
+| 3b | `files.link` `/usr/sbin/snitchd` and `/usr/local/bin/snitchd` → the binary (sudo's `secure_path` and the user's PATH have no `/usr/local/sbin`; found by 4.2) | enabled | pyinfra |
 | 4 | `files.put` both units → `/etc/systemd/system/` mode 644 | enabled | content |
 | 5 | learn drop-in: `files.directory` `/etc/systemd/system/snitchd.service.d` + `files.put(StringIO(...))` `learn.conf` when `snitchd_learn`; else `files.file(present=False)` of `learn.conf` | enabled | content / presence |
 | 6 | `systemd.service` `snitchd-trial-boot.service` `enabled=True, running=False, daemon_reload=<4 or 5 .changed>` | enabled | pyinfra |

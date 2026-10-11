@@ -288,3 +288,20 @@ must have run once this boot only.
 - Throwaway commit with a rule for an undeclared program: run 38134607285 red at
   `snitchd-rules` with `files/snitchd/rules.toml:238: rule for undeclared program "undeclared"`;
   the branch was reset to b7af2bc afterwards. The merge to `main` is task 4.2's step.
+
+---
+
+## First deploy on the dev VM (task 4.2, 2026-10-11, operator's go given)
+
+| Step | Command / change | Outcome |
+|---|---|---|
+| pre-check | clean VM tree at b7af2bc, `snitchd_enabled = True`, serial getty active, kill map 0, nothing installed | ok |
+| deploy | `uv run pyinfra -y inventory.py tasks/snitchd.py` | 9 ops, 8 success, 1 no change (drop-in absent); the restart op fired once on the first install |
+| phase A | `sudo scripts/deploy-check.sh` | 15/15 PASS; `state: service active mode monitor trial none kept no kill clear`; oneshot journal empty this boot |
+| path | `sudo snitchd status` → command not found: sudo's `secure_path` is `/usr/sbin:/usr/bin:/sbin:/bin`, the user's PATH lacks `/usr/local/sbin` | deploy-revealed: the task now links `/usr/sbin/snitchd` and `/usr/local/bin/snitchd` to the binary (commit in the VM repo); `sudo snitchd status` exit 0, `snitchd -version` as the user prints v0.2.0 |
+| idempotent (2.8) | second deploy | 11 ops, 11 no change (9/9 before the links were added) |
+| reload (2.6) | comment appended to files/snitchd/rules.toml, deploy | `snitchd rules` changed, restart op no change, new `rules:` summary in the journal within 5 s, `ExecMainStartTimestamp` unchanged; reverted and deployed again |
+| version bump (2.4) | modified copy moved over `/usr/local/sbin/snitchd`, deploy | install op re-ran (digest back to a51cf6d6…), restart op ran, new PID, `snitchd status` exit 0 after 3 s including the deploy; oneshot journal still empty (the `Wants=` fix holds) |
+| off (2.5) | `snitchd_enabled = False`, deploy | 3 ops: off op ran; service inactive, both units disabled; binary, rules, units, links present; `/var/lib/snitch` empty; second off run 3/3 no change |
+| on | `snitchd_enabled = True`, deploy | 11 ops: boot unit enabled, service running; install op no change (no download); active, both enabled |
+| merge (4.2) | VM repo `main` pushed, branch `snitchd` deleted | see the run id in tasks.md |

@@ -167,7 +167,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Boundary: scripts/deploy-check.sh, README.md (Trial paragraph, after 2.1)_
   - _Depends: 1.2, 2.1_
   - _Requirements: 4.1, 5.1, 5.2, 5.4, 5.5, 5.6_
-- [ ] 4.2 First deploy on the dev VM
+- [x] 4.2 First deploy on the dev VM
   - Only after the operator's go: deploy the task with the switch on; phase A of the check;
     a second deploy executes zero operations; a comment edit in the rules file deploys and the
     journal shows a new summary within 5 s with no restart; a copy of the installed binary
@@ -226,3 +226,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 3.2: gates verified in pyinfra's source: an op whose `_if` is false still completes, so `did_change()` on a repeat run returns false (no raise); `files.file(present=False)` on a missing path is a complete no-op object; `systemctl show` on never-installed units exits 0 with empty `UnitFileState`. Reviewer finding carried out of the task: `Wants=snitchd-trial-boot.service` in snitchd.service made a service restart start the oneshot and end a live trial (fixed in the unit, both repos, see the next note).
 - 3.3: first review rejected one daemon fact (the rules file is polled every 2 s and applies within 5 s; 10 s is the executable re-resolve): README claims about the daemon are checked against the code, not the memory. Parent note: never `git commit -am` in a tree with other tasks' uncommitted work (it swept 3.3/3.4 into the unit fix once; split with a soft reset before anything was pushed).
 - 3.4: VM lint runs on branch `snitchd`: 38134552778 green (snitchd-rules success), 38134607285 red on a throwaway commit with a rule for an undeclared program (the job printed `rules.toml:238: rule for undeclared program`), branch reset to b7af2bc. A `! grep` line is exempt from `bash -e`: guards are `if grep …; then exit 1; fi` (design updated). GitHub's default `run:` shell is `bash -e {0}` without pipefail unless `shell: bash` is explicit.
+- 4.2: every step passed first time (table in research.md). Deployment revealed that sudo's `secure_path` on this VM is `/usr/sbin:/usr/bin:/sbin:/bin` and the user's PATH has no `/usr/local/sbin`: the task now links `/usr/sbin/snitchd` and `/usr/local/bin/snitchd` to the binary (design op 3b). Right after a restart `snitchd status` shows `version: unknown (no status record)` for up to 2 s (the writer's first tick); the deploy check compares the version after `is-active`, which was always past that window here. VM repo `main` at eea9699, lint run 38136203738 green (snitchd-rules included), branch `snitchd` deleted.
