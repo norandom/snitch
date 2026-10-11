@@ -343,3 +343,10 @@ cross-task reviews (coverage + boundary; design alignment + integration): 27/27 
 covered (3.5 deferred to task 4.5 by the plan), no Critical or Warning findings; nine Notes, all
 documentation alignments, fixed in f29b79b, 8644e2f and VM 173ecef; the checksum-mismatch branch
 was exercised on the host (above). Open: task 4.5, the learning run after a working day.
+
+## Revalidation by daemon-api (2026-10-11)
+daemon-api changed two things this spec deployed: `snitchd.service` now has
+`RuntimeDirectoryMode=0755` (the status file stays 0600; the API socket needs a traversable
+directory) and the task deploys `/etc/snitch/operator`. Both landed in the VM repo at 44af244
+(lint incl. snitchd-rules green) and were deployed with pins v0.3.0; `deploy-check.sh` phase A
+passed 15/15 afterwards.

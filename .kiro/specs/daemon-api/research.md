@@ -216,3 +216,29 @@ attached at the cgroup2 root `/sys/fs/cgroup`), one `curl https://1.1.1.1/`:
 - Service restored (`systemctl is-active` → active); `deploy-check.sh` phase A tail recorded in
   the task report.
 Outcome: the spec continues with counting on (`Counting = true` when the attach succeeds).
+
+---
+
+## Release, VM follow-up and verification on the dev VM (task 4.3, 2026-10-11, operator's standing go)
+
+- snitch `main` pushed at 01cebeb (lint green), tag `v0.3.0` on it; release run 38145060886 green;
+  assets verified: `sha256sum -c` OK, `./snitchd -version` → v0.3.0, `check` on
+  /etc/snitch/rules.toml exit 0. Digest `e1303f2f31e7d62be794f051ea21d00542f84fab42124afb5222eecead98ad64`.
+- VM repo 44af244 (pushed, lint incl. snitchd-rules green): unit copy with
+  `RuntimeDirectoryMode=0755`, `/etc/snitch/operator` = the desktop user (root:root 0644), pins
+  0.3.0. Deploy: 12 ops, 6 changed (operator file, binary, unit, boot unit enabled, running,
+  restarted). After it: `/run/snitch` 0755 with `api.sock` 0666 and `status` 0600, service
+  active, `snitchd -version` v0.3.0; `deploy-check.sh` phase A: 15/15,
+  `state: service active mode monitor trial none kept no kill clear`.
+- `scripts/api-check.sh` as the operator (mc): first run FAILed A2 only because deploy-check had
+  curled 9.9.9.9 seconds before (10 s dedupe, the script explained it); second run FAILed A3
+  because the first run's `rule.add` declared an ad hoc `curl` program whose events then land
+  under a new key (bytes grew on the new entry): the script now sums bytes over all entries of
+  the address; one further run missed B2's event once (reader now unbuffered with `python3 -u`).
+  Then two clean runs: status v0.3.0, event allow-monitor within 1 s, bytes growing within 5 s,
+  rule.add accepted, deny-rule event within 1 s, curl 9.9.9.9 denied with EPERM, rule.remove,
+  allow-monitor again, curl connects again, pid unchanged. As `nobody`: rule.add and trial
+  refused with `<type>: write requires the operator`, reads fine. Observed: the "unknown" bucket
+  holds ~19 MB (sockets older than the daemon, e.g. the RDP session), as designed.
+- A note for the design: an ad hoc program declared by `rule.add` stays in the overlay after
+  `rule.remove` (ruleless), so later events of that executable are keyed by the program name.

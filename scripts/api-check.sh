@@ -93,7 +93,7 @@ sub_pid=0; sub_log=""
 #    sub <sock> <seconds>                  subscribe, prints every line for N seconds
 #    get <json> <dotted.path>              a field: true/false, a string, a number
 #    event <log> <addr> <path> <verdict>   exit 0 and the line when an event matches
-#    bytes <reply> <addr> <path>           the largest bytesSent of the matching entries
+#    bytes <reply> <addr> <path>           the bytesSent summed over the matching entries (a declared program changes the key)
 #    rule <reply> <note> <source>          "program<TAB>to" of the first rule with the note (and source, when given)
 #    added <reply>                         "program<TAB>to" from the add reply's text
 py=$(cat <<'PY'
@@ -180,7 +180,7 @@ elif mode == "event":
     sys.exit(1)
 elif mode == "bytes":
     reply, addr, path = json.loads(args[0]), args[1], args[2]
-    print(max((e.get("bytesSent", 0) for e in reply.get("entries") or [] if e.get("addr") == addr and is_curl(e, path)), default=0))
+    print(sum(e.get("bytesSent", 0) for e in reply.get("entries") or [] if e.get("addr") == addr and is_curl(e, path)))
 elif mode == "rule":
     reply, note, source = json.loads(args[0]), args[1], args[2]
     for r in reply.get("rules") or []:
@@ -235,7 +235,7 @@ status_running() { status_read && [ "$(jget "$last_status" status.running)" = tr
 #    runs directly (not through pyrun) so $! is its pid and stop_sub ends it, not a subshell.
 start_sub() { # start_sub <seconds>: returns once the subscribe reply arrived
   sub_log=$(mktemp "$tmp/sub.XXXXXX")
-  python3 -I -c "$py" sub "$sock" "$1" >"$sub_log" 2>&1 &
+  python3 -I -u -c "$py" sub "$sock" "$1" >"$sub_log" 2>&1 &
   sub_pid=$!
   wait_for 3 0.1 grep -Eq '"type": ?"reply"' "$sub_log"
 }

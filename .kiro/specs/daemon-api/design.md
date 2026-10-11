@@ -192,8 +192,9 @@ CLAUDE.md                        # status
 ### Modified Files (summary)
 - snitch: C and bindings, `internal/rules` (merge, source, write header), `cmd/snitchd`
   (config, state, reload, events, daemon, ctl_verbs), unit, README, CLAUDE.md.
-- VM repo (follow-up commit, not in this spec's tasks): unit copy, `files.put` of
-  `/etc/snitch/operator` with the desktop user; recorded in deploy-service as a revalidation.
+- VM repo (done in task 4.3, commit 44af244): unit copy with `RuntimeDirectoryMode=0755`,
+  `files.put` of `/etc/snitch/operator` with the desktop user, pins v0.3.0; recorded in
+  deploy-service's research log as a revalidation.
 
 ## System Flows
 
