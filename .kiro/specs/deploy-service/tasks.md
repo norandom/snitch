@@ -89,7 +89,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Requirements: 1.1, 1.2, 1.3_
 
 - [ ] 3. Deployed by the VM repo
-- [ ] 3.1 (P) The rules file for this VM
+- [x] 3.1 (P) The rules file for this VM
   - `files/snitchd/rules.toml` per the design's content contract: a header naming the source,
     the deferred list and the session warning; a program for every Python rule's executable
     with globs kept and `~` as `/home/*`; the Anthropic address rules for any program and for
@@ -219,3 +219,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 1.1: `-version` returns `errVersion`, which wraps `flag.ErrHelp`, so main's silent exit-0 branch handles it without touching main.go; the print goes through the package-level `stdout io.Writer` seam (swapped in tests, no `t.Parallel` in the package); `startupLine(version, mode, source)` and `mustVersion` (the single Ensure) are the helpers 1.2 should reuse. An empty linked version panics before `run`'s recover (raw exit 2, not 70): harmless, nothing attached yet.
 - 1.2: `version` is the thirteenth, last status key; `versionLine` follows `rulesLine`'s shape (`recErr != nil` → unknown). The task boundary missed `follow_test.go`, whose writer fixture compares the whole record: boundaries of tasks that add a record field must list every fixture building that record (`grep -rn 'status.Record{' cmd/snitchd`). Implementers: a one-line fix outside the boundary is a NEEDS_CONTEXT, handled by the parent, as here.
 - 1.3: `check` calls `rules.Load`/`Resolve`/`Encode` directly (no stat-then-load window; a missing file is exit 1 `<path>: does not exist`); errors print as `snitchd check: <path>:<line>: <reason>`; the unresolved line is `unresolved: <program> <pattern> (<reason>)`, one per pattern (3.1 and the deploy check read that shape). The every-verb contract test skips root-less verbs (`check` uses no probes or trial delegates): a verb that needs none of them is marked `root: false` and gets its own contract tests.
+- 3.1: 18 programs, 13 rules, 15 map entries (the two proto-less DNS rules expand to tcp+udp); on this VM only the Go toolchain glob is unresolved (the tools are installed here). B3 (Anthropic domains for any program) was missing from research.md's inventory and is covered as a deferred comment under `claude`; research.md fixed.
