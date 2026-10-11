@@ -42,7 +42,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
     cmd/snitchd/decode.go, decode_test.go, cmd/snitchd/counting.go (attach only, the sweep is
     3.4), daemon.go (one line to attach), .kiro/specs/daemon-api/research.md (gate record)_
   - _Requirements: 3.3, 3.7_
-- [ ] 1.2 (P) The connection table, windows and byte join
+- [x] 1.2 (P) The connection table, windows and byte join
   - One table keyed by program (or path), address, port and protocol: observe an event (dedupe
     within 10 s unless the verdict changed; counts, first/last seen, last allowed/blocked), add
     bytes by cookie (a cookie not yet observed parks its bytes for two sweeps, then the "unknown"
@@ -238,3 +238,4 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
 
 ## Implementation Notes
 - 2.1: `LoadOverlay`/`ParseOverlay` load an overlay whose rules name base programs (plain `Load` rejects them as undeclared); `Merge` re-validates the union so an unknown program still fails there. Overlay writer is `WriteWith(path, f, header)`; `WriteFile(path, f)` stays the learned writer (daemon.go passes it by value). Shadowing is per base rule over expanded keys (a proto overlay rule replaces an any-proto base rule whole; pinned by a test a mutant required). Fixtures comparing whole records (`file_test.go`, `learn_test.go`) gained `Source`. Later tasks: load the overlay with `LoadOverlay`, write it with `WriteWith`.
+- 1.2: dedupe anchors on the last EMITTED event (a steady duplicate stream re-emits once per 10 s); windows are bucket-aligned (the bucket at now−win excluded; 15 m spans 14–15 min of wall time); `Snapshot` returns `([]Entry, error)` and is served from caches rebuilt by `Changed`, which returns every dirty row regardless of `since`; cookies idle ≥ `CookieIdle` (10 min) are expired by `Prune` (first review found the index unbounded and a whole-map invariant scan on the pump path: both fixed, Observe ≈ 6–14 µs with 200k live cookies). Sweep (3.5): call `AddBytes` per cookie delta, then `Prune(now)` once.
