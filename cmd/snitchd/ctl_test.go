@@ -24,8 +24,8 @@ func testCtl(t *testing.T, p probes) (*ctl, *bytes.Buffer, *bytes.Buffer) {
 	return c, out, errw
 }
 
-func TestVerbTableNamesTheFiveVerbs(t *testing.T) {
-	want := []string{"trial", "keep", "unkeep", "end", "status"}
+func TestVerbTableNamesTheSixVerbs(t *testing.T) {
+	want := []string{"trial", "keep", "unkeep", "end", "status", "check"}
 	for _, name := range want {
 		if !isVerb(name) {
 			t.Errorf("%q is not a verb", name)
@@ -59,7 +59,7 @@ func TestVerbDispatchRunsTheHandlerWithTheSharedFlags(t *testing.T) {
 				}
 				got = c
 				return 7
-			}}}
+			}, true}}
 			c, _, _ := testCtl(t, probes{})
 			if code := dispatch(table, c, tc.args); code != 7 {
 				t.Fatalf("exit %d, want the handler's 7", code)
@@ -89,23 +89,65 @@ func TestVerbUnknownWordExitsTwoNamingTheVerbs(t *testing.T) {
 	if code := dispatch(verbs, c, []string{"foo"}); code != 2 {
 		t.Fatalf("exit %d, want 2", code)
 	}
-	for _, name := range []string{"foo", "trial", "keep", "unkeep", "end", "status"} {
+	for _, name := range []string{"foo", "trial", "keep", "unkeep", "end", "status", "check"} {
 		if !strings.Contains(errw.String(), name) {
 			t.Errorf("usage %q does not name %q", errw.String(), name)
 		}
 	}
 }
 
+// TestVerbNeedsRoot: dispatch refuses a non-root caller only for the verbs that need root
+// (spec deploy-service, design "check verb": the table's root flag).
 func TestVerbNeedsRoot(t *testing.T) {
-	called := false
-	table := []verb{{"stub", func(*ctl, []string) int { called = true; return 0 }}}
-	c, _, errw := testCtl(t, probes{})
-	c.euid = func() int { return 1000 }
-	if code := dispatch(table, c, []string{"stub"}); code != 2 || called {
-		t.Fatalf("exit %d called %v, want 2 and no handler", code, called)
+	cases := []struct {
+		name     string
+		root     bool
+		wantCode int
+		wantRun  bool
+	}{
+		{"root verb refuses", true, 2, false},
+		{"rootless verb runs", false, 0, true},
 	}
-	if !strings.Contains(errw.String(), "run as root") {
-		t.Fatalf("message %q does not say to run as root", errw.String())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			table := []verb{{"stub", func(*ctl, []string) int { called = true; return 0 }, tc.root}}
+			c, _, errw := testCtl(t, probes{})
+			c.euid = func() int { return 1000 }
+			if code := dispatch(table, c, []string{"stub"}); code != tc.wantCode || called != tc.wantRun {
+				t.Fatalf("exit %d called %v, want %d and called %v", code, called, tc.wantCode, tc.wantRun)
+			}
+			if got := strings.Contains(errw.String(), "run as root"); got != !tc.wantRun {
+				t.Fatalf("stderr %q: 'run as root' present %v, want %v", errw.String(), got, !tc.wantRun)
+			}
+		})
+	}
+}
+
+// TestVerbDispatchRootGateOnTheRealTable: check is the only verb that runs without root; every
+// other verb of the real table still refuses with exit 2 and never reaches its handler.
+func TestVerbDispatchRootGateOnTheRealTable(t *testing.T) {
+	valid := writeRules(t, "[[program]]\nname = \"ghost\"\npaths = [\"/nonexistent/ghost\"]\n")
+	rootless := 0
+	for _, v := range verbs {
+		c, out, errw := testCtl(t, probes{})
+		c.euid = func() int { return 1000 }
+		if !v.root {
+			rootless++
+			if v.name != "check" {
+				t.Errorf("%q runs without root; only check may", v.name)
+			}
+			if code := dispatch(verbs, c, []string{v.name, "-rules", valid}); code != 0 || !strings.Contains(out.String(), "rules:") {
+				t.Errorf("%s as uid 1000: exit %d stdout %q stderr %q, want 0 and the summary", v.name, code, out.String(), errw.String())
+			}
+			continue
+		}
+		if code := dispatch(verbs, c, []string{v.name}); code != 2 || !strings.Contains(errw.String(), "run as root") {
+			t.Errorf("%s as uid 1000: exit %d stderr %q, want 2 and 'run as root'", v.name, code, errw.String())
+		}
+	}
+	if rootless != 1 {
+		t.Fatalf("%d rootless verbs, want exactly one (check)", rootless)
 	}
 }
 

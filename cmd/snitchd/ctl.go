@@ -21,20 +21,23 @@ import (
 )
 
 // verb is one command-line word and its handler. The handler parses its own flags through
-// c.parse (which carries the shared -state-dir and -status) and returns the exit code.
+// c.parse (which carries the shared -state-dir and -status) and returns the exit code. root
+// says dispatch must refuse a non-root caller (the pinned maps and the state files need it).
 type verb struct {
 	name string
 	run  func(c *ctl, args []string) int
+	root bool
 }
 
 // verbs is the table main consults; the writing handlers live in ctl_verbs.go, status in
-// ctl_status.go.
+// ctl_status.go, check (the only verb without root) in ctl_check.go.
 var verbs = []verb{
-	{"trial", runTrial},
-	{"keep", runKeep},
-	{"unkeep", runUnkeep},
-	{"end", runEnd},
-	{"status", runStatus},
+	{"trial", runTrial, true},
+	{"keep", runKeep, true},
+	{"unkeep", runUnkeep, true},
+	{"end", runEnd, true},
+	{"status", runStatus, true},
+	{"check", runCheck, false},
 }
 
 // probes read the kernel side: the pinned control map (heartbeat age on the monotonic clock,
@@ -133,8 +136,8 @@ func runCtl(args []string) int {
 	return dispatch(verbs, newCtl(os.Stdout, os.Stderr, realProbes()), args)
 }
 
-// dispatch finds the verb, insists on root (the pinned maps and the state files need it) and
-// runs the handler. An unknown word is a usage error that names the verbs.
+// dispatch finds the verb, insists on root where the verb needs it (the pinned maps and the
+// state files) and runs the handler. An unknown word is a usage error that names the verbs.
 func dispatch(table []verb, c *ctl, args []string) int {
 	contract.Require(len(args) > 0, "dispatch: a verb is required")
 	for _, v := range table {
@@ -142,7 +145,7 @@ func dispatch(table []verb, c *ctl, args []string) int {
 			continue
 		}
 		c.name = v.name
-		if c.euid() != 0 {
+		if v.root && c.euid() != 0 {
 			fmt.Fprintf(c.errw, "snitchd %s: run as root (the pinned maps and the state files need it)\n", c.name)
 			return exitUsage
 		}

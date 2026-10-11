@@ -37,7 +37,8 @@ func completeCtl() *ctl {
 }
 
 // Every handler requires its writers and probes (ctl.require's first line) and its delegates
-// (the second); each slot blank on its own trips the line that names it, for every verb.
+// (the second); each slot blank on its own trips the line that names it, for every verb that
+// talks to the daemon (check runs without root and uses none of them: ctl_check_test.go).
 func TestContractEveryVerbNamesTheMissingSlot(t *testing.T) {
 	completeCtl().require() // the fixture itself passes: a blank slot is what trips below
 	const writers, delegates = "ctl: incomplete writers or probes", "ctl: incomplete deps"
@@ -57,6 +58,9 @@ func TestContractEveryVerbNamesTheMissingSlot(t *testing.T) {
 		{"deps.confirm", delegates, func(c *ctl) { c.deps.confirm = nil }},
 	}
 	for _, v := range verbs {
+		if !v.root {
+			continue
+		}
 		for _, b := range blank {
 			c := completeCtl()
 			b.set(c)

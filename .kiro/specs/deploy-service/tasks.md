@@ -18,7 +18,7 @@ tag, the VM repo) happen only in the tasks that name them, after the no-secrets 
 diff. Tasks that edit files in the same Go package run one at a time. The spec counts as
 validated with task 4.5 (the learning run) still open: it needs a working day of monitor mode.
 
-- [ ] 1. The binary says what it is and checks what it loads
+- [x] 1. The binary says what it is and checks what it loads
 - [x] 1.1 The version in the binary
   - One version variable, "dev" unless set at link time; `-version` prints it and exits 0
     before the configuration check, so `-version` alone is valid; the startup journal line
@@ -44,7 +44,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
     .kiro/specs/persistent-trial/design.md (one sentence)_
   - _Depends: 1.1_
   - _Requirements: 1.2_
-- [ ] 1.3 The `check` verb
+- [x] 1.3 The `check` verb
   - A verb that loads a rules file the way the daemon does (parse, validate, resolve through
     the OS seams) without root or BPF: exit 0 with the daemon's summary line plus one
     `unresolved:` line per pattern without a match; exit 1 with the parser's or resolver's
@@ -56,7 +56,8 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - Done when: `go test ./cmd/snitchd -run 'Check|Dispatch'` proves every exit code and message
     with temp files and a fake euid, and a binary built from this tree runs
     `check -rules examples/rules.toml` as a normal user with exit 0 and the summary
-  - _Boundary: cmd/snitchd/ctl.go, ctl_test.go, ctl_check.go, ctl_check_test.go_
+  - _Boundary: cmd/snitchd/ctl.go, ctl_test.go, ctl_check.go, ctl_check_test.go,
+    contracts_trial_test.go (skip the root-less verb in the every-verb loop)_
   - _Requirements: 3.1_
 
 - [ ] 2. A release to pin
@@ -217,3 +218,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 ## Implementation Notes
 - 1.1: `-version` returns `errVersion`, which wraps `flag.ErrHelp`, so main's silent exit-0 branch handles it without touching main.go; the print goes through the package-level `stdout io.Writer` seam (swapped in tests, no `t.Parallel` in the package); `startupLine(version, mode, source)` and `mustVersion` (the single Ensure) are the helpers 1.2 should reuse. An empty linked version panics before `run`'s recover (raw exit 2, not 70): harmless, nothing attached yet.
 - 1.2: `version` is the thirteenth, last status key; `versionLine` follows `rulesLine`'s shape (`recErr != nil` → unknown). The task boundary missed `follow_test.go`, whose writer fixture compares the whole record: boundaries of tasks that add a record field must list every fixture building that record (`grep -rn 'status.Record{' cmd/snitchd`). Implementers: a one-line fix outside the boundary is a NEEDS_CONTEXT, handled by the parent, as here.
+- 1.3: `check` calls `rules.Load`/`Resolve`/`Encode` directly (no stat-then-load window; a missing file is exit 1 `<path>: does not exist`); errors print as `snitchd check: <path>:<line>: <reason>`; the unresolved line is `unresolved: <program> <pattern> (<reason>)`, one per pattern (3.1 and the deploy check read that shape). The every-verb contract test skips root-less verbs (`check` uses no probes or trial delegates): a verb that needs none of them is marked `root: false` and gets its own contract tests.

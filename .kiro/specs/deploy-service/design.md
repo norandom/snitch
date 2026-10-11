@@ -357,7 +357,7 @@ var version = "dev" // -ldflags "-X main.version=vX.Y.Z"; "dev" for go build/go 
 // cmd/snitchd/ctl_check.go
 // snitchd check [-rules /etc/snitch/rules.toml]
 // exit 0: valid; stdout: the daemon's summary line (programs, resolved, executables, rules)
-//         plus one "unresolved: <program> (<reason>)" line per pattern without a match
+//         plus one "unresolved: <program> <pattern> (<reason>)" line per pattern without a match
 // exit 1: invalid; stderr: the parser's or resolver's error (file:line: reason)
 // exit 2: usage (bad flag; the file not existing is exit 1 with "does not exist")
 func runCheck(c *ctl, args []string) int
