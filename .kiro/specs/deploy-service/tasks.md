@@ -122,7 +122,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
     files/snitchd/snitchd.service, files/snitchd/snitchd-trial-boot.service_
   - _Depends: 2.2, 3.1_
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 3.5_
-- [ ] 3.3 The VM README
+- [x] 3.3 The VM README
   - The task-table row; a section with the switch, the pins and how to bump them, the rules
     file and the deferred list, the learning run, the trial commands with the serial console and
     the kill switch as the way back and the restart remedy for a version mismatch, off, and the
@@ -224,3 +224,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 2.2: `git tag -a` needs the same `-c user.name/user.email` as commits (no global identity on this VM). Release run 38133561179 green on the first try; digest a51cf6d6…5d291 recorded in research.md for the VM pin.
 - 4.1: `deploy-check.sh` exits 2 for usage/not root, 1 for a failed check; journal probes use `journalctl -n0 --show-cursor` + `--after-cursor` (a `--since` fallback with 1 s granularity only when the unit has no entries); the trap runs `snitchd end` only after a trial verb was issued and always prints the `state:` line. Validated against a fake-service harness: 4.2 on the VM is the real proof. `uvx --from shellcheck-py shellcheck` works locally.
 - 3.2: gates verified in pyinfra's source: an op whose `_if` is false still completes, so `did_change()` on a repeat run returns false (no raise); `files.file(present=False)` on a missing path is a complete no-op object; `systemctl show` on never-installed units exits 0 with empty `UnitFileState`. Reviewer finding carried out of the task: `Wants=snitchd-trial-boot.service` in snitchd.service made a service restart start the oneshot and end a live trial (fixed in the unit, both repos, see the next note).
+- 3.3: first review rejected one daemon fact (the rules file is polled every 2 s and applies within 5 s; 10 s is the executable re-resolve): README claims about the daemon are checked against the code, not the memory. Parent note: never `git commit -am` in a tree with other tasks' uncommitted work (it swept 3.3/3.4 into the unit fix once; split with a soft reset before anything was pushed).
