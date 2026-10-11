@@ -21,7 +21,7 @@ and, where it listens, `-api <temp socket>`, so it never reads a half-written ov
 with the service's socket. The counting map `bytes` and its link are not pinned (read it by name
 with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/sbin).
 
-- [ ] 1. The kernel side and the pure data structures
+- [x] 1. The kernel side and the pure data structures
 - [ ] 1.1 The socket cookie and the counting program (feasibility gate)
   - The kernel event carries the socket's cookie, taken in the decision hook from the direct
     BTF walk `sock->sk` (trusted pointer; a CO-RE read would be a scalar the helper rejects); a new counting
@@ -58,7 +58,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Boundary: internal/api/table.go, window.go, bytes.go, table_test.go, window_test.go,
     bytes_test.go_
   - _Requirements: 2.2, 2.4, 2.5, 3.1, 3.2, 3.4, 3.5, 3.6_
-- [ ] 1.3 (P) Wire types, codec, roles and the client queue
+- [x] 1.3 (P) Wire types, codec, roles and the client queue
   - The envelope and every message type with the design's JSON names; a line reader with the
     64 KiB limit and an encoder producing one object per line; request parsing that names the
     missing field; the role from peer credentials (root or the operator uid write, anyone else
@@ -242,3 +242,4 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
 - 2.3: `trialOps` in trialops.go; the CLI builds it with `ops(rec)` and maps errors with `report()` (`usageErr` → exit 2, `needsYes` carries the exact confirm sentence; both are types, match with `errors.As`). Multi-fault refusal order changed (kill/bounds now after the CLI's running/record checks); every single-fault text is byte-identical and no state can start a trial that could not before (21 mutants). ctl_verbs.go 286 → 203 lines. API (3.4): pass `yes` through from the request; `following = d.follow != nil`.
 - 2.2: `loadRules(base, overlay, notice)` sets `snapshot.rulesErr` for an invalid overlay at startup (base alone, start not refused); `reloader.rulesError() (time.Time, error)` returns the last reload failure (cleared by a successful FULL reload only) or the startup record with a zero time; the watch stamps a path list (an empty path stamps as absent). `-rules ""` is now a usage error. Open: `snitchd check` validates the base alone (decide in 3.2/4.1 whether it merges the overlay); a self-healed re-resolve conflict stays recorded until a full reload.
 - 3.2: `toEvent` in apievent.go with a `verdictWire` table indexed by the C enum; an unmapped executable is `program: "unknown"` with its path (the bytes bucket is `unknown` with no path or addr, so they never collide); the learned projection is `rules.Observed` / `(*Learned).Observations()` (`Observation` was the sink's input type). Schema limit for 4.1 to document: a port-range rule is reported with `port: 0` (RuleView has one int); `snitchd check` validating the base alone is also 4.1's call.
+- 1.3: `RoleFor(cred *unix.Ucred, operator)` (the type is `Role`); drops travel as their own `{"type":"dropped","id":0,"count":n}` line before the next delivered message (shared message bytes stay immutable; `Reply.Dropped` removed); `Event.Time` is `time.Time`; line limit inclusive at 64 KiB. Two review rounds went to one test that assumed a scheduling order: queue tests must accept every legal interleaving (read until N replies under a deadline; check sums, not positions) and be run with `GOMAXPROCS=1 -race -count=300`.
