@@ -41,8 +41,10 @@ file (`/etc/snitch/rules.toml`), restarts it on failure and never passes `-mode`
 starts in monitor mode and follows the trial and kept-enforce files under `/var/lib/snitch`.
 `systemd/snitchd-trial-boot.service` is a oneshot ordered before it that runs
 `snitchd end -at-boot`, so a trial that was open at shutdown is gone before anything can
-enforce. Neither unit is installed or enabled here: the VM repo's pyinfra flow deploys them
-once the trial phase of the enforce test has passed. By hand it would be:
+enforce. Neither unit is installed or enabled here: the `snitchd` task of the
+[hyperland-forky-worker-vm](https://github.com/norandom/hyperland-forky-worker-vm) repo deploys
+the binary (a release asset, pinned by version and sha256) and the two units; that repo carries
+a copy of the two unit files, marked as copies of these. By hand it would be:
 
 ```sh
 sudo install -m 755 /tmp/snitchd /usr/local/sbin/snitchd
@@ -62,6 +64,14 @@ under `/var/lib/snitch` and ends a trial itself at its deadline; a reboot ends a
 exception, and it is a plain file: `rm /var/lib/snitch/enforce` from a console removes it, and
 the kill switch (`scripts/fail-open.sh`) overrides it meanwhile. `scripts/enforce-test.sh`
 runs the whole flow as its phase 3 (`--skip-trial` leaves it out).
+
+**Release.** A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lint.yml`, the same jobs
+as on every push) and then one static amd64 build with the tag linked in
+(`.github/workflows/release.yml`); a failing check publishes nothing. The assets are `snitchd`,
+`snitchd.sha256` (the form `sha256sum -c` reads) and the Python client's `snitch` and
+`snitch-trial`. `snitchd -version` prints the tag (`dev` for a plain `go build`), and
+`snitchd status` shows it. The VM repo pins the version and the sha256 of the `snitchd` asset
+(see **Service** above).
 
 `systemd/snitch-trial*.service`, `snitch-trial.timer` and `snitch-watch.service` belong to the
 Little Snitch client below, not to snitchd.

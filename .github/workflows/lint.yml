@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call: # the release workflow runs these jobs first (deploy-service, Req 1.4)
 
 permissions:
   contents: read
