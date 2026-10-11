@@ -142,7 +142,7 @@ this VM by the VM repo's `tasks/snitchd.py` (switches `snitchd_enabled`, `snitch
 mode; `sudo scripts/deploy-check.sh [--trial]` verified it incl. a reboot and a 2-minute trial.
 Open there: the learning run after a working day (task 4.5).
 Spec `daemon-api` (2026-10-11, see `.kiro/specs/daemon-api/`; implemented and deployed as
-v0.3.0, final validation pending): the local API
+v0.3.0, validated GO 2026-10-11; the validation fixes after v0.3.0 await tag v0.3.1): the local API
 on `/run/snitch/api.sock` (`-api`), JSON lines documented in `examples/api.md` (every local user
 reads status, rules, programs, learned, a windowed connection table, and subscribes to events,
 2 s summaries and state lines; root and the user in `/etc/snitch/operator` run the trial verbs and
