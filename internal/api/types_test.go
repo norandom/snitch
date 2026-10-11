@@ -107,3 +107,10 @@ func TestConstants(t *testing.T) {
 		t.Fatalf("constants drifted from the design: %d %d %v %v %d", LineLimit, Backlog, WriteDeadline, SummaryEvery, MaxClients)
 	}
 }
+
+func TestRequestYesMarshalsUnderItsName(t *testing.T) {
+	b, err := json.Marshal(Request{Type: "trial", Id: 1, Duration: "10m", Yes: true})
+	if err != nil || !strings.Contains(string(b), `"yes":true`) {
+		t.Fatalf("got %s, %v", b, err)
+	}
+}

@@ -27,6 +27,7 @@ type Request struct {
 	Summary  bool   `json:"summary,omitempty"`  // subscribe (default true)
 	Duration string `json:"duration,omitempty"` // trial
 	Extend   bool   `json:"extend,omitempty"`   // trial
+	Yes      bool   `json:"yes,omitempty"`      // trial: start even with zero effective rules (the CLI's -y)
 	Program  string `json:"program,omitempty"`  // rule.add, rule.remove
 	Path     string `json:"path,omitempty"`     // rule.add
 	To       string `json:"to,omitempty"`       // rule.add, rule.remove
