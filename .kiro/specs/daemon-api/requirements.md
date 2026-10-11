@@ -157,8 +157,9 @@ that the tray and the status bar need neither root nor the status file.
 #### Acceptance Criteria
 1. When a client asks for the status, the daemon shall answer with the same facts the status
    verb prints (running, mode and its source, trial deadline, kept, kill switch, learning, rules
-   summary, version, status file age) plus the API's own counters (clients, drops, table size,
-   evictions) and the daemon's start time.
+   summary, version) plus the API's own counters (clients, drops, table size, evictions) and the
+   daemon's start time and pid; the status file's age and the heartbeat age have no meaning
+   in-process (the daemon answering is the proof of life) and are not carried.
 2. When a client asks for the rules, the daemon shall list the effective rules with program, to,
    protocol, port, verdict, note, id, and the file each came from (the deployed file or the local
    overlay), in the precedence order the kernel uses.
@@ -218,7 +219,7 @@ against the daemon, so that the TUI is built against a contract, not a reading o
    status reply, a subscription receiving events for a probe connection within one second, bytes
    growing for a download, a rule edit refused for the reader and applied for the operator (with
    the kernel decision changing accordingly in monitor mode, visible as the verdict in the event),
-   and the trial verbs refused for a non-operator user; the daemon's heartbeat and decisions
-   continue throughout.
+   and the trial verbs refused for a non-operator user; the daemon runs throughout (the same
+   pid answers before and after, and its decisions keep flowing as events).
 5. The verification shall include the client-side command lines in the schema document, so that
    the next spec's author can repeat them.
