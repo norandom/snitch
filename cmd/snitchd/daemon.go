@@ -53,9 +53,12 @@ type daemon struct {
 // heartbeat), the objects, the first heartbeat, the maps, and only then the hooks.
 func startup(cfg config) (*daemon, error) {
 	d := &daemon{cfg: cfg, log: func(m string) { fmt.Fprintln(os.Stderr, "snitchd:", m) }}
-	snap, err := loadRules(cfg.rules, d.log)
+	snap, err := loadRules(cfg.rules, cfg.overlay, d.log)
 	if err != nil {
 		return nil, fmt.Errorf("rules: %w", err)
+	}
+	if snap.rulesErr != nil { // the overlay alone is bad: start on the base, report (Req 5.4)
+		d.log(fmt.Sprintf("overlay not loaded, running on the rules file alone: %v", snap.rulesErr))
 	}
 	if err := d.setupLearning(); err != nil {
 		return nil, err
@@ -195,7 +198,8 @@ func (d *daemon) serve() int { return runJobs(d.log, d.jobList()...) }
 // jobList: the heartbeat, the deadline, the stop signals, the event pump, the reloads, and,
 // when configured, the learned-file writer and the mode follower with its status writer.
 func (d *daemon) jobList() []jobs.Job {
-	r := &reloader{path: d.cfg.rules, st: &d.st, programs: mapOps(d.objs.Programs), rules: mapOps(d.objs.Rules), load: loadRules, log: d.log}
+	r := &reloader{path: d.cfg.rules, overlay: d.cfg.overlay, paths: []string{d.cfg.rules, d.cfg.overlay},
+		st: &d.st, programs: mapOps(d.objs.Programs), rules: mapOps(d.objs.Rules), load: loadRules, log: d.log}
 	js := []jobs.Job{
 		jobs.Every(heartbeatPeriod, func(context.Context) error { return d.beat() }),
 		jobs.After(d.cfg.duration),

@@ -45,6 +45,9 @@ func TestChecksRefuseUnsafeCombinations(t *testing.T) {
 		{"unknown mode", []string{"-mode", "panic"}, "mode"},
 		{"negative duration", []string{"-duration", "-5s"}, "duration"},
 		{"learned is the live file", []string{"-learn", "-rules", "/tmp/r.toml", "-learned", "/tmp/r.toml"}, "live rules file"},
+		{"overlay is the rules file", []string{"-rules", "/tmp/r.toml", "-overlay", "/tmp/r.toml"}, "-overlay"},
+		{"overlay is the learned file", []string{"-learn", "-learned", "/tmp/l.toml", "-overlay", "/tmp/l.toml"}, "-overlay"},
+		{"empty rules path", []string{"-rules", ""}, "-rules"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -62,6 +65,9 @@ func TestChecksAcceptSafeCombinations(t *testing.T) {
 		{"-mode", "enforce", "-duration", "90s"},
 		{"-learn", "-duration", "60s"},
 		{"-mode", "monitor"},
+		{"-api", ""},
+		{"-overlay", ""},
+		{"-learned", "/tmp/l.toml", "-overlay", "/tmp/l.toml"}, // the learner never runs without -learn
 	} {
 		if _, err := parseFlags(args); err != nil {
 			t.Fatalf("%v: %v", args, err)
@@ -167,4 +173,35 @@ func swapStdout(w io.Writer) func() {
 	old := stdout
 	stdout = w
 	return func() { stdout = old }
+}
+
+// The daemon-api flags (Req 1.9 for -api; design File Structure Plan for the defaults).
+func TestOverlayAndAPIFlagsHaveTheDesignDefaultsAndTakeValues(t *testing.T) {
+	cfg, err := parseFlags(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.overlay != "/etc/snitch/rules.d/local.toml" || cfg.api != "/run/snitch/api.sock" {
+		t.Fatalf("defaults wrong: overlay %q, api %q", cfg.overlay, cfg.api)
+	}
+	cfg, err = parseFlags([]string{"-overlay", "/tmp/x/local.toml", "-api", "/tmp/x/api.sock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.overlay != "/tmp/x/local.toml" || cfg.api != "/tmp/x/api.sock" {
+		t.Fatalf("values wrong: overlay %q, api %q", cfg.overlay, cfg.api)
+	}
+	if cfg, err = parseFlags([]string{"-api", ""}); err != nil || cfg.api != "" {
+		t.Fatalf("-api \"\" turns the API off: %v, %q", err, cfg.api)
+	}
+}
+
+func TestHelpNamesTheOverlayAndAPIFlags(t *testing.T) {
+	var usage bytes.Buffer
+	parseFlagsTo([]string{"-h"}, &usage)
+	for _, want := range []string{"-overlay string", "-api string", "empty disables"} {
+		if !strings.Contains(usage.String(), want) {
+			t.Fatalf("usage lacks %q:\n%s", want, usage.String())
+		}
+	}
 }

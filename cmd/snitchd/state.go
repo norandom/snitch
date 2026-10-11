@@ -15,10 +15,14 @@ import (
 )
 
 // snapshot is one consistent view of the rules: the resolved file and its kernel entries.
-// Immutable once published; a reload builds a new one.
+// Immutable once published; a reload builds a new one. rulesErr is the startup fallback's
+// record: the overlay was invalid when this snapshot was built, so it holds the base alone
+// (Req 5.4: an API write must never refuse the next start); the reloader reports it in the
+// facts until a good full reload replaces the snapshot. A reload never publishes one with it.
 type snapshot struct {
-	res *rules.Resolved
-	ent rules.Entries
+	res      *rules.Resolved
+	ent      rules.Entries
+	rulesErr error
 }
 
 // state hands the current snapshot to the event pump without locks.
@@ -65,9 +69,14 @@ func apply(programs, rules putDel, ch rules.Changes) error {
 	return nil
 }
 
-// loadRules reads, resolves and encodes the rules file. A missing file is an empty snapshot
-// with a notice; an invalid file is the parser's error (file:line: reason).
-func loadRules(path string, notice func(string)) (*snapshot, error) {
+// loadRules reads, merges, resolves and encodes the rules: the base file (missing = an empty
+// snapshot with a notice; invalid = the parser's error file:line: reason, the operator's
+// mistake) and, when overlay is set and exists, the overlay merged over it with precedence.
+// An invalid overlay is not an error here: the base alone is returned with the overlay's
+// error in snapshot.rulesErr, so startup continues and the reloader decides (it keeps the
+// previous rules instead).
+func loadRules(path, overlay string, notice func(string)) (*snapshot, error) {
+	contract.Require(path != "", "loadRules needs the rules path")
 	f, err := rules.Load(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		notice(fmt.Sprintf("no rules loaded: %s does not exist (everything is reported, nothing denied by rule)", path))
@@ -76,11 +85,33 @@ func loadRules(path string, notice func(string)) (*snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	f, overlayErr := mergeOverlay(f, overlay)
 	res, err := rules.Resolve(f, rules.OSFS(notice))
 	if err != nil {
 		return nil, err
 	}
-	return &snapshot{res: res, ent: rules.Encode(res)}, nil
+	return &snapshot{res: res, ent: rules.Encode(res), rulesErr: overlayErr}, nil
+}
+
+// mergeOverlay lays the overlay file over base. No overlay path or no file: base unchanged.
+// An unreadable or invalid overlay, or one Merge rejects (an unknown program, a duplicate
+// name): base unchanged and the error returned for the caller to record.
+func mergeOverlay(base *rules.File, overlay string) (*rules.File, error) {
+	if overlay == "" {
+		return base, nil
+	}
+	ov, err := rules.LoadOverlay(overlay)
+	if errors.Is(err, fs.ErrNotExist) {
+		return base, nil
+	}
+	if err != nil {
+		return base, err
+	}
+	merged, err := rules.Merge(base, ov)
+	if err != nil {
+		return base, fmt.Errorf("%s: %w", overlay, err)
+	}
+	return merged, nil
 }
 
 // summary is the one line printed after every successful apply. A program counts as resolved

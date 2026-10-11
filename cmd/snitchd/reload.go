@@ -18,18 +18,45 @@ const (
 	reResolvePeriod = 10 * time.Second // Req 4.3: a replaced executable is matched within 10 s
 )
 
-// reloader rebuilds the snapshot from the rules file or from a fresh resolution of the same
-// file, applies the difference to the maps and publishes; on any failure the previous
-// snapshot stays current. Delegates for the maps and the loader keep it testable.
+// reloader rebuilds the snapshot from the rules files (base plus overlay) or from a fresh
+// resolution of the same files, applies the difference to the maps and publishes; on any
+// failure the previous snapshot stays current and the error is kept for the facts until a
+// full reload succeeds. Delegates for the maps, the loader and the clock keep it testable.
 type reloader struct {
-	mu       sync.Mutex // one reload at a time: the diff is computed against the current base
-	path     string
-	st       *state
-	programs putDel
-	rules    putDel
-	load     func(path string, notice func(string)) (*snapshot, error)
-	log      func(string)
-	stamp    fileStamp
+	mu        sync.Mutex // one reload at a time: the diff is computed against the current base
+	path      string
+	overlay   string
+	paths     []string // the files the watch stamps: rules, overlay, later the operator file
+	st        *state
+	programs  putDel
+	rules     putDel
+	load      func(path, overlay string, notice func(string)) (*snapshot, error)
+	log       func(string)
+	now       func() time.Time // nil = time.Now
+	stamps    []fileStamp
+	lastErr   error // the last failed reload; nil after a successful full reload
+	lastErrAt time.Time
+}
+
+// rulesError is the facts' view (Req 5.4): the last failed reload, or, when every reload
+// since succeeded or none ran, the startup fallback recorded on the current snapshot.
+func (r *reloader) rulesError() (time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.lastErr != nil {
+		return r.lastErrAt, r.lastErr
+	}
+	if cur := r.st.current(); cur != nil && cur.rulesErr != nil {
+		return time.Time{}, cur.rulesErr
+	}
+	return time.Time{}, nil
+}
+
+func (r *reloader) clock() time.Time {
+	if r.now == nil {
+		return time.Now()
+	}
+	return r.now()
 }
 
 // fileStamp is what a poll compares: editors replace files (new inode) or rewrite them.
@@ -52,8 +79,11 @@ func stampOf(path string) (fileStamp, bool) {
 	return s, true
 }
 
-// reload builds a new snapshot (full: re-read the file; otherwise re-resolve the current
-// file), applies the diff and publishes. Returns whether a new snapshot is current.
+// reload builds a new snapshot (full: re-read the files; otherwise re-resolve the current
+// ones), applies the diff and publishes. Returns whether a new snapshot is current. On a
+// reload an invalid overlay is a failure like an invalid base (the previous rules stay, the
+// loader's startup fallback is not taken); any failure is recorded for the facts and a
+// successful full reload clears it (a re-resolve reads no file, so it leaves the record).
 func (r *reloader) reload(full bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -61,43 +91,66 @@ func (r *reloader) reload(full bool) bool {
 	var next *snapshot
 	var err error
 	if full || cur == nil {
-		next, err = r.load(r.path, r.log)
+		next, err = r.load(r.path, r.overlay, r.log)
 	} else {
 		next, err = reresolve(cur, r.log)
+	}
+	if err == nil && next.rulesErr != nil && full {
+		err = next.rulesErr
 	}
 	if err == nil {
 		err = apply(r.programs, r.rules, rules.Diff(cur.ent, next.ent))
 	}
 	if err != nil {
+		r.lastErr, r.lastErrAt = err, r.clock()
 		r.log(fmt.Sprintf("reload failed, keeping the previous rules: %v", err))
 		return false
 	}
 	contract.Invariant(r.st.current() == cur, "the base snapshot moved during a reload")
+	if full {
+		r.lastErr = nil
+	}
 	r.st.publish(next)
 	fmt.Println(summary(next))
 	return true
 }
 
-// reresolve keeps the parsed file and only looks at the executables again.
+// reresolve keeps the parsed file (and its startup record) and only looks at the executables
+// again.
 func reresolve(cur *snapshot, notice func(string)) (*snapshot, error) {
 	res, err := rules.Resolve(cur.res.File, rules.OSFS(notice))
 	if err != nil {
 		return nil, err
 	}
-	return &snapshot{res: res, ent: rules.Encode(res)}, nil
+	return &snapshot{res: res, ent: rules.Encode(res), rulesErr: cur.rulesErr}, nil
 }
 
-// watchFile polls the rules file and reloads fully when it changed (or appeared/vanished).
+// watchFile polls every path in r.paths and reloads fully when one changed (or appeared or
+// vanished): a removed overlay reloads to the base alone.
 func (r *reloader) watchFile() jobs.Job {
-	r.stamp, _ = stampOf(r.path)
-	return jobs.Every(filePollPeriod, func(context.Context) error {
-		now, _ := stampOf(r.path)
-		if now != r.stamp {
-			r.stamp = now
-			r.reload(true)
+	r.stampAll()
+	return jobs.Every(filePollPeriod, r.pollFiles)
+}
+
+func (r *reloader) stampAll() {
+	contract.Require(len(r.paths) > 0, "watchFile needs the paths to watch")
+	r.stamps = make([]fileStamp, len(r.paths))
+	for i, p := range r.paths {
+		r.stamps[i], _ = stampOf(p)
+	}
+}
+
+func (r *reloader) pollFiles(context.Context) error {
+	changed := false
+	for i, p := range r.paths {
+		if now, _ := stampOf(p); now != r.stamps[i] {
+			r.stamps[i], changed = now, true
 		}
-		return nil
-	})
+	}
+	if changed {
+		r.reload(true)
+	}
+	return nil
 }
 
 // reResolve re-checks the executables so an upgraded tool is matched again.

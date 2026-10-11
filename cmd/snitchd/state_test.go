@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/norandom/snitch/internal/contract"
+	"github.com/norandom/snitch/internal/contract/contracttest"
 	"github.com/norandom/snitch/internal/rules"
 )
 
@@ -65,7 +67,7 @@ func writeRules(t *testing.T, body string) string {
 
 func TestLoadRulesMissingFileIsEmptyWithNotice(t *testing.T) {
 	var notes []string
-	snap, err := loadRules(filepath.Join(t.TempDir(), "none.toml"), func(m string) { notes = append(notes, m) })
+	snap, err := loadRules(filepath.Join(t.TempDir(), "none.toml"), "", func(m string) { notes = append(notes, m) })
 	if err != nil || len(snap.res.File.Programs) != 0 || len(snap.ent.Rules) != 0 {
 		t.Fatalf("want an empty snapshot, got %+v, %v", snap, err)
 	}
@@ -76,7 +78,7 @@ func TestLoadRulesMissingFileIsEmptyWithNotice(t *testing.T) {
 
 func TestLoadRulesInvalidFileIsAnErrorWithLine(t *testing.T) {
 	p := writeRules(t, "[[program]]\nname = \"curl\"\npaths = []\n\n[[rule]]\nprogram = \"wget\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n")
-	_, err := loadRules(p, func(string) {})
+	_, err := loadRules(p, "", func(string) {})
 	var e *rules.Error
 	if !errors.As(err, &e) || e.Line != 5 {
 		t.Fatalf("want a rules error at line 5, got %v", err)
@@ -90,7 +92,7 @@ func TestLoadRulesResolvesAndEncodes(t *testing.T) {
 	}
 	p := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\"]\n\n[[program]]\nname = \"ghost\"\npaths = [\"/nonexistent/ghost\"]\n\n"+
 		"[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nproto = \"tcp\"\nport = 443\nverdict = \"allow\"\n\n[[rule]]\nprogram = \"ghost\"\nto = \"::/0\"\nverdict = \"deny\"\n")
-	snap, err := loadRules(p, func(string) {})
+	snap, err := loadRules(p, "", func(string) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +110,7 @@ func TestLoadRulesResolvesAndEncodes(t *testing.T) {
 func TestSummaryCountsAProgramResolvedWhenOnePathMaps(t *testing.T) {
 	self, _ := os.Executable()
 	p := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\", \""+t.TempDir()+"/*\"]\n")
-	snap, err := loadRules(p, func(string) {})
+	snap, err := loadRules(p, "", func(string) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,5 +129,84 @@ func TestStatePublishesSnapshots(t *testing.T) {
 	st.publish(snap)
 	if st.current() != snap {
 		t.Fatal("publish must make the snapshot current")
+	}
+}
+
+// baseFor is a base file with one program (this test binary) and one allow rule.
+func baseFor(t *testing.T) string {
+	t.Helper()
+	self, _ := os.Executable()
+	return writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\"]\n\n[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n")
+}
+
+func writeOverlay(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "local.toml")
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestLoadRulesWithoutAnOverlayFileIsBaseOnly(t *testing.T) {
+	var notes []string
+	for _, overlay := range []string{"", filepath.Join(t.TempDir(), "none.toml")} {
+		snap, err := loadRules(baseFor(t), overlay, func(m string) { notes = append(notes, m) })
+		if err != nil || snap.rulesErr != nil || len(snap.res.File.Rules) != 1 || len(notes) != 0 {
+			t.Fatalf("overlay %q: want the base alone and no notice, got %+v, %v, %v, notes %q", overlay, snap.res.File, snap.rulesErr, err, notes)
+		}
+	}
+}
+
+func TestLoadRulesMergesTheOverlayWithPrecedence(t *testing.T) {
+	ov := writeOverlay(t, "[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"deny\"\n\n[[rule]]\nprogram = \"me\"\nto = \"8.8.8.8\"\nverdict = \"allow\"\n")
+	snap, err := loadRules(baseFor(t), ov, func(string) {})
+	if err != nil || snap.rulesErr != nil {
+		t.Fatalf("a valid overlay merges: %v, %v", err, snap.rulesErr)
+	}
+	rs := snap.res.File.Rules
+	if len(rs) != 2 || rs[0].To.String() != "1.1.1.1/32" || rs[0].Verdict != rules.Deny || rs[0].Source != ov || rs[1].Source != ov {
+		t.Fatalf("want the overlay's deny for 1.1.1.1 and its 8.8.8.8 rule, both sourced from the overlay, got %+v", rs)
+	}
+	if len(snap.ent.Rules) != 2 || !strings.Contains(summary(snap), "2 rules effective") {
+		t.Fatalf("want two kernel entries, got %d: %s", len(snap.ent.Rules), summary(snap))
+	}
+}
+
+// Req 5.4 and the design's startup row: an invalid overlay never refuses the start (an API
+// write must not break the next boot); the base is effective and the error is recorded.
+func TestLoadRulesInvalidOverlayAtStartupIsBaseOnlyWithTheErrorRecorded(t *testing.T) {
+	cases := map[string]string{
+		"syntax":          "garbage = [\n",
+		"unknown program": "[[rule]]\nprogram = \"nobody\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			ov := writeOverlay(t, body)
+			snap, err := loadRules(baseFor(t), ov, func(string) {})
+			if err != nil {
+				t.Fatalf("the start must not be refused: %v", err)
+			}
+			if snap.rulesErr == nil || !strings.Contains(snap.rulesErr.Error(), ov) {
+				t.Fatalf("want the overlay error naming %s, got %v", ov, snap.rulesErr)
+			}
+			if len(snap.res.File.Rules) != 1 || snap.res.File.Rules[0].Verdict != rules.Allow || len(snap.ent.Rules) != 1 {
+				t.Fatalf("want the base alone effective, got %+v", snap.res.File.Rules)
+			}
+		})
+	}
+}
+
+func TestLoadRulesInvalidBaseIsStillAnErrorWithAnOverlay(t *testing.T) {
+	ov := writeOverlay(t, "[[rule]]\nprogram = \"me\"\nto = \"8.8.8.8\"\nverdict = \"allow\"\n")
+	if _, err := loadRules(writeRules(t, "garbage = [\n"), ov, func(string) {}); err == nil {
+		t.Fatal("a broken base file is the operator's error, overlay or not")
+	}
+}
+
+func TestLoadRulesRequiresABasePath(t *testing.T) {
+	v := contracttest.Panics(t, contract.Precondition, func() { loadRules("", "", func(string) {}) })
+	if !strings.Contains(v.Msg, "rules path") {
+		t.Fatalf("want the precondition to name the rules path, got %q", v.Msg)
 	}
 }

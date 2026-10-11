@@ -21,9 +21,9 @@ func TestContractReloadDetectsAMovedBase(t *testing.T) {
 	path := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\"]\n")
 	r, _ := newReloader(t, path, &recorder{})
 	r.st.publish(snapWith(self, ""))
-	r.load = func(p string, notice func(string)) (*snapshot, error) {
+	r.load = func(p, overlay string, notice func(string)) (*snapshot, error) {
 		r.st.publish(&snapshot{res: &rules.Resolved{File: &rules.File{}}})
-		return loadRules(p, notice)
+		return loadRules(p, overlay, notice)
 	}
 	contracttest.Panics(t, contract.InvariantKind, func() { r.reload(true) })
 }

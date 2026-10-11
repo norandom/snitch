@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/norandom/snitch/internal/contract"
+	"github.com/norandom/snitch/internal/contract/contracttest"
 	"github.com/norandom/snitch/internal/rules"
 )
 
@@ -80,7 +84,7 @@ func TestReloadReresolvePicksUpANewExecutable(t *testing.T) {
 	path := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\", \""+dir+"/*\"]\n\n[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n")
 	rec := &recorder{}
 	r, _ := newReloader(t, path, rec)
-	first, err := loadRules(path, func(string) {})
+	first, err := loadRules(path, "", func(string) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +124,7 @@ func TestReloadReresolveDoesNotRereadTheFile(t *testing.T) {
 	path := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\"]\n\n[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n")
 	rec := &recorder{}
 	r, _ := newReloader(t, path, rec)
-	first, _ := loadRules(path, func(string) {})
+	first, _ := loadRules(path, "", func(string) {})
 	r.st.publish(first)
 	os.WriteFile(path, []byte("[[program]]\nname = \"me\"\npaths = [\""+self+"\"]\n\n[[rule]]\nprogram = \"me\"\nto = \"9.9.9.9\"\nverdict = \"deny\"\n"), 0o644)
 	r.reload(false)
@@ -141,4 +145,125 @@ func TestStampSeesASizeChangeWithTheSameMtime(t *testing.T) {
 	if a == b {
 		t.Fatal("size must be part of the stamp")
 	}
+}
+
+// overlayReloader watches base and overlay and ticks a fixed clock for the error's time.
+func overlayReloader(t *testing.T, base, overlay string, rec *recorder) (*reloader, *[]string) {
+	t.Helper()
+	r, logs := newReloader(t, base, rec)
+	r.overlay, r.paths = overlay, []string{base, overlay}
+	r.now = func() time.Time { return time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC) }
+	return r, logs
+}
+
+const goodOverlay = "[[rule]]\nprogram = \"me\"\nto = \"8.8.8.8\"\nverdict = \"allow\"\n"
+
+// brokenOverlay publishes a merged snapshot, then breaks the overlay on disk and reloads.
+func brokenOverlay(t *testing.T) (r *reloader, before *snapshot, ov string, logs *[]string) {
+	t.Helper()
+	base := baseFor(t)
+	ov = writeOverlay(t, goodOverlay)
+	r, logs = overlayReloader(t, base, ov, &recorder{})
+	before, err := loadRules(base, ov, func(string) {})
+	if err != nil || before.rulesErr != nil {
+		t.Fatal(err, before.rulesErr)
+	}
+	r.st.publish(before)
+	os.WriteFile(ov, []byte("garbage = [\n"), 0o644)
+	if r.reload(true) {
+		t.Fatal("an invalid overlay must not reload")
+	}
+	return r, before, ov, logs
+}
+
+// Req 5.4: an invalid overlay on disk keeps the previous rules and is reported in the facts.
+func TestReloadInvalidOverlayKeepsThePreviousSnapshotAndRecordsTheError(t *testing.T) {
+	r, before, ov, logs := brokenOverlay(t)
+	if r.st.current() != before {
+		t.Fatal("an invalid overlay must keep the previous snapshot")
+	}
+	at, lastErr := r.rulesError()
+	if lastErr == nil || !strings.Contains(lastErr.Error(), ov) || at != r.now() {
+		t.Fatalf("want the overlay error recorded at the clock's time, got %v at %v", lastErr, at)
+	}
+	if len(*logs) != 1 || !strings.Contains((*logs)[0], "keeping the previous rules") {
+		t.Fatalf("want one log line, got %q", *logs)
+	}
+}
+
+func TestReloadRepairedOverlayClearsTheError(t *testing.T) {
+	r, _, ov, _ := brokenOverlay(t)
+	os.WriteFile(ov, []byte(goodOverlay), 0o644)
+	if !r.reload(true) {
+		t.Fatal("a repaired overlay reloads")
+	}
+	if _, lastErr := r.rulesError(); lastErr != nil {
+		t.Fatalf("a good reload clears the error, got %v", lastErr)
+	}
+}
+
+func TestReloadStartupOverlayErrorIsReportedUntilAGoodFullReload(t *testing.T) {
+	base, ov := baseFor(t), writeOverlay(t, "garbage = [\n")
+	r, _ := overlayReloader(t, base, ov, &recorder{})
+	snap, err := loadRules(base, ov, func(string) {})
+	if err != nil || snap.rulesErr == nil {
+		t.Fatal("the startup fallback: base only with the error on the snapshot", err)
+	}
+	r.st.publish(snap)
+	if _, got := r.rulesError(); got != snap.rulesErr {
+		t.Fatalf("the facts show the startup error, got %v", got)
+	}
+	if !r.reload(false) {
+		t.Fatal("a re-resolve of the base succeeds")
+	}
+	if _, got := r.rulesError(); got != snap.rulesErr {
+		t.Fatalf("a re-resolve reads no file: the overlay error stays, got %v", got)
+	}
+	os.WriteFile(ov, []byte(goodOverlay), 0o644)
+	if !r.reload(true) {
+		t.Fatal("a repaired overlay reloads")
+	}
+	if _, got := r.rulesError(); got != nil || len(r.st.current().res.File.Rules) != 2 {
+		t.Fatalf("want no error and the merged rules, got %v, %d rules", got, len(r.st.current().res.File.Rules))
+	}
+}
+
+func TestReloadBaseErrorAfterAGoodOverlayIsRecorded(t *testing.T) {
+	base, ov := baseFor(t), writeOverlay(t, goodOverlay)
+	r, _ := overlayReloader(t, base, ov, &recorder{})
+	before, _ := loadRules(base, ov, func(string) {})
+	r.st.publish(before)
+	os.WriteFile(base, []byte("garbage = [\n"), 0o644)
+	if r.reload(true) || r.st.current() != before {
+		t.Fatal("an invalid base keeps the previous snapshot")
+	}
+	if _, lastErr := r.rulesError(); lastErr == nil || !strings.Contains(lastErr.Error(), base) {
+		t.Fatalf("want the base error recorded, got %v", lastErr)
+	}
+}
+
+// The watch stamps every path: a change to the overlay alone reloads.
+func TestWatchReloadsWhenOnlyTheOverlayChanges(t *testing.T) {
+	base, ov := baseFor(t), writeOverlay(t, goodOverlay)
+	r, _ := overlayReloader(t, base, ov, &recorder{})
+	before, _ := loadRules(base, ov, func(string) {})
+	r.st.publish(before)
+	r.stampAll()
+	if r.pollFiles(context.Background()); r.st.current() != before {
+		t.Fatal("nothing changed: no reload")
+	}
+	os.WriteFile(ov, []byte(goodOverlay+"\n[[rule]]\nprogram = \"me\"\nto = \"9.9.9.9\"\nverdict = \"deny\"\n"), 0o644)
+	if r.pollFiles(context.Background()); r.st.current() == before || len(r.st.current().res.File.Rules) != 3 {
+		t.Fatalf("a changed overlay must reload, got %d rules", len(r.st.current().res.File.Rules))
+	}
+	after := r.st.current()
+	os.Remove(ov)
+	if r.pollFiles(context.Background()); r.st.current() == after || len(r.st.current().res.File.Rules) != 1 {
+		t.Fatal("a removed overlay reloads to the base alone")
+	}
+}
+
+func TestWatchRequiresAPathList(t *testing.T) {
+	r, _ := newReloader(t, baseFor(t), &recorder{})
+	contracttest.Panics(t, contract.Precondition, func() { r.stampAll() })
 }
