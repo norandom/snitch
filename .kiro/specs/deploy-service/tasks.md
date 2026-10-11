@@ -104,7 +104,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Boundary: hyperland-forky-worker-vm/files/snitchd/rules.toml_
   - _Depends: 1.3_
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6_
-- [ ] 3.2 The snitchd task
+- [x] 3.2 The snitchd task
   - Group data: the enabled switch, version and sha256 pins (the values from 2.2), the learn
     switch, in a commented block after the serial console; the task after `services` in the
     deploy order; copies of both unit files with the one-line header; the task's operations in
@@ -223,3 +223,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 2.1: the publish step is an explicit if/else on `gh release view` (a failed upload no longer falls through into `create`); `go build -o dist/snitchd` creates `dist/`; the reviewer ran shellcheck over the `run:` blocks via `uvx --from shellcheck-py shellcheck`, which also works locally for later shell tasks.
 - 2.2: `git tag -a` needs the same `-c user.name/user.email` as commits (no global identity on this VM). Release run 38133561179 green on the first try; digest a51cf6d6…5d291 recorded in research.md for the VM pin.
 - 4.1: `deploy-check.sh` exits 2 for usage/not root, 1 for a failed check; journal probes use `journalctl -n0 --show-cursor` + `--after-cursor` (a `--since` fallback with 1 s granularity only when the unit has no entries); the trap runs `snitchd end` only after a trial verb was issued and always prints the `state:` line. Validated against a fake-service harness: 4.2 on the VM is the real proof. `uvx --from shellcheck-py shellcheck` works locally.
+- 3.2: gates verified in pyinfra's source: an op whose `_if` is false still completes, so `did_change()` on a repeat run returns false (no raise); `files.file(present=False)` on a missing path is a complete no-op object; `systemctl show` on never-installed units exits 0 with empty `UnitFileState`. Reviewer finding carried out of the task: `Wants=snitchd-trial-boot.service` in snitchd.service made a service restart start the oneshot and end a live trial (fixed in the unit, both repos, see the next note).

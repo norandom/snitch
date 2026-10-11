@@ -441,7 +441,9 @@ reads the executed run's summary. A `_if` lambda runs before the op's sudo conte
   -rules /etc/snitch/rules.toml -learn -learned /var/lib/snitch/learned.toml\n`. No other flag
   is ever written by the task (2.7); the CI job fails if a command line in the task carries
   `-mode` or `-duration` (`grep -nE 'snitchd[^#]*(-mode|-duration)'`, so comments explaining
-  the rule stay allowed) or if `/sys/fs/bpf` appears anywhere in it.
+  the rule stay allowed) or if `/sys/fs/bpf` appears anywhere in it; each grep in an
+  `if grep …; then exit 1; fi` (a `! grep` line is exempt from `bash -e` and only the step's
+  last line would decide).
 - Idempotency (2.8): ops 1, 2, 4, 5, 6, 7 are pyinfra-idempotent; 3, 7b and 8 are gated at
   execution time, so a second run with nothing changed executes zero operations.
 - Deploy order: `"snitchd"` after `"services"` in `deploy.py`. The rules file names programs
@@ -496,8 +498,9 @@ reads the executed run's summary. A `_if` lambda runs before the op's sudo conte
 - Steps: checkout; read `snitchd_version` and `snitchd_sha256` from `group_data/all.py` with
   `python3 -c 'import runpy; d = runpy.run_path("group_data/all.py"); print(d["snitchd_version"], d["snitchd_sha256"])'`;
   `curl -fsSL` the asset into a fresh dir; `sha256sum -c`; `chmod +x`; `./snitchd check -rules
-  files/snitchd/rules.toml`; then `! grep -nE 'snitchd[^#]*(-mode|-duration)' tasks/snitchd.py`
-  and `! grep -n '/sys/fs/bpf' tasks/snitchd.py` (2.7 guard).
+  files/snitchd/rules.toml`; then the 2.7 guard, one `if grep …; then exit 1; fi` per pattern
+  (`grep -nE 'snitchd[^#]*(-mode|-duration)' tasks/snitchd.py`, `grep -n '/sys/fs/bpf'
+  tasks/snitchd.py`): a negated `! grep` line is exempt from `bash -e`, so it must not be used.
 - Runs on push and PR like the other jobs; fails the build on any non-zero step (3.1).
 
 ### Verification (snitch)
