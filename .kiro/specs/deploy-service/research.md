@@ -280,3 +280,11 @@ design's "the restart does not touch the trial file" and Req 2.7. Fixed by dropp
 (keeping `After=`) in snitch/systemd and the VM copy; persistent-trial's design records the
 deviation. 4.2 checks `journalctl -u snitchd-trial-boot -b` after the restart step: the oneshot
 must have run once this boot only.
+
+## VM repo CI (task 3.4, 2026-10-11)
+- Branch `snitchd` at b7af2bc (3.1-3.4 plus the unit fix): lint run 38134552778 green, the new
+  `snitchd-rules` job downloaded the v0.2.0 asset, verified the digest and ran `check` on
+  files/snitchd/rules.toml (18 programs, 13 rules).
+- Throwaway commit with a rule for an undeclared program: run 38134607285 red at
+  `snitchd-rules` with `files/snitchd/rules.toml:238: rule for undeclared program "undeclared"`;
+  the branch was reset to b7af2bc afterwards. The merge to `main` is task 4.2's step.

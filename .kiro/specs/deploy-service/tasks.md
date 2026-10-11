@@ -88,7 +88,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Depends: 1.2, 1.3, 2.1_
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 3. Deployed by the VM repo
+- [x] 3. Deployed by the VM repo
 - [x] 3.1 (P) The rules file for this VM
   - `files/snitchd/rules.toml` per the design's content contract: a header naming the source,
     the deferred list and the session warning; a program for every Python rule's executable
@@ -133,7 +133,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Boundary: hyperland-forky-worker-vm/README.md_
   - _Depends: 3.2_
   - _Requirements: 4.2, 4.3, 5.6_
-- [ ] 3.4 The rules file checked in the VM repo's CI
+- [x] 3.4 The rules file checked in the VM repo's CI
   - A lint job that reads the pins from the group data, downloads the pinned release binary,
     verifies its checksum, runs the `check` verb on the rules file, and fails on a command line
     in the task carrying a mode or duration flag or on any mention of the BPF path; a pin-check
@@ -225,3 +225,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 4.1: `deploy-check.sh` exits 2 for usage/not root, 1 for a failed check; journal probes use `journalctl -n0 --show-cursor` + `--after-cursor` (a `--since` fallback with 1 s granularity only when the unit has no entries); the trap runs `snitchd end` only after a trial verb was issued and always prints the `state:` line. Validated against a fake-service harness: 4.2 on the VM is the real proof. `uvx --from shellcheck-py shellcheck` works locally.
 - 3.2: gates verified in pyinfra's source: an op whose `_if` is false still completes, so `did_change()` on a repeat run returns false (no raise); `files.file(present=False)` on a missing path is a complete no-op object; `systemctl show` on never-installed units exits 0 with empty `UnitFileState`. Reviewer finding carried out of the task: `Wants=snitchd-trial-boot.service` in snitchd.service made a service restart start the oneshot and end a live trial (fixed in the unit, both repos, see the next note).
 - 3.3: first review rejected one daemon fact (the rules file is polled every 2 s and applies within 5 s; 10 s is the executable re-resolve): README claims about the daemon are checked against the code, not the memory. Parent note: never `git commit -am` in a tree with other tasks' uncommitted work (it swept 3.3/3.4 into the unit fix once; split with a soft reset before anything was pushed).
+- 3.4: VM lint runs on branch `snitchd`: 38134552778 green (snitchd-rules success), 38134607285 red on a throwaway commit with a rule for an undeclared program (the job printed `rules.toml:238: rule for undeclared program`), branch reset to b7af2bc. A `! grep` line is exempt from `bash -e`: guards are `if grep …; then exit 1; fi` (design updated). GitHub's default `run:` shell is `bash -e {0}` without pipefail unless `shell: bash` is explicit.
