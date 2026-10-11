@@ -149,7 +149,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Requirements: 3.1, 2.7_
 
 - [ ] 4. Verified on the dev VM
-- [ ] 4.1 (P) The deploy check script
+- [x] 4.1 (P) The deploy check script
   - `scripts/deploy-check.sh`: root; phase A always (service active, both units enabled,
     version line equal to the binary's `-version` first with the restart remedy on mismatch,
     status exit 0 with monitor, no trial, nothing kept, kill clear; the startup and rules
@@ -222,3 +222,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 3.1: 18 programs, 13 rules, 15 map entries (the two proto-less DNS rules expand to tcp+udp); on this VM only the Go toolchain glob is unresolved (the tools are installed here). B3 (Anthropic domains for any program) was missing from research.md's inventory and is covered as a deferred comment under `claude`; research.md fixed.
 - 2.1: the publish step is an explicit if/else on `gh release view` (a failed upload no longer falls through into `create`); `go build -o dist/snitchd` creates `dist/`; the reviewer ran shellcheck over the `run:` blocks via `uvx --from shellcheck-py shellcheck`, which also works locally for later shell tasks.
 - 2.2: `git tag -a` needs the same `-c user.name/user.email` as commits (no global identity on this VM). Release run 38133561179 green on the first try; digest a51cf6d6…5d291 recorded in research.md for the VM pin.
+- 4.1: `deploy-check.sh` exits 2 for usage/not root, 1 for a failed check; journal probes use `journalctl -n0 --show-cursor` + `--after-cursor` (a `--since` fallback with 1 s granularity only when the unit has no entries); the trap runs `snitchd end` only after a trial verb was issued and always prints the `state:` line. Validated against a fake-service harness: 4.2 on the VM is the real proof. `uvx --from shellcheck-py shellcheck` works locally.

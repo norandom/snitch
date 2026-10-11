@@ -63,7 +63,10 @@ under `/var/lib/snitch` and ends a trial itself at its deadline; a reboot ends a
 (the boot oneshot above, and the daemon checks the boot id itself). A kept enforce is the one
 exception, and it is a plain file: `rm /var/lib/snitch/enforce` from a console removes it, and
 the kill switch (`scripts/fail-open.sh`) overrides it meanwhile. `scripts/enforce-test.sh`
-runs the whole flow as its phase 3 (`--skip-trial` leaves it out).
+runs the whole flow as its phase 3 (`--skip-trial` leaves it out). On a deployed host,
+`sudo scripts/deploy-check.sh` checks the service read-only (active, version, status, a rule
+event and a monitor event in the journal) and `--trial` adds a prompted two-minute trial with a
+trap that ends it.
 
 **Release.** A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lint.yml`, the same jobs
 as on every push) and then one static amd64 build with the tag linked in
