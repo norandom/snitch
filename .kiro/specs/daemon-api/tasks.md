@@ -115,7 +115,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Boundary: cmd/snitchd/trialops.go, trialops_test.go, ctl_verbs.go_
   - _Requirements: 5.1_
 
-- [ ] 3. The server, the wiring and the writes
+- [x] 3. The server, the wiring and the writes
 - [x] 3.1 The API server
   - Accept loop as a job; role decided once per connection; a verb table of handlers (status,
     rules, programs, learned, snapshot, subscribe, unsubscribe, trial, keep, unkeep, end,
@@ -177,7 +177,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Boundary: cmd/snitchd/apiwrite.go, apiwrite_test.go, api.go (the two delegate lines)_
   - _Depends: 2.1, 2.3, 3.3_
   - _Requirements: 5.1, 5.2, 5.3, 5.5, 5.6, 5.7_
-- [ ] 3.5 Byte counting attached and swept
+- [x] 3.5 Byte counting attached and swept
   - The cgroup v2 root found from the mounts table; the counting program attached with a link
     (not pinned) or counting switched off with one log line; a sweep every 2 s reading the
     bytes map in batches, feeding deltas by cookie to the table, forgetting cookies idle for ten
@@ -248,3 +248,4 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
 - 4.1: examples/api.md (37 parsing examples) documents the `dropped` line, `Summary.Dropped` as reserved, port ranges as `port: 0`, `snitchd check` validating the base alone, and python3/socat clients (no `nc -U` here). Review caught two spec errors: an event's `time` is Go's RFC 3339 (fractional digits trimmed, none at whole seconds), and a `deny-rule` verdict is enforced in EVERY mode (the kernel returns -EPERM for V_DENY_RULE without a mode gate): the design's "not denied in monitor mode" was wrong and is corrected; 4.2 must expect curl to fail after the deny rule.
 - 4.2: `scripts/api-check.sh` runs as the user with an embedded python3 client (no `nc -U` here); `trial` is sent only after an observed `rule.add` refusal on the same uid; B1 expects curl to FAIL with EPERM after the deny rule (first version encoded the design's wrong "not denied in monitor" assumption); the remove key comes from the add reply's `rule added: <program> to <to>` text; a backgrounded shell function's `$!` is the subshell, not python: run python3 directly to be able to stop it; `Status` has no heartbeat age, the check uses `running` plus an unchanged pid. The real-daemon B1/B2 proof is 4.3's run.
 - 3.4: `apiTrial` builds the seam from the daemon's live facts (kill map lookup, `following = d.follow != nil`, snapshot rule count); `end` over the API is never at-boot; `apiRuleEdit` goes load → mutate → `Merge` (validates against the deployed file) → `WriteWith`; `to` is parsed by a netip mirror of the rules parser (export `rules.ParsePrefix` in a cleanup); remove is by key (ids renumber); the claimed-executable check also covers declared-but-unresolved paths. `operatorWatch` stamps presence, inode, size, mtime, mode and owner every 2 s and calls `SetOperator` only on change. follow.go clears a spent trial file BEFORE `apply`, so the state event carries no stale deadline (log order unchanged). Parent hardening after review: an edit mutex on the daemon (two writers would lose an overlay edit; `apiState` is passed by value, so the mutex lives on `daemon`), relative `path` refused, and `apiJobs` now appends `d.sweepJobs()` (3.5).
+- 3.5: `sweeper` over a `byteReader` seam (`BatchLookup` 256 with `Iterate` fallback; cilium v0.22 returns the count before `ErrKeyNotExist`); a lower map value than last time is a recreated entry (delta = current value); cookies unseen for 10 min of SWEEP time (not the map's `last_ns`, which would double count) are forgotten, only after a complete read; `Prune` once per tick; `sweepJobs()` is nil unless counting is on and the API table exists (gate pinned by a test after the review). Root run: curl entry `bytesSent: 2480` in a 15m snapshot. Open for 4.4: pin "forget only after a complete read".
