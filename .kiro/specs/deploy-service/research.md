@@ -257,3 +257,17 @@ them; pip's interpreter rule is scoped to pypi, a domain rule, so deferred).
   following"; the deploy check compares versions first and names the restart as the remedy.
 - Verified by the reviewer in pyinfra's source: `running=False` on an inactive oneshot is a
   no-op; `enable` and `daemon-reload` start nothing.
+
+---
+
+## Release v0.2.0 (task 2.2, 2026-10-11)
+
+- Tag `v0.2.0` on commit 86a26ea (groups 1 and 2.1), pushed after lint run 38133518047 was
+  green on `main`. Release workflow run 38133561179: jobs checks/{actionlint,shellcheck,ruff,go}
+  and release all success.
+- Assets: `snitchd` (4690082 bytes), `snitchd.sha256`, `snitch`, `snitch-trial`.
+- Verified locally from the download: `sha256sum -c snitchd.sha256` → OK; `./snitchd -version`
+  → `v0.2.0`; statically linked ELF x86-64; `./snitchd check -rules examples/rules.toml` → exit 0
+  (3 programs, 6 rules).
+- **Pin for the VM repo**: `snitchd_version = "0.2.0"`,
+  `snitchd_sha256 = "a51cf6d6c27e1af9de2487f0613cee1f0ef061e020a99e1065feb669dc45d291"`.

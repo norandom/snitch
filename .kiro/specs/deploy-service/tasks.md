@@ -60,7 +60,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
     contracts_trial_test.go (skip the root-less verb in the every-verb loop)_
   - _Requirements: 3.1_
 
-- [ ] 2. A release to pin
+- [x] 2. A release to pin
 - [x] 2.1 The release workflow
   - The lint workflow becomes callable from another workflow (its jobs unchanged); a release
     workflow on `v*` tags runs it first, then builds the static amd64 binary with the version
@@ -77,7 +77,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Boundary: .github/workflows/release.yml, .github/workflows/lint.yml, README.md (Release
     and Service paragraphs)_
   - _Requirements: 1.1, 1.3, 1.4, 4.1_
-- [ ] 2.2 Tag v0.2.0 and verify the release
+- [x] 2.2 Tag v0.2.0 and verify the release
   - Only after the operator's go (a tag push publishes a release): commit group 1 and 2.1 if
     not yet committed, check the diff for secrets, push `main`, wait for lint to be green, then
     tag that commit `v0.2.0` and push the tag; watch the release workflow
@@ -221,3 +221,4 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 1.3: `check` calls `rules.Load`/`Resolve`/`Encode` directly (no stat-then-load window; a missing file is exit 1 `<path>: does not exist`); errors print as `snitchd check: <path>:<line>: <reason>`; the unresolved line is `unresolved: <program> <pattern> (<reason>)`, one per pattern (3.1 and the deploy check read that shape). The every-verb contract test skips root-less verbs (`check` uses no probes or trial delegates): a verb that needs none of them is marked `root: false` and gets its own contract tests.
 - 3.1: 18 programs, 13 rules, 15 map entries (the two proto-less DNS rules expand to tcp+udp); on this VM only the Go toolchain glob is unresolved (the tools are installed here). B3 (Anthropic domains for any program) was missing from research.md's inventory and is covered as a deferred comment under `claude`; research.md fixed.
 - 2.1: the publish step is an explicit if/else on `gh release view` (a failed upload no longer falls through into `create`); `go build -o dist/snitchd` creates `dist/`; the reviewer ran shellcheck over the `run:` blocks via `uvx --from shellcheck-py shellcheck`, which also works locally for later shell tasks.
+- 2.2: `git tag -a` needs the same `-c user.name/user.email` as commits (no global identity on this VM). Release run 38133561179 green on the first try; digest a51cf6d6…5d291 recorded in research.md for the VM pin.
