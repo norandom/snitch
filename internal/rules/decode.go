@@ -115,7 +115,7 @@ func tableLines(src []byte) (map[string][]int, error) {
 func convertRule(r rawRule, line int) (Rule, error) {
 	rule := Rule{Program: r.Program, Note: r.Note, Count: r.Count, First: r.First, Last: r.Last, Line: line}
 	var err error
-	if rule.To, err = parsePrefix(r.To); err != nil {
+	if rule.To, err = ParsePrefix(r.To); err != nil {
 		return rule, err
 	}
 	if rule.Proto, err = parseProto(r.Proto); err != nil {
@@ -128,8 +128,10 @@ func convertRule(r rawRule, line int) (Rule, error) {
 	return rule, err
 }
 
-// parsePrefix accepts a CIDR prefix or a bare address (a /32 or /128), canonicalised.
-func parsePrefix(s string) (netip.Prefix, error) {
+// ParsePrefix reads a rule's `to`: a CIDR prefix (masked to its network) or a bare address
+// without a zone (a /32 or /128). The API's rule edits parse their `to` with it, so a key
+// written over the socket is the key the file would have.
+func ParsePrefix(s string) (netip.Prefix, error) {
 	if p, err := netip.ParsePrefix(s); err == nil {
 		return p.Masked(), nil
 	}

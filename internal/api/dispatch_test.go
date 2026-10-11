@@ -6,6 +6,7 @@ import (
 
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -264,5 +265,21 @@ func TestServerSetOperatorFollowsTheFile(t *testing.T) {
 	s.SetOperator(0)
 	if s.roleOf(user) != Reader || s.roleOf(&unix.Ucred{Uid: 0}) != Writer {
 		t.Fatal("no operator: only root writes")
+	}
+}
+
+// A refused write is journaled too, so a reader probing the write verbs leaves a trace: the
+// line names the type and the uid, and is the only line a refusal leaves.
+func TestServerRefusedWritesAreLogged(t *testing.T) {
+	f := newFixture(t)
+	f.listen(nil)
+	p := f.dial()
+	p.errorOf(p.ask(writeRequests["rule.add"]))
+	p.errorOf(p.ask(writeRequests["end"]))
+	statusOk(t, p)
+	want := []string{"api: rule.add by uid 1000 refused: write requires the operator",
+		"api: end by uid 1000 refused: write requires the operator"}
+	if got := f.lines(&f.log); !reflect.DeepEqual(got, want) {
+		t.Fatalf("log:\n got %q\nwant %q", got, want)
 	}
 }

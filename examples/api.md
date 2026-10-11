@@ -113,7 +113,8 @@ given; reconnect after the file changes.
 
 Every write, accepted or refused by its backend, leaves one journal line with the caller's uid,
 the request and the outcome: `api: trial by uid 1000 {"type":"trial","id":8,"duration":"10m"}
--> ok: enforce until ...` or `-> error: ...`.
+-> ok: enforce until ...` or `-> error: ...`. A write a reader attempted is journaled too:
+`api: rule.add by uid 1000 refused: write requires the operator`.
 
 ## Requests
 

@@ -1,7 +1,7 @@
 // dispatch.go: one connected client's subscription flags and the verb table. A parsed request
 // goes through the role check (the write set is auth.go's) and then its handler; writes are
-// audited with the peer's uid before the reply leaves. Handlers return a Reply or an Error
-// and dispatch stamps type and id, so every line gets exactly one answer.
+// audited with the peer's uid before the reply leaves, refused ones included. Handlers return
+// a Reply or an Error and dispatch stamps type and id, so every line gets exactly one answer.
 package api
 
 import (
@@ -59,6 +59,7 @@ func (s *Server) dispatch(c *client, line []byte) any {
 	var out any
 	if IsWrite(req.Type) && c.Role != Writer {
 		out = Error{Error: req.Type + ": write requires the operator"}
+		s.d.Log(journal(c, req) + " refused: write requires the operator")
 	} else {
 		out = run(s, c, req)
 		if IsWrite(req.Type) {
@@ -82,8 +83,14 @@ func stamped(out any, id int) any {
 	return nil
 }
 
-// audit is the journal line every write leaves: the user, the request and the outcome
-// (Req 5.5).
+// journal is how every write's log line starts: the request type and the peer's uid. A
+// refused write (a reader probing the write verbs) leaves one too, from dispatch.
+func journal(c *client, req Request) string {
+	return "api: " + req.Type + " by uid " + strconv.FormatUint(uint64(c.uid), 10)
+}
+
+// audit is the journal line every delegated write leaves: the user, the request and the
+// outcome (Req 5.5).
 func (s *Server) audit(c *client, req Request, out any) {
 	outcome := "ok"
 	switch v := out.(type) {
@@ -92,7 +99,7 @@ func (s *Server) audit(c *client, req Request, out any) {
 	case Error:
 		outcome = "error: " + v.Error
 	}
-	s.d.Log("api: " + req.Type + " by uid " + strconv.FormatUint(uint64(c.uid), 10) + " " + strings.TrimSpace(string(Encode(req))) + " -> " + outcome)
+	s.d.Log(journal(c, req) + " " + strings.TrimSpace(string(Encode(req))) + " -> " + outcome)
 }
 
 func (s *Server) status(_ *client, _ Request) any {

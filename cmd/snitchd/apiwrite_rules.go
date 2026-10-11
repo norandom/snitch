@@ -50,7 +50,7 @@ type editKey struct {
 func parseEditKey(req api.Request) (editKey, error) {
 	k := editKey{program: req.Program}
 	var err error
-	if k.to, err = toPrefix(req.To); err != nil {
+	if k.to, err = rules.ParsePrefix(req.To); err != nil {
 		return k, err
 	}
 	switch req.Proto {
@@ -68,19 +68,6 @@ func parseEditKey(req api.Request) (editKey, error) {
 	}
 	k.port = uint16(req.Port)
 	return k, nil
-}
-
-// toPrefix accepts what the rules file's `to` accepts: a CIDR prefix, or a bare address
-// without a zone, canonicalised the same way.
-func toPrefix(s string) (netip.Prefix, error) {
-	if p, err := netip.ParsePrefix(s); err == nil {
-		return p.Masked(), nil
-	}
-	a, err := netip.ParseAddr(s)
-	if err != nil || a.Zone() != "" {
-		return netip.Prefix{}, fmt.Errorf("to %q: not an address or prefix", s)
-	}
-	return netip.PrefixFrom(a, a.BitLen()), nil
 }
 
 func (k editKey) String() string {

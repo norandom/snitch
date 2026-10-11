@@ -589,19 +589,66 @@ func WriteWith(path string, f *File, header string) error // the overlay writer;
 - Every write over the API logs one audit line before replying.
 
 ### Contracts
-- `api.New`: `Require` non-nil `Table`, `Facts`, `Log`, `Now` (`TestNewRequiresDeps`).
-- `Server.Emit`: `Require(!e.Time.IsZero())`; `Ensure` no blocking: the test fills a client's
-  queue and times `Emit` under 1 ms (`TestEmitNeverBlocks`); `TestObserveUnderSnapshotStorm`
-  keeps a hot `snapshot` loop running and requires `Observe` p99 under 1 ms;
-  `TestAcceptErrorDoesNotEndJob` injects accept errors and the job keeps running.
-- `Table`: `Invariant(len(m) <= Max)` after insert (`TestTableEvictsAtMax`); cookie map keys
-  present (`TestCookiesFollowEntries`); window index in range (`TestWindowIndex`).
-- `auth.Role`: `Ensure` reader for unknown creds (`TestRoleUnknownIsReader`).
-- `rules.Merge`: `Require` non-nil files; `Ensure` dense ids after merge and every rule has a
-  `Source` (`TestMergeContracts`).
-- `trialOps`: `Require` store dir non-empty; outputs equal the CLI's incl. "not following" and
-  "zero rules" (`TestTrialOpsTextsMatchCLI`).
-- `WriteWith`: `Require(header != "")` (the overlay writer; `WriteFile` stays the learned writer).
+The `internal/contract` conventions of the earlier designs apply (`Require` on a function's
+inputs, `Ensure` before return, `Invariant` on state; a violation is a bug and exits the daemon,
+which detaches the kernel programs: contracts fail open; an operator error returns `error`).
+The implemented set (audited in 4.4), each with the test that trips exactly it; a contract that
+is true by construction says so and names the behaviour test that pins it instead.
+
+`internal/api`:
+- `New` requires non-nil `Table`, `Facts`, `Log`, `Now`; `Server.Job` requires the listener;
+  `Server.Emit` requires a non-zero `Event.Time`. `server_test`: `TestNewRequiresDeps` (all
+  three).
+- `Server.Emit` never blocks and the pump never waits for a client: a full queue drops and
+  `Emit` stays under 1 ms (`server_load_test`: `TestEmitNeverBlocks`); `Table.Observe` p99
+  under 1 ms under a hot `snapshot` loop (`TestObserveUnderSnapshotStorm`); an accept error
+  does not end `Server.Job` (`TestAcceptErrorDoesNotEndJob`). Behaviour tests, not
+  `contract` calls.
+- `dispatch` holds that every parsed request type has a handler (`contracts_test`:
+  `TestContractDispatchNeedsAHandlerForEveryType`; `dispatch_test`:
+  `TestServerVerbTableMatchesTheRequestTypes` keeps the verb table and the codec's
+  `requestTypes` equal). `stamped` ensures a handler answered with a `Reply` or an `Error`
+  (`contracts_test`: `TestContractStampedNeedsAReplyOrAnError`).
+- `Table`: `NewTable` requires a clock (`table_test`: `TestTableRequiresClock`); `insert`
+  requires `Max > 0` (`contracts_test`: `TestContractInsertNeedsAPositiveMax`) and holds
+  `len(m) <= Max` after the insert (`table_test`: `TestTableEvictsAtMax`); `AddBytes` holds
+  that a bound cookie maps to a present entry (`bytes_test`: `TestBytesCookiesFollowEntries`);
+  `remove`'s "no cookie left behind" is true by construction (a delete then a lookup), no trip
+  test. `window.add` ensures the ring index is in range (`window_test`: `TestWindowIndex`).
+- `newLineReader` requires a positive limit, `Encode` ensures the value encoded and spans one
+  line, `NewClient` requires a connection and a positive deadline. `codec_test`:
+  `TestCodecAndClientContracts` (the one-line postcondition cannot be tripped: `encoding/json`
+  escapes newlines).
+- `RoleFor` ensures a nil credential is a `Reader`: true by construction; `auth_test`:
+  `TestRoleUnknownIsReader` pins the behaviour.
+
+`internal/rules`:
+- `Merge` requires both files and ensures every merged program and rule carries a `Source`
+  (`merge_test`: `TestMergeContracts`). Dense ids are `validate`'s invariant from the
+  rule-loading design (`contracts_internal_test`: `TestContractIDsMustBeDense`), which `Merge`
+  re-runs on the union.
+- `WriteWith` requires a header (`write_test`: `TestWriteWithRequiresAHeader`); `WriteFile`
+  stays the learned writer.
+- `Learned.Observations` ensures the dirty flag is what it was: true by construction;
+  `learn_view_test`: `TestLearnObservationsLeavesDirtyAloneAndSorts` pins it. `Learned.Observe`
+  requires a valid address (`contracts_internal_test`: `TestContractObserveNeedsAnAddress`).
+- `ParsePrefix` (the one reading of a rule's `to`, shared with the API's rule edits) has no
+  contract: a bad `to` is an operator error, returned (`prefix_test`: `TestParsePrefix`).
+
+`cmd/snitchd`:
+- `trialOps` requires a store dir and its `now`, `boot`, `kill`, `rules` delegates
+  (`trialops_test`: `TestContractTrialOpsNeedsAStoreDir`); its texts equal the CLI's incl.
+  "not following" and "zero rules" (`TestTrialOpsTextsMatchCLI`).
+- `apiJobs` requires the reloader when the API is on; `ruleAdd` and `ruleRemove` require a
+  published snapshot (`contracts_test`: `TestContractAPIEditsNeedTheFirstSnapshot`).
+  `installAPI` requires the kill reader, the rules-error reader and a start time, `facts` the
+  installed API, `listenAPI` the path and the log, `operatorUID` its delegates (`api_test`:
+  `TestOperatorAndListenerContracts`).
+- `operatorWatch.tick` requires its path and delegates, `operatorJob` the installed server
+  (`apioperator_test`: `TestOperatorWatchContracts`).
+- `newSweeper` requires every delegate (`counting_test`: `TestContractSweeperRequiresDelegates`).
+- `toEvent` requires the event, the exe fallback and a non-zero time; `rulesView` requires a
+  built snapshot (`apievent_test`: `TestToEventContracts`).
 
 ## Error Handling
 

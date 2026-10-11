@@ -119,10 +119,11 @@ func TestToEventContracts(t *testing.T) {
 }
 
 // Req 4.2, 4.3: rules and programs with the file each came from, in file order; a program is
-// resolved when one executable maps; the port is the single port or 0 (any).
+// resolved when one executable maps (a declared path that is absent resolves nothing: Resolved
+// false, Executables 0); the port is the single port or 0 (any).
 func TestRulesViewSourcesAndCounts(t *testing.T) {
 	self, _ := os.Executable()
-	base := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\", \"/nonexistent/me\"]\n\n[[program]]\nname = \"ghost\"\npaths = []\nnote = \"nothing\"\n\n[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\nnote = \"base\"\n\n[[rule]]\nprogram = \"any\"\nto = \"10.0.0.0/8\"\nproto = \"udp\"\nverdict = \"deny\"\n")
+	base := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\", \"/nonexistent/me\"]\n\n[[program]]\nname = \"ghost\"\npaths = []\nnote = \"nothing\"\n\n[[program]]\nname = \"absent\"\npaths = [\"/nonexistent/absent\"]\n\n[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\nnote = \"base\"\n\n[[rule]]\nprogram = \"any\"\nto = \"10.0.0.0/8\"\nproto = \"udp\"\nverdict = \"deny\"\n")
 	ov := writeOverlay(t, "[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"deny\"\nnote = \"local\"\n\n[[rule]]\nprogram = \"ghost\"\nto = \"8.8.8.8\"\nproto = \"tcp\"\nport = 443\nverdict = \"allow\"\n")
 	snap, err := loadRules(base, ov, func(string) {})
 	if err != nil || snap.rulesErr != nil {
@@ -137,6 +138,7 @@ func TestRulesViewSourcesAndCounts(t *testing.T) {
 	wantPrograms := []api.ProgramView{
 		{Name: "me", Paths: []string{self, "/nonexistent/me"}, Resolved: true, Executables: 1, Source: base},
 		{Name: "ghost", Paths: []string{}, Resolved: false, Executables: 0, Source: base},
+		{Name: "absent", Paths: []string{"/nonexistent/absent"}, Resolved: false, Executables: 0, Source: base},
 	}
 	if !reflect.DeepEqual(rs, wantRules) {
 		t.Fatalf("rules wrong:\n got %+v\nwant %+v", rs, wantRules)

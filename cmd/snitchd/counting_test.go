@@ -224,3 +224,23 @@ func TestSweepJobsOnlyWithCountingAndATable(t *testing.T) {
 		t.Fatalf("counting with the API: %d jobs", len(js))
 	}
 }
+
+// A cookie is forgotten only after a COMPLETE read has gone 10 min without it: a failed read
+// shows nothing, so forgetting on it would turn every cookie's next value into a first sight
+// (double counting) as soon as the map was unreadable for ten minutes.
+func TestSweepForgetsOnlyAfterACompleteRead(t *testing.T) {
+	r := newSweepRig(t)
+	r.bytes.rows[9] = 100
+	r.tick(t, 0)
+	delete(r.bytes.rows, 9)
+	r.bytes.err = errors.New("lookup: EINTR")
+	r.tick(t, 11*time.Minute)
+	if _, kept := r.s.last[9]; !kept {
+		t.Fatal("a failed read at +11 min must not forget the cookie")
+	}
+	r.bytes.err = nil
+	r.tick(t, 0)
+	if _, kept := r.s.last[9]; kept {
+		t.Fatal("a complete read at +11 min forgets the cookie")
+	}
+}
