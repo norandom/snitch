@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -54,6 +55,7 @@ type daemon struct {
 	onMode   func(trial.Mode, string)
 	counting bool
 	api      apiState
+	editMu   sync.Mutex // one overlay edit over the API at a time: load, change, validate, write
 }
 
 // startup: rules first (a bad file is reported before anything touches the kernel), then the

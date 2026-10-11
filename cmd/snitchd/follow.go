@@ -35,18 +35,26 @@ func (f *follower) job() jobs.Job { return jobs.Every(heartbeatPeriod, f.tick) }
 
 func (f *follower) tick(context.Context) error { f.require(); f.decide(f.now()); return nil }
 
-// decide is one tick: Read → Decide → apply on a change (the same decision again is silent)
-// → clear what the decision spent → remember. Learning removes nothing: the files are not
-// read for their meaning, so a trial started by mistake is still there to be ended.
+// decide is one tick: Read → Decide → remove the spent trial → apply on a change (the same
+// decision again is silent) → clear the kept file's problem → remember. The spent trial goes
+// before apply: the state event apply sends (daemon-api Req 4.5) reads the store and must not
+// carry a deadline that just passed; its removal failure is logged after the mode line, where
+// the journal has it. Learning removes nothing: the files are not read for their meaning, so
+// a trial started by mistake is still there to be ended.
 func (f *follower) decide(now time.Time) {
 	f.require()
 	st := f.store.Read()
 	dec := trial.Decide(now, f.boot, st, f.learn)
+	var spent error
+	if !f.learn && dec.ClearTrial {
+		spent = f.store.ClearTrial()
+	}
 	if f.changed(dec) {
 		f.apply(dec.Mode, f.reason(st, dec))
 	}
 	if !f.learn {
-		f.clear(st, dec)
+		f.failed(spent, f.store.TrialPath())
+		f.clearKept(st, dec)
 	}
 	f.last = dec
 }
@@ -87,30 +95,28 @@ func (f *follower) reason(st trial.State, dec trial.Decision) string {
 	return "trial ended by the operator: file removed"
 }
 
-// clear removes a spent trial (ended, foreign boot, malformed, superseded by keep) and a kept
-// file that Read reported as a Problem (Decide only ever clears the trial). A problem the
-// reason does not already carry (a broken kept file next to a live trial) gets its own line
-// when the file goes (Req 3.5: log what was found). A failed removal is logged and retried on
-// the next tick; the mode is already the safe one.
-func (f *follower) clear(st trial.State, dec trial.Decision) {
-	if dec.ClearTrial {
-		f.remove(f.store.ClearTrial, f.store.TrialPath())
-	}
+// clearKept removes a kept file that Read reported as a Problem (Decide only ever clears the
+// trial, decide removed it already: ended, foreign boot, malformed, superseded by keep). A
+// problem the reason does not already carry (a broken kept file next to a live trial) gets
+// its own line when the file goes (Req 3.5: log what was found). A failed removal is logged
+// and retried on the next tick; the mode is already the safe one.
+func (f *follower) clearKept(st trial.State, dec trial.Decision) {
 	for _, p := range st.Problems {
 		if !strings.HasPrefix(p, f.store.KeptPath()+":") {
 			continue
 		}
-		if f.remove(f.store.ClearKept, f.store.KeptPath()) && !strings.Contains(dec.Reason, p) {
+		if !f.failed(f.store.ClearKept(), f.store.KeptPath()) && !strings.Contains(dec.Reason, p) {
 			f.log("file removed: " + p)
 		}
 	}
 }
 
-func (f *follower) remove(remove func() error, path string) bool {
-	if err := remove(); err != nil {
-		f.log("remove " + path + ": " + err.Error())
+// failed logs a removal's error (nil is a success, or nothing removed) and says whether it failed.
+func (f *follower) failed(err error, path string) bool {
+	if err == nil {
 		return false
 	}
+	f.log("remove " + path + ": " + err.Error())
 	return true
 }
 

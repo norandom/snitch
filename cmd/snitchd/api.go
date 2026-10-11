@@ -2,7 +2,8 @@
 // file, the listener, the facts behind a status reply, the state hooks and the wiring of the
 // server into the job list. Fail-safe: the API is optional (no -api, or a listener that cannot
 // be created, leaves the daemon protecting the host without it, Req 1.9); the server holds no
-// map and no store, it only reads delegates; the write verbs are stubs until task 3.4.
+// map and no store, it only reads delegates; the write verbs (apiwrite.go, apiwrite_rules.go)
+// reach the trial files only through trialOps and the rules only through the overlay file.
 package main
 
 import (
@@ -42,7 +43,7 @@ type apiState struct {
 
 // apiJobs is the one line daemon.go adds: nothing without -api; otherwise the listener (a
 // failure is logged and the API skipped, Req 1.9), the server with the daemon's delegates,
-// and its job.
+// its job and the operator file's watch (apioperator.go).
 func (d *daemon) apiJobs(r *reloader) []jobs.Job {
 	if d.cfg.api == "" {
 		return nil
@@ -54,7 +55,7 @@ func (d *daemon) apiJobs(r *reloader) []jobs.Job {
 	}
 	d.installAPI(apiState{operator: operatorUID(operatorPath, lookupUID, os.Stat, d.log),
 		kill: killOf(d.objs.Kill), rulesErr: r.rulesError, started: time.Now()})
-	return []jobs.Job{d.api.server.Job(l)}
+	return append([]jobs.Job{d.api.server.Job(l), d.operatorJob(operatorPath)}, d.sweepJobs()...)
 }
 
 // installAPI builds the table and the server over the daemon's delegates and installs the
@@ -64,17 +65,12 @@ func (d *daemon) installAPI(a apiState) {
 	a.table = api.NewTable(time.Now)
 	a.server = api.New(api.Deps{Operator: a.operator, Table: a.table, Facts: d.facts, Rules: d.rulesFacts,
 		Learned: d.learnedFacts, Log: d.log, Now: time.Now,
-		Trial:    notAvailable, // task 3.4: the trial seam (trialOps) replaces this stub
-		RuleEdit: notAvailable, // task 3.4: the overlay flow replaces this stub
-	})
+		Trial: d.apiTrial, RuleEdit: d.apiRuleEdit})
 	d.api = a
 	d.emit = a.server.Emit
 	d.onMode = func(m trial.Mode, reason string) { a.server.StateChanged(d.stateEvent(m, reason, false)) }
 	d.st.onPublish = func() { a.server.StateChanged(d.stateEvent(trial.Mode(d.mode.Load()), "rules reloaded", true)) }
 }
-
-// notAvailable answers the write verbs until task 3.4 wires them.
-func notAvailable(api.Request, uint32) (string, error) { return "", errors.New("not available") }
 
 // stateEvent is the state message (Req 4.5): the mode, what the store says about the trial
 // and kept, and whether the rules changed.
