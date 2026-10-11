@@ -267,3 +267,25 @@ func TestWatchRequiresAPathList(t *testing.T) {
 	r, _ := newReloader(t, baseFor(t), &recorder{})
 	contracttest.Panics(t, contract.Precondition, func() { r.stampAll() })
 }
+
+// A re-resolve that changes nothing is quiet: no map operation, no publish (so no state event
+// to the API's subscribers every 10 s), and the current snapshot stays the same pointer.
+func TestReloadReresolveWithoutAChangeIsQuiet(t *testing.T) {
+	self, _ := os.Executable()
+	path := writeRules(t, "[[program]]\nname = \"me\"\npaths = [\""+self+"\"]\n\n[[rule]]\nprogram = \"me\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n")
+	rec := &recorder{}
+	r, _ := newReloader(t, path, rec)
+	first, err := loadRules(path, "", func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.st.publish(first)
+	published := 0
+	r.st.onPublish = func() { published++ }
+	if !r.reload(false) {
+		t.Fatal("a no-change re-resolve must still report success")
+	}
+	if published != 0 || len(rec.log) != 0 || r.st.current() != first {
+		t.Fatalf("want no publish, no map op and the same snapshot; got publishes %d, ops %q, same %v", published, rec.log, r.st.current() == first)
+	}
+}

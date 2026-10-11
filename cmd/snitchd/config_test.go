@@ -41,6 +41,7 @@ func TestChecksRefuseUnsafeCombinations(t *testing.T) {
 		want string
 	}{
 		{"enforce without duration", []string{"-mode", "enforce"}, "needs -duration"},
+		{"api under the state dir", []string{"-state-dir", "/var/lib/snitch", "-api", "/var/lib/snitch/api.sock"}, "must not be under -state-dir"},
 		{"learn with enforce", []string{"-mode", "enforce", "-duration", "10s", "-learn"}, "learning never denies"},
 		{"unknown mode", []string{"-mode", "panic"}, "mode"},
 		{"negative duration", []string{"-duration", "-5s"}, "duration"},

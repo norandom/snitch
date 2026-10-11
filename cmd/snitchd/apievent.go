@@ -94,7 +94,7 @@ func singlePort(ports []uint16) int {
 }
 
 // learnedView converts the learner's projection to the wire (Req 4.4); times are RFC 3339
-// in UTC. Never nil: an empty learned set is an empty list on the wire.
+// in UTC. An empty learned set is omitted on the wire (omitempty).
 func learnedView(in []rules.Observed) []api.Observation {
 	out := make([]api.Observation, 0, len(in))
 	for _, o := range in {

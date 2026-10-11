@@ -33,6 +33,11 @@ type Changes struct {
 	DelRules    []RuleKey
 }
 
+// Empty says whether the diff changes nothing in the maps.
+func (c Changes) Empty() bool {
+	return len(c.PutPrograms)+len(c.DelPrograms)+len(c.PutRules)+len(c.DelRules) == 0
+}
+
 // Encode produces the map entries for a Resolved. A rule with ports but no protocol becomes
 // TCP and UDP entries per port: the kernel probes (proto, port), (proto, 0), (0, 0), never
 // (0, port).

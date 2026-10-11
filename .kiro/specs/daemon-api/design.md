@@ -155,11 +155,12 @@ internal/api/
 ├── codec.go                     # NEW line reader with limit, encoder; request parsing (type, id, fields)
 ├── auth.go                      # NEW Role (reader/writer) from Ucred and operator uid; the write-set check
 ├── client.go                    # NEW per-client queue, writer goroutine, drop counter, write deadline
-├── server.go                    # NEW Listener job: accept loop, dispatcher (verb table), subscriptions, state events
+├── server.go                    # NEW Listener job: accept loop, subscriptions, fan-out, state events
+├── dispatch.go                  # NEW the verb table and request handlers, the audit line
 ├── table.go                     # NEW connection table: key, entry, dedupe, counts, bytes, LRU eviction, snapshot
 ├── window.go                    # NEW per-entry minute/hour buckets and window queries (15m 30m 1h 24h 7d), rate
 ├── bytes.go                     # NEW cookie → key join, unknown bucket, sweep input type
-└── *_test.go                    # one per file; net.Pipe/unix socket in t.TempDir()
+└── *_test.go                    # one per file (+ server_load_test.go, contracts_test.go); net.Pipe/unix socket in t.TempDir()
 internal/rules/
 ├── merge.go                     # NEW Merge(base, overlay) with precedence and Source; expandedKeys shared with validate
 ├── file.go                      # + Source on Program and Rule
@@ -172,7 +173,9 @@ internal/rules/
 cmd/snitchd/
 ├── api.go                       # NEW wiring: operator file, listener, getters, emit delegate, state hooks, apiJobs (server, sweep)
 ├── apievent.go                  # NEW kernel event → api.Event, rule and program views
-├── apiwrite.go                  # NEW the API's write handlers: trial seam calls, overlay add/remove with pre-checks, audit log
+├── apiwrite.go                  # NEW the API's trial verbs through the seam
+├── apiwrite_rules.go            # NEW rule.add / rule.remove into the overlay (pre-checks, merge-validate, write)
+├── apioperator.go               # NEW the operator file watch (SetOperator on a stamp change)
 ├── counting.go                  # NEW cgroup root detection, attach, sweep job (2 s), cookie join feed
 ├── trialops.go                  # NEW trialOps: start/keep/unkeep/end on the store with the verbs' texts and refusals
 ├── ctl_verbs.go                 # calls trialOps; CLI parsing, probes and record checks stay
@@ -273,11 +276,11 @@ flowchart TD
 | 1.3 | peercred roles | auth.go, api.go (operator file) | `Role(ucred, operator)` | decision table |
 | 1.4 | reader write refused, connection kept | server.go dispatcher | error envelope | decision table |
 | 1.5 | many clients | server.go, client.go | | |
-| 1.6 | bounded backlog, drops counted, stuck client closed, never blocks | client.go | `send` non-blocking, `dropped` field, 5 s deadline | event flow |
+| 1.6 | bounded backlog, drops counted, stuck client closed, never blocks | client.go | `send` non-blocking, a `dropped` line, 5 s deadline | event flow |
 | 1.7 | JSON lines, type, id | types.go, codec.go | envelope | |
 | 1.8 | bad input errors | codec.go, server.go | error envelope, 64 KiB | |
 | 1.9 | `-api` off, soft listen failure | config.go, api.go | | |
-| 2.1 | events within 1 s, fields | events.go `toEvent`, types.go Event | | event flow |
+| 2.1 | events within 1 s, fields | apievent.go `toEvent`, types.go Event | | event flow |
 | 2.2 | dedupe window | table.go | 10 s | event flow |
 | 2.3 | exclude local | server.go subscribe options | `local: bool` | |
 | 2.4 | 2 s summary | table.go dirty set, server.go | Summary | |
@@ -299,7 +302,7 @@ flowchart TD
 | 5.1 | trial verbs via seam | trialops.go, apiwrite.go | `trialOps` | decision table |
 | 5.2-5.3 | overlay add/remove | apiwrite.go, rules.Merge, WriteWith | | rule edit flow |
 | 5.4 | overlay precedence, validation, survives deploy | merge.go, state.go, reload.go | | |
-| 5.5 | audit line | apiwrite.go | `d.log` | |
+| 5.5 | audit line | internal/api dispatch.go (`audit`, refused writes too) | | |
 | 5.6 | no other writes | server verb table | | decision table |
 | 5.7 | write failure | apiwrite.go | error | |
 | 6.1 | schema doc | examples/api.md | | |

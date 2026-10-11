@@ -26,7 +26,7 @@ type reloader struct {
 	mu        sync.Mutex // one reload at a time: the diff is computed against the current base
 	path      string
 	overlay   string
-	paths     []string // the files the watch stamps: rules, overlay, later the operator file
+	paths     []string // the files the watch stamps: rules and overlay (the operator file has its own watch)
 	st        *state
 	programs  putDel
 	rules     putDel
@@ -88,18 +88,12 @@ func (r *reloader) reload(full bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cur := r.st.current()
-	var next *snapshot
-	var err error
-	if full || cur == nil {
-		next, err = r.load(r.path, r.overlay, r.log)
-	} else {
-		next, err = reresolve(cur, r.log)
-	}
-	if err == nil && next.rulesErr != nil && full {
-		err = next.rulesErr
+	next, ch, err := r.next(cur, full)
+	if err == nil && !full && ch.Empty() {
+		return true // a re-resolve that changed nothing: no apply, no publish, no summary line
 	}
 	if err == nil {
-		err = apply(r.programs, r.rules, rules.Diff(cur.ent, next.ent))
+		err = apply(r.programs, r.rules, ch)
 	}
 	if err != nil {
 		r.lastErr, r.lastErrAt = err, r.clock()
@@ -113,6 +107,25 @@ func (r *reloader) reload(full bool) bool {
 	r.st.publish(next)
 	fmt.Println(summary(next))
 	return true
+}
+
+// next builds the candidate snapshot (a full load, or a re-resolve of the current file) and
+// the map diff against the current one; an invalid overlay counts as an error on a full load.
+func (r *reloader) next(cur *snapshot, full bool) (*snapshot, rules.Changes, error) {
+	var next *snapshot
+	var err error
+	if full || cur == nil {
+		next, err = r.load(r.path, r.overlay, r.log)
+	} else {
+		next, err = reresolve(cur, r.log)
+	}
+	if err == nil && next.rulesErr != nil && full {
+		err = next.rulesErr
+	}
+	if err != nil {
+		return nil, rules.Changes{}, err
+	}
+	return next, rules.Diff(cur.ent, next.ent), nil
 }
 
 // reresolve keeps the parsed file (and its startup record) and only looks at the executables

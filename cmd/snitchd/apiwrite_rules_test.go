@@ -184,6 +184,7 @@ func TestApiWriteRuleAddRefusalsLeaveTheFileAlone(t *testing.T) {
 		req        api.Request
 	}{
 		{"verdict", `verdict "maybe": want allow or deny`, add("curl", "9.9.9.9", "", 0, "maybe")},
+		{"deny for any", "a deny for every program is deny by default without a deadline: use snitchd trial", add("any", "0.0.0.0/0", "", 0, "deny")},
 		{"to", `to "nowhere": not an address or prefix`, add("curl", "nowhere", "", 0, "deny")},
 		{"zone", `to "fe80::1%eth0": not an address or prefix`, add("curl", "fe80::1%eth0", "", 0, "deny")},
 		{"proto", `proto "icmp": want tcp, udp or any`, add("curl", "9.9.9.9", "icmp", 0, "deny")},

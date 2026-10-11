@@ -101,7 +101,8 @@ The role is decided once per connection from the peer's credentials (`SO_PEERCRE
   has, plus `trial`, `keep`, `unkeep`, `end`, `rule.add`, `rule.remove`.
 
 A write from a reader is refused with `<type>: write requires the operator`, for example
-`trial: write requires the operator`; nothing is changed and nothing is logged.
+`trial: write requires the operator`; nothing is changed, and the refusal is journaled with the
+uid like an accepted write.
 
 `/etc/snitch/operator` holds one user name on its first line (the VM repo deploys it with the
 desktop user). The daemon reads it when it starts and again when the file changes, with the
@@ -326,8 +327,9 @@ one named after the path's base name (a suffix on collision). A path whose execu
 already mapped to a program is refused with `executable is program curl: use that name`. The
 overlay is loaded, the rule appended, the union with the base validated (an invalid result is
 refused and the file untouched) and written; the daemon's reload picks it up within 2 s and
-every subscriber gets a `state` line with `rulesChanged: true`. `text` is the outcome sentence
-of task 3.4's write flow; show it, do not parse it. A missing one answers `missing field: program or path`, `missing field: to` or
+every subscriber gets a `state` line with `rulesChanged: true`. `text` is the daemon's outcome
+sentence (`rule added: <program> to <to> [proto] [port N] <verdict> (applies within 5 s)`); show
+it, do not parse it. A missing one answers `missing field: program or path`, `missing field: to` or
 `missing field: verdict`.
 
 ```json
@@ -335,7 +337,7 @@ of task 3.4's write flow; show it, do not parse it. A missing one answers `missi
 ```
 
 ```json
-{"type": "reply", "id": 12, "ok": true, "text": "rule added: curl -> 9.9.9.9/32 tcp 443 deny (/etc/snitch/rules.d/local.toml)"}
+{"type": "reply", "id": 12, "ok": true, "text": "rule added: curl to 9.9.9.9/32 tcp port 443 deny (applies within 5 s)"}
 ```
 
 ### rule.remove
@@ -350,7 +352,7 @@ edit (`edit /etc/snitch/rules.toml`); ids are never used, they change on every r
 ```
 
 ```json
-{"type": "reply", "id": 13, "ok": true, "text": "rule removed: curl -> 9.9.9.9/32 tcp 443 (/etc/snitch/rules.d/local.toml)"}
+{"type": "reply", "id": 13, "ok": true, "text": "rule removed: curl to 9.9.9.9/32 tcp port 443 (applies within 5 s)"}
 ```
 
 ## Unsolicited lines
@@ -408,8 +410,8 @@ A mode, trial or rules change, to every subscribed connection. `mode` is `monito
 unchanged). The reasons a mode change carries are the daemon's own log reasons: `trial until
 <deadline>`, `trial ended at its deadline`, `trial ended at boot`, `trial ended by the
 operator: file removed`, `enforce kept`, `enforce unkept: file removed`, `trial file
-unreadable: ..., removed`. The line for a trial that ended is sent before the file is cleared,
-so it carries the spent deadline once.
+unreadable: ..., removed`. For a trial that ended, the spent file is cleared first, so the line
+carries `trial: ""` and the reason names how it ended.
 
 ```json
 {"type": "state", "id": 0, "mode": "enforce", "trial": "2026-10-11T12:10:00Z", "kept": false, "rulesChanged": false, "reason": "trial until 2026-10-11T14:10:00+02:00"}

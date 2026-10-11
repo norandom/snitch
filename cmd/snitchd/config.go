@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -122,6 +124,14 @@ func checkFiles(cfg config) error {
 		return &usageError{"-overlay must not be the rules file: the overlay is merged over it"}
 	case cfg.learn && cfg.overlay == cfg.learned:
 		return &usageError{"-overlay must not be the learned file: learning writes it"}
+	case cfg.api != "" && under(cfg.api, cfg.stateDir):
+		return &usageError{"-api must not be under -state-dir: the socket's directory is made world-traversable"}
 	}
 	return nil
+}
+
+// under says whether path lies inside dir (the API socket's directory is re-moded to 0755).
+func under(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
 }

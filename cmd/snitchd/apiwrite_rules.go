@@ -125,6 +125,9 @@ func (d *daemon) ruleAdd(req api.Request) (string, error) {
 	if key.program, err = d.editProgram(snap, ov, req.Program, req.Path); err != nil {
 		return "", err
 	}
+	if key.program == "any" && verdict == rules.Deny {
+		return "", errors.New("a deny for every program is deny by default without a deadline: use snitchd trial")
+	}
 	ov.Rules = append(ov.Rules, rules.Rule{Program: key.program, To: key.to, Proto: key.proto, Ports: key.ports(),
 		Verdict: verdict, Note: req.Note, Source: d.cfg.overlay})
 	if err := d.writeOverlay(ov); err != nil {
