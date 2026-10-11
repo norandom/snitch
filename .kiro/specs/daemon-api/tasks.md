@@ -103,7 +103,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
     reload_test.go, daemon.go (loader call)_
   - _Depends: 2.1_
   - _Requirements: 1.9, 5.4_
-- [ ] 2.3 (P) The trial seam
+- [x] 2.3 (P) The trial seam
   - The verbs' file operations and their texts (start with bounds, extend and yes, keep, unkeep,
     end with at-boot) and the refusals that depend on the store, learning, the kill switch,
     following the files and the rule count move behind one seam the CLI handlers call; the CLI
@@ -239,3 +239,4 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
 ## Implementation Notes
 - 2.1: `LoadOverlay`/`ParseOverlay` load an overlay whose rules name base programs (plain `Load` rejects them as undeclared); `Merge` re-validates the union so an unknown program still fails there. Overlay writer is `WriteWith(path, f, header)`; `WriteFile(path, f)` stays the learned writer (daemon.go passes it by value). Shadowing is per base rule over expanded keys (a proto overlay rule replaces an any-proto base rule whole; pinned by a test a mutant required). Fixtures comparing whole records (`file_test.go`, `learn_test.go`) gained `Source`. Later tasks: load the overlay with `LoadOverlay`, write it with `WriteWith`.
 - 1.2: dedupe anchors on the last EMITTED event (a steady duplicate stream re-emits once per 10 s); windows are bucket-aligned (the bucket at now−win excluded; 15 m spans 14–15 min of wall time); `Snapshot` returns `([]Entry, error)` and is served from caches rebuilt by `Changed`, which returns every dirty row regardless of `since`; cookies idle ≥ `CookieIdle` (10 min) are expired by `Prune` (first review found the index unbounded and a whole-map invariant scan on the pump path: both fixed, Observe ≈ 6–14 µs with 200k live cookies). Sweep (3.5): call `AddBytes` per cookie delta, then `Prune(now)` once.
+- 2.3: `trialOps` in trialops.go; the CLI builds it with `ops(rec)` and maps errors with `report()` (`usageErr` → exit 2, `needsYes` carries the exact confirm sentence; both are types, match with `errors.As`). Multi-fault refusal order changed (kill/bounds now after the CLI's running/record checks); every single-fault text is byte-identical and no state can start a trial that could not before (21 mutants). ctl_verbs.go 286 → 203 lines. API (3.4): pass `yes` through from the request; `following = d.follow != nil`.
