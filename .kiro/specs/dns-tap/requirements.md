@@ -107,8 +107,9 @@ the Python client ran by name are expressible without listing addresses.
    at load as today for an invalid file), the overlay (base rules stay in effect, the error is reported as today) or the API
    request, with a message that names the rule and says a deny by name is not supported.
 4. If `to` is neither an address, a prefix, nor a well-formed domain name (labels of letters,
-   digits and hyphens, at most 253 characters, no leading dot or wildcard), the daemon shall
-   refuse it with a message that quotes the value.
+   digits and hyphens, at most 62 characters and 16 labels, no leading dot or wildcard), the
+   daemon shall refuse it with a message that quotes the value; a name rule matches at most 8
+   levels of subdomain below it (documented).
 5. The daemon shall treat a name rule's identity (program, name, protocol, port) like an address
    rule's for duplicates in a file and for shadowing between the overlay and the base file; a
    rule for a parent name and one for a child name are two rules.

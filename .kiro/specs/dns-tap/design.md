@@ -173,33 +173,34 @@ bpf/snitch.bpf.c                 # unchanged (decide, count_egress)
 internal/bpf/gen.go              # + second go:generate line: object Dns from ../../bpf/dns.bpf.c with its -type flags
 internal/bpf/dns_x86_bpfel.{go,o}# generated
 internal/dns/
-├── name.go                      # NEW ParseName (grammar, lowercase, trailing dot), Covers(rule, name), Key(name) [64]byte (".github.com" form), Suffixes
+├── name.go                      # NEW Covers(rule, name), Key(name) [64]byte (".github.com" form), Suffixes; the grammar lives in rules.ParseName
 ├── cache.go                     # NEW Cache: Learn(name, addrs, ttl, now) []Change, Expire(now) []Change, NameOf(addr), Names(addr), Len, bounds, eviction, counters
 ├── compile.go                   # NEW Compiler: Slots(rules) map[Key]Slots (domains map content, 4 per name), Keys(rule, addr) []RuleKey, Compiled set with ids and expiry, Recompile(snapshot rules, cache)
 ├── resolv.go                    # NEW Resolvers(r io.Reader) []netip.Addr from resolv.conf "nameserver" lines; ResolverKey(addr)
 ├── record.go                    # NEW Record{Name, TTL, Addrs} from bpf.DnsDnsAnswer (decode, bounds), Stats from the stats array
-└── *_test.go                    # name_test, cache_test, compile_test, resolv_test, record_test
+└── *_test.go                    # name_test, cache_test + cache_bounds_test, compile_test + compile_recompile_test, resolv_test, record_test (split to stay under 300)
 internal/rules/
-├── file.go                      # + Rule.Name string; Dest() string
+├── file.go                      # + Rule.Name string; Dest() string; IsName() bool
 ├── decode.go                    # convertRule: ParsePrefix, else dns-free ParseName (lives in rules: nameparse.go); deny-by-name refusal
 ├── nameparse.go                 # NEW ParseName grammar (rules owns the grammar; internal/dns re-exports or imports it)
 ├── validate.go                  # ruleKey gains name; message uses Dest(); at most 4 rules per exact name
 ├── write.go                     # formatRule writes Dest()
-├── encode.go                    # Encode skips Name != ""; EncodeAddr(rule, program, addr) RuleKey/RuleVal reusing encodeRule
-├── learn.go                     # learnKey.name, Observation.Name, Observed.Name; File() writes Name
+├── encode.go                    # Encode skips IsName(); EncodeAddr(rule, program, addr) reusing encodeRule; ProgramID(res, name) and Expand(rule) exported for the compiler
+├── learn.go                     # learnKey.name, Observation.Name, Observed.Name
+├── learn_name.go                # NEW the name branches of NewLearned seed and File() (learn.go is at 272 lines)
 └── *_test.go                    # extended
 cmd/snitchd/
-├── dns.go                       # NEW load Dns object with MapReplacements{rules}, attach both at the cgroup root (soft), resolvers writer, dnsState
-├── dnsreader.go                 # NEW ring-buffer reader job: record -> cache.Learn -> compiled puts (minus file keys), recordSource delegate
+├── dns.go                       # NEW load Dns object with MapReplacements{rules} (65536 NO_PREALLOC spec, no PinPath), attach both at the cgroup root (soft), resolvers writer, dnsState, evictSome
+├── dnsreader.go                 # NEW ring-buffer reader job: read delegate (rd.Read().RawSample) -> Decode -> handle under mu: Learn, Compute, Apply minus file keys, delete unwanted recorded slot keys
 ├── dnsjobs.go                   # NEW expiry tick (2 s): cache.Expire -> deletes; resolv.conf watch (2 s stamp) -> resolvers map; dnsJobs(); recompile hook for the reloader
 ├── dnsfacts.go                  # NEW api.DNSStatus from stats map + cache + compiled; status record line; nameOf delegate
 ├── reload.go                    # + after func(*snapshot) called under mu after publish (the recompile hook)
-├── state.go                     # summary(): "+ N compiled" entries
+├── state.go                     # summary(): "+ N compiled" entries; apply(..., onFull func() bool): ENOSPC on a file put -> onFull then retry once
 ├── events.go                    # describe/ruleText use Dest(); observation carries Name via nameOf
 ├── apievent.go                  # toEvent(e, snap, exe, now, nameOf) sets Name; rulesView To: Dest(); learnedView Name
 ├── apiwrite_rules.go            # editKey gains name; parseEditKey tries ParseName; matches by Dest; deny-by-name refusal text
 ├── config.go                    # + -dns (default true); -dns=false turns the tap off
-├── daemon.go                    # + dns dnsState field; startup: loadDNS after attach; jobList: dnsJobs
+├── daemon.go                    # + dns dnsState field; startup: loadDNS after attach and r.after = d.dns.recompile; jobList: dnsJobs (one field, three calls)
 ├── ctl_status.go                # + "dns:" line from the record
 ├── ctl_check.go                 # unchanged (Encode skips names)
 └── *_test.go                    # dns_test (attach soft failure, resolvers), dnsreader_test (fake source, re-put, file-key subtraction, stale id), dnsjobs_test (expiry, resolv watch), dnsfacts_test
@@ -211,7 +212,7 @@ internal/status/status.go        # + Record.DNS string key "dns" (before version
 examples/rules.toml              # name rules documented; examples/api.md: name, dns, limits; README
 scripts/api-check.sh             # + phase C: status dns on, curl by name -> event with rule and name, curl by address -> no name, expiry/restart
 scripts/deploy-check.sh          # --trial runs gh api, git ls-remote, uv pip download, cargo search, go list -m during the 2 min trial
-scripts/dns-progtest.sh          # NEW root: go test -run DNSProg -tags root (Program.Run on crafted datagrams)
+scripts/dns-progtest.sh          # NEW root: go test -run DNSProg -tags root (Program.Run on crafted frames with test_skip_question; one real-socket join test in a test cgroup)
 ```
 
 ### Modified Files (summary)
@@ -339,7 +340,11 @@ flowchart TD
   `exists`, other errors `update_fail`.
 - Accept only: UDP, not fragmented, source port 53, source address in `resolvers`, QR=1, TC=0,
   RCODE=0, QDCOUNT=1, question name within bounds and without compression, and a `questions`
-  entry for `(receiving socket cookie, id)` whose name equals the question (then deleted).
+  entry for `(receiving socket cookie, id)` whose name equals the question and is at most 5 s
+  old (then deleted); an older entry counts as `no_question`.
+- The dns object declares `rules` exactly as `snitch.bpf.c` does (LPM trie, 65536,
+  `BPF_F_NO_PREALLOC`) so `MapReplacements` accepts the shared handle; no `PinPath` on this object
+  (all its maps die with the daemon, Req 2.6).
 - Bounds (`#define`s, mirrored as constants in `internal/dns`): `NAME_MAX` 64, `LABELS_MAX` 16,
   `LEVELS_MAX` 8, `SLOTS_MAX` 4, `RR_MAX` 32, `ADDRS_MAX` 8, `questions` 4096 LRU, `resolvers` 16,
   `domains` 4096, `dns_answers` 256 KiB.
@@ -348,8 +353,10 @@ flowchart TD
 
 **Contracts**: Event [x] / State [x]
 - Event: `dns_answer` record `{qname[64] (key form), ttl u32 (min over collected RRs), n u8,
-  family[8], addrs[8][16]}`, submitted only when `n > 0`; dropped (counted) when the ring buffer
-  is full: the trie insert still happened and the daemon's next record or recompile corrects it.
+  family[8], addrs[8][16], slots[LEVELS_MAX*SLOTS_MAX] domain_slot}`: the slots the kernel
+  inserted for this answer (zero id = unused; the same slots apply to every address), submitted
+  only when `n > 0`. The record is reserved before the walk; when the ring buffer is full nothing
+  is compiled and `ringbuf_full` counts it, so every kernel insert has a record.
 - State: `domains` key `[64]u8` `.label.label` lowercase zero-padded; value 4 slots
   `{program u32 (0 any), proto u8 (0 any), port u16 (0 any), id u32 (0 empty)}`; `resolvers` key
   `[16]u8` (v4 in `[0..3]`); `questions` key `{cookie u64, id u16}`.
@@ -373,7 +380,7 @@ flowchart TD
 ```go
 // name.go
 const NameMax = 64; LabelsMax = 16; LevelsMax = 8; SlotsMax = 4; AddrsMax = 8
-func ParseName(s string) (string, error)      // lowercase, trailing dot removed; labels of [a-z0-9-], 1..63 each, total <= 62 bytes in key form, <= 16 labels, no leading dot, no "*"
+// the grammar is rules.ParseName (one parser); internal/dns re-exports nothing
 func Covers(rule, name string) bool           // rule == name || strings.HasSuffix(name, "."+rule)
 func Key(name string) [NameMax]byte           // "." + name, zero padded
 func Suffixes(name string) []string           // name, then dropping leading labels, at most LevelsMax
@@ -409,7 +416,10 @@ type Stats struct{ Seen, NotResolver, NotAnswer, NoQuestion, NameTooLong, Parsed
 ```
 - Preconditions: `Learn` requires a parsed name and valid addrs (contract); `Compute` requires
   `res != nil`. Postconditions: `Learn` never exceeds the bounds (Ensure); `Apply` never returns a
-  file key in puts or dels (Ensure); every put value has `Verdict == rules.Allow` (Invariant).
+  file key in puts or dels, and a key the file holds is neither written nor remembered (Ensure);
+  every put value has `Verdict == rules.Allow` (Invariant).
+- Capacity: when `Compiled.Len() > Max`, `handle` evicts the address with the soonest expiry
+  (cache and compiled together) until under `Max`, counted in `Evictions`.
 - `Cache` entry: `addr -> {names [≤4]{name, expiry}}`; expiry per name; an address is gone when
   its last name expires; eviction picks the address whose latest expiry is soonest (a heap or a
   scan over ≤ 8192: a scan at 2 s is fine, measured in a benchmark).
@@ -423,9 +433,12 @@ type Stats struct{ Seen, NotResolver, NotAnswer, NoQuestion, NameTooLong, Parsed
 
 - `Rule.Name string` (`To` is the zero prefix when set); `func (r Rule) Dest() string` returns
   `Name` or `To.String()`; `IsName() bool`.
-- `convertRule`: `ParsePrefix` first; on failure `ParseName` (in `rules/nameparse.go`, the grammar
-  owner; `internal/dns.ParseName` calls it); both failing → `to %q: not an address, prefix or
-  domain name`. A name with `Verdict == Deny` → `rule %d: a deny by name is not supported (deny
+- `convertRule`: `ParsePrefix` first; on failure `rules.ParseName` (`rules/nameparse.go`, the only
+  parser: lowercase, trailing dot removed, labels of `[a-z0-9-]` 1..63 each, no leading dot, no
+  `*`); both failing → `to %q: not an address, prefix or domain name`; a name over 62 characters
+  or 16 labels → `to %q: a name has at most 62 characters and 16 labels` (the kernel's bounds;
+  Req 3.4 amended accordingly). A name rule matches at most 8 levels of subdomain below it
+  (documented). A name with `Verdict == Deny` → `rule %d: a deny by name is not supported (deny
   stays a timed trial)`.
 - `ruleKey{program, to, name, proto, port}`; duplicate message prints `Dest()`; a parent and a
   child name are distinct keys. New check: more than `SlotsMax` rules sharing one exact name →
@@ -460,30 +473,37 @@ type dnsState struct {
     log     func(string)
 }
 func loadDNS(d *daemon) dnsState                          // off when -dns=false; MapReplacements; attach egress+ingress at cgroupRoot; soft: "dns tap off: <err>"
-func (s *dnsState) handle(rec dns.Record, snap *snapshot)   // Learn -> for each change: Compute, Apply(minus snap.ent.Rules) -> puts/dels on the trie; log once per failure streak
+func (s *dnsState) handle(rec dns.Record)                 // under mu: snap := st.current(); Learn -> Compute per address; Apply(minus snap.ent.Rules) -> puts/dels; delete every recorded slot key Compute does not want; log once per failure streak
 func (s *dnsState) expire(ctx) error                      // 2 s: Expire -> Apply(gone) -> dels
-func (s *dnsState) recompile(snap *snapshot)              // reloader.after: write domains from Slots(snap.res) (put new, delete stale), then Recompile -> puts/dels
+func (s *dnsState) recompile(snap *snapshot)              // reloader.after, holding mu from the domains rewrite (put new, delete stale) through Recompile -> puts/dels
 func (s *dnsState) watchResolv(ctx) error                 // 2 s stamp of /etc/resolv.conf -> resolvers map (put new, delete gone)
 func (s *dnsState) nameOf(addr netip.Addr, ruleID uint32) string   // comp.NameOf, else cache.Names(addr)[0], else ""
 func (s *dnsState) facts() *api.DNSStatus
 func (d *daemon) dnsJobs(r *reloader) []jobs.Job          // reader, expire, watchResolv when on
-type recordSource interface{ Read() ([]byte, error) }     // *ringbuf.Reader and a test fake (two implementations)
+// read is a delegate: rd.Read().RawSample in the daemon, a slice source in tests
+read func() ([]byte, error)
 ```
-- Reader job: `Read` → `dns.Decode` → `handle(rec, d.st.current())`. The reader never blocks on
-  the API (it writes maps only). File keys are subtracted using the snapshot's `ent.Rules`.
+- Reader job: `read` → `dns.Decode` → `handle(rec)`. The reader never blocks on the API (it
+  writes maps only). File keys are subtracted using the snapshot's `ent.Rules`.
 - `reloader.after func(*snapshot)` is invoked inside `reload` after `publish` and before the
-  summary (under `mu`); `recompile` takes `dnsState.mu` inside it. Lock order: `reloader.mu` then
-  `dnsState.mu`; the reader takes only `dnsState.mu` and reads the snapshot pointer (no reloader
-  lock), so a record processed during a reload uses either the old or the new snapshot and the
-  recompile that follows the publish corrects any old-id put.
+  summary (under `reloader.mu`); `recompile` holds `dnsState.mu` from the `domains` rewrite
+  through `Recompile`. Lock order: `reloader.mu` then `dnsState.mu`. `handle` loads the snapshot
+  pointer only after taking `dnsState.mu`, so a record is processed entirely under the old
+  snapshot (and the recompile that follows re-puts its keys with new ids) or entirely under the
+  new one; no put with a stale id can follow the recompile.
+- A rule removed while its record is in flight: the record carries the slots the kernel
+  inserted; `handle` deletes every recorded key that `Compute` under the current snapshot does
+  not want, so no kernel insert outlives its rule.
+- The file's deletes run before the compiled re-put in a reload (a sub-millisecond window in
+  which a name-allowed address shared with a removed file rule has no entry); accepted.
 - Startup order: `loadRules` → objects → `apply` file entries → `publish` → `attach` LSM →
   `loadDNS` (replacements need `objs.Rules`) → `recompile(snap)` once (domains + resolvers
   written before any answer can be learned).
 - `-dns` flag (default true); `checkFiles` unchanged. Off or failed: `facts().On=false` with the
   reason; `nameOf` returns ""; `summary` omits compiled.
-- Capacity: `Compiled.Max 16384`; `handle` evicts (cache) when exceeded; `apply` (state.go) on
-  `ENOSPC` for a file put → `d.dns.evictSome(n)` then retry once (one line in `apply`'s error
-  path behind a delegate `onFull func() bool` so `state.go` stays testable without DNS).
+- Capacity: `Compiled.Max 16384` (policy above); `apply` (state.go) on `ENOSPC` for a file put →
+  `onFull func() bool` (the daemon's `evictSome`, soonest expiry first) then retry once; the
+  delegate keeps `state.go` testable without DNS.
 
 ### API and status fields
 
@@ -525,7 +545,11 @@ type recordSource interface{ Read() ([]byte, error) }     // *ringbuf.Reader and
   check` with the new pinned version.
 
 ## Implementation Rules (binding)
-- Caps as in tech.md; new files for new behaviour; `daemon.go` takes one field and two calls.
+- Caps as in tech.md; new files for new behaviour; `daemon.go` takes one field and three calls.
+- `handle` loads the snapshot after taking `dnsState.mu`; `recompile` holds `dnsState.mu` across
+  the `domains` rewrite and `Recompile`; the reader never takes `reloader.mu`.
+- The Dns bpf2go line passes no `-type rule_key`/`rule_val`: the shared trie is addressed with
+  `rules.RuleKey`/`RuleVal`.
 - Both kernel programs: `return 1` on every path (a grep in a test over the C: no `return 0`).
 - No deny from a name anywhere: `domain_slot` has no verdict field; `Compiled` values are
   `Allow` by construction (Invariant); the validator and `ruleAdd` refuse `deny` names.
@@ -568,6 +592,12 @@ type recordSource interface{ Read() ([]byte, error) }     // *ringbuf.Reader and
 - `internal/api`: JSON key sets with `name` and `dns`.
 ### Root (dev VM)
 - `scripts/dns-progtest.sh`: the kernel parser on crafted datagrams (trie contents, stats).
+  `Program.Run` on cgroup_skb takes an Ethernet frame and gives the program a fresh dummy socket
+  per run, so the `questions` join cannot pass there: the parser tests set the rodata variable
+  `const volatile __u32 test_skip_question` through `CollectionSpec.Variables` before load (never
+  set by the daemon). The join itself is proved by one real-socket test: a fake resolver on
+  127.0.0.1:53 (the test adds it to `resolvers`), both programs attached to a test cgroup the
+  test creates and enters, a UDP query and answer, then the trie and `questions` are inspected.
 - `scripts/api-check.sh` phase C and `scripts/deploy-check.sh --trial` with the dev tools.
 ### Load
 - Benchmark: `Cache.Learn` and `Expire` at 8192 addresses; `Compiled.Recompile` with 50 name
