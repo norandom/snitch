@@ -141,7 +141,8 @@ this VM by the VM repo's `tasks/snitchd.py` (switches `snitchd_enabled`, `snitch
 18 programs, 13 rules, domain rules deferred as comments). The service runs from boot in monitor
 mode; `sudo scripts/deploy-check.sh [--trial]` verified it incl. a reboot and a 2-minute trial.
 Open there: the learning run after a working day (task 4.5).
-Spec `daemon-api` (2026-10-11, see `.kiro/specs/daemon-api/`), implemented and deployed as v0.3.0, see `.kiro/specs/daemon-api/`, not validated yet): the local API
+Spec `daemon-api` (2026-10-11, see `.kiro/specs/daemon-api/`; implemented and deployed as
+v0.3.0, final validation pending): the local API
 on `/run/snitch/api.sock` (`-api`), JSON lines documented in `examples/api.md` (every local user
 reads status, rules, programs, learned, a windowed connection table, and subscribes to events,
 2 s summaries and state lines; root and the user in `/etc/snitch/operator` run the trial verbs and
