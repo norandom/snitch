@@ -157,7 +157,7 @@ graph TB
 cmd/snitchd/
 ├── version.go             # NEW: `var version = "dev"` and the startup/version strings
 ├── config.go              # + `-version` flag: print version, exit 0, before check()
-├── daemon.go              # + version in the startup line; counts() passes it to the record
+├── daemon.go              # + version in the startup line (follow.go writes it to the record)
 ├── follow.go              # + Version in the status record it writes
 ├── ctl.go                 # verb gains `root bool`; dispatch honours it; table + {"check", runCheck, false}
 ├── ctl_check.go           # NEW: the check verb (parse, resolve, summary, exit codes)
@@ -235,7 +235,7 @@ flowchart TD
     A[deploy-check.sh] --> B{service active and boot unit enabled}
     B --> C{status exit 0 mode monitor version equals binary}
     C --> D{apt-get update -> journal event with rule apt}
-    D --> E{curl 9.9.9.9 -> journal monitor event program unknown}
+    D --> E{curl 9.9.9.9 -> journal monitor event for curl}
     E --> F{--trial given and operator says y}
     F -- no --> G[final state: monitor no trial nothing kept kill clear]
     F -- yes --> H[snitchd trial 2m]
@@ -439,7 +439,8 @@ reads the executed run's summary. A `_if` lambda runs before the op's sudo conte
 - Op 6 never starts the oneshot (`running=False` on an inactive oneshot is a no-op); the deploy
   therefore never runs `snitchd end` (2.7). Op 7's restart does not remove trial or kept files
   (the follower reads them; a kept enforce comes back as kept).
-- The drop-in content is exactly `[Service]\nExecStart=\nExecStart=/usr/local/sbin/snitchd
+- The drop-in content is the repo's `# Managed by debian-hypr` header line plus exactly
+  `[Service]\nExecStart=\nExecStart=/usr/local/sbin/snitchd
   -rules /etc/snitch/rules.toml -learn -learned /var/lib/snitch/learned.toml\n`. No other flag
   is ever written by the task (2.7); the CI job fails if a command line in the task carries
   `-mode` or `-duration` (`grep -nE 'snitchd[^#]*(-mode|-duration)'`, so comments explaining
@@ -527,7 +528,7 @@ reads the executed run's summary. A `_if` lambda runs before the op's sudo conte
   `journalctl -u snitchd -b` has the startup line and a `rules:` summary; `apt-get update -o
   Acquire::Retries=0 >/dev/null` then a new journal line matching `program apt` with `rule`
   (5.2 rule event); `curl -sS --max-time 5 -o /dev/null https://9.9.9.9/` then a new journal
-  line with `allow (monitor)` and `program /usr/bin/curl` (5.2 monitor event). Journal checks
+  line with `allow (monitor)` and `curl` (the comm column; 5.2 monitor event). Journal checks
   use a cursor taken before the probe (`journalctl --show-cursor` / `--after-cursor`).
 - Phase B (`--trial`, after `[y/N]`, trap runs `snitchd end` and prints the final state):
   `snitchd trial 2m` exits 0 and prints `enforce until`; status `^mode: *enforce`; curl to the
