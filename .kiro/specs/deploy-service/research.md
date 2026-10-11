@@ -334,3 +334,12 @@ Wrong pin `snitchd_sha256 = "0000000000…"` on the deployed host, one deploy: t
 (digest differs), printed `snitchd v0.2.0: sha256 a51cf6d6…5d291, expected 0000000000…5d291`
 and failed; pyinfra stopped for the host; binary digest and the daemon's PID unchanged, service
 active; pin restored (Req 2.3).
+
+## Feature validation (2026-10-11): GO
+Mechanical: `go test -count=1 -race ./...` ok, caps ok, no TODO/secret markers in either repo's
+feature files, live smoke on the deployed service (active, `snitchd status` exit 0 at v0.2.0,
+`check` on /etc/snitch/rules.toml exit 0), shellcheck and actionlint clean. Two independent
+cross-task reviews (coverage + boundary; design alignment + integration): 27/27 criteria
+covered (3.5 deferred to task 4.5 by the plan), no Critical or Warning findings; nine Notes, all
+documentation alignments, fixed in f29b79b, 8644e2f and VM 173ecef; the checksum-mismatch branch
+was exercised on the host (above). Open: task 4.5, the learning run after a working day.
