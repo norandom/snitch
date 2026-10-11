@@ -182,7 +182,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
     push of 3.1 to 3.4), the dev VM_
   - _Depends: 3.3, 3.4, 4.1_
   - _Requirements: 2.2, 2.4, 2.5, 2.6, 2.8, 5.1, 5.2_
-- [ ] 4.3 Reboot and the two-minute trial
+- [x] 4.3 Reboot and the two-minute trial
   - Only after the operator's go, serial console open, RDP drops once: reboot; phase A again
     (active, monitor, no trial recorded); then `deploy-check.sh --trial`; the operator confirms
     the RDP session stayed up through the trial
@@ -191,7 +191,7 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
   - _Boundary: .kiro/specs/deploy-service/research.md, CLAUDE.md, the dev VM_
   - _Depends: 4.2_
   - _Requirements: 5.3, 5.4, 5.5_
-- [ ] 4.4 Caps, contracts and CI
+- [x] 4.4 Caps, contracts and CI
   - Every documented contract of this spec has a violation test; caps green; no exported
     identifier without a caller; the design's contract list matches the code; then snitch
     `main` is pushed after the no-secrets check of the diff (the VM repo was pushed in 4.2), and
@@ -228,3 +228,5 @@ validated with task 4.5 (the learning run) still open: it needs a working day of
 - 3.4: VM lint runs on branch `snitchd`: 38134552778 green (snitchd-rules success), 38134607285 red on a throwaway commit with a rule for an undeclared program (the job printed `rules.toml:238: rule for undeclared program`), branch reset to b7af2bc. A `! grep` line is exempt from `bash -e`: guards are `if grep …; then exit 1; fi` (design updated). GitHub's default `run:` shell is `bash -e {0}` without pipefail unless `shell: bash` is explicit.
 - 4.2: every step passed first time (table in research.md). Deployment revealed that sudo's `secure_path` on this VM is `/usr/sbin:/usr/bin:/sbin:/bin` and the user's PATH has no `/usr/local/sbin`: the task now links `/usr/sbin/snitchd` and `/usr/local/bin/snitchd` to the binary (design op 3b). Right after a restart `snitchd status` shows `version: unknown (no status record)` for up to 2 s (the writer's first tick); the deploy check compares the version after `is-active`, which was always past that window here. VM repo `main` at eea9699, lint run 38136203738 green (snitchd-rules included), branch `snitchd` deleted.
 - 4.3 (part 1): the two-minute trial on the deployed service passed 9/9 after phase A 15/15 (transcript in research.md); run BEFORE the reboot because a reboot ends the Claude Code session running on this VM. Part 2 (after the operator's reboot): `sudo scripts/deploy-check.sh` must pass with `trial none`, `journalctl -u snitchd-trial-boot -b` shows the oneshot ran once, RDP came back; then mark 4.3 [x] and update CLAUDE.md's status.
+- 4.3 (part 2): reboot at 13:44, oneshot ran once (`already monitor: no trial, nothing kept`), daemon up in monitor from the files, phase A 15/15 after the reboot, RDP back.
+- 4.4: contracts audited with mutants (design's contract list rewritten to function and test names); snitch main lint 38136576321 success 5271e17; VM main lint 38136203738 success eea9699. Open: 4.5 (learning run after a working day).

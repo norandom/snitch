@@ -75,8 +75,8 @@ Little-Snitch-style egress control for Linux, open source, eBPF. Two binaries, o
 
 Started as part of github.com/norandom/hyperland-forky-worker-vm (a Hyprland thin client over
 RDP). That repo deploys releases of this one pinned by sha256 (`group_data/all.py`:
-`snitch_version`, `snitch_sha256`, `snitch_trial_sha256`); `littlesnitch_enabled = False` there
-keeps Little Snitch and the Python popups off while snitchd replaces them.
+`snitchd_enabled`, `snitchd_version`, `snitchd_sha256`, `snitchd_learn`; `tasks/snitchd.py`);
+Little Snitch and the Python client were retired there on 2026-10-11, snitchd watches egress.
 
 ## Fail-safes: design constraints, not options
 
@@ -120,7 +120,7 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   programs or with the flag).
   Lookup order: program-specific then any-program; exact proto+port, proto, any.
 
-## Status (2026-10-10) and next steps
+## Status (2026-10-11) and next steps
 
 Works on Debian forky 7.2 (BPF LSM active): attach, heartbeat, mode, local-net classification,
 IPv4/IPv6/v4-mapped, TCP + UDP (connect and unconnected sendmsg), events with verdicts.
@@ -130,22 +130,24 @@ loaded into the maps, reload on change / exe change / SIGHUP, learning mode (`-l
 `-learned`), events with program name and rule, enforce only bounded (`-mode enforce` needs
 `-duration`); `scripts/enforce-test.sh` passed 16/16 on this VM with the serial console open;
 `scripts/fail-open.sh` is the console recovery. Needs Linux >= 6.12 (kfuncs in the C).
-Spec `persistent-trial` (2026-10-10, see `.kiro/specs/persistent-trial/`) implemented:
-`systemd/snitchd.service` plus the boot-revert oneshot, the daemon follows the trial and kept
-files under `/var/lib/snitch` when started without `-mode`, the verbs `snitchd trial | keep |
-unkeep | end | status`, and phase 3 of `scripts/enforce-test.sh`, which passed 63/63 on this VM
-(2026-10-10, serial console open); validated GO on 2026-10-11. Nothing is installed or enabled
-here yet: spec `deploy-service` (release, pyinfra task, rules file) does that.
+Spec `persistent-trial` (2026-10-10, see `.kiro/specs/persistent-trial/`): `systemd/snitchd.service`
+plus the boot-revert oneshot, the daemon follows the trial and kept files under `/var/lib/snitch`
+when started without `-mode`, the verbs `snitchd trial | keep | unkeep | end | status`; validated
+GO 2026-10-11. Spec `deploy-service` (2026-10-11, see `.kiro/specs/deploy-service/`): release
+`v0.2.0` (`.github/workflows/release.yml` on a `v*` tag: lint, static build, `snitchd` +
+`snitchd.sha256` assets; `snitchd -version`, `snitchd check -rules F` without root), deployed on
+this VM by the VM repo's `tasks/snitchd.py` (switches `snitchd_enabled`, `snitchd_learn`; pins
+`snitchd_version`, `snitchd_sha256`; rules at `files/snitchd/rules.toml` → `/etc/snitch/rules.toml`,
+18 programs, 13 rules, domain rules deferred as comments). The service runs from boot in monitor
+mode; `sudo scripts/deploy-check.sh [--trial]` verified it incl. a reboot and a 2-minute trial.
+Open there: the learning run after a working day (task 4.5).
 Not done yet, in order:
 
-1. Deployment (spec `deploy-service`): GitHub release with sha256, the VM repo's snitchd task,
-   `/etc/snitch/rules.toml` translated from the Python client's rules; until then enforce runs
-   only through the test script.
-2. Daemon API over a unix socket (JSON lines, same shapes the Python TUI consumes), event
+1. Daemon API over a unix socket (JSON lines, same shapes the Python TUI consumes), event
    dedupe, per-socket byte counting (cgroup skb programs, socket cookie) for the egress graph.
-3. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.
-4. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
-5. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
+2. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.
+3. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
+4. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
    CrowdStrike-style graph (process tree -> socket -> destination) behind a verdict. OpenObserve
    (http://10.0.0.54:40002, org default; OTLP gateway in k3s :4317/:4318) gets one batch per
    host every 10 min and shows that graph as a (limited) Sankey: process -> destination -> verdict.

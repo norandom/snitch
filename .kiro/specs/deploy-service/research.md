@@ -317,3 +317,14 @@ and this Claude Code session (Anthropic ranges allowed by rule) stayed up.
 
 Order change: the trial ran before the reboot because a reboot ends the Claude Code session
 on this VM; the reboot and the post-reboot phase A are the operator's next step (part 2).
+
+## Reboot (task 4.3, part 2, 2026-10-11)
+
+Operator reboot at 13:44:28 (RDP dropped once and came back). `journalctl -u snitchd-trial-boot -b`:
+the oneshot ran once at 13:44:32, `already monitor: no trial, nothing kept`, then
+`snitchd v0.2.0: mode monitor (files)` from the daemon. `sudo scripts/deploy-check.sh` after the
+reboot: 15/15, `state: service active mode monitor trial none kept no kill clear` (Req 5.3, 5.5).
+
+## Push state (task 4.4)
+- snitch `main`: lint run 38136576321 success 5271e17 (run id, conclusion, sha).
+- VM repo `main`: lint run 38136203738 success eea9699, snitchd-rules job included.
