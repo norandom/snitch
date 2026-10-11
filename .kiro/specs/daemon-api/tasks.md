@@ -22,7 +22,7 @@ with the service's socket. The counting map `bytes` and its link are not pinned 
 with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/sbin).
 
 - [x] 1. The kernel side and the pure data structures
-- [ ] 1.1 The socket cookie and the counting program (feasibility gate)
+- [x] 1.1 The socket cookie and the counting program (feasibility gate)
   - The kernel event carries the socket's cookie, taken in the decision hook from the direct
     BTF walk `sock->sk` (trusted pointer; a CO-RE read would be a scalar the helper rejects); a new counting
     program on egress adds each packet's length to a per-cookie entry in a bounded, unpinned map
@@ -189,7 +189,7 @@ with `bpftool map dump name bytes` while the daemon runs; bpftool lives in /usr/
   - _Depends: 1.1, 1.2, 3.3_
   - _Requirements: 3.2, 3.3, 3.4_
 
-- [ ] 4. Schema, verification, closing
+- [x] 4. Schema, verification, closing
 - [x] 4.1 (P) The schema document and the README
   - `examples/api.md`: envelope, every request with its reply, every unsolicited type, the
     field-name table against the Python client, the limits and windows, authorization, and the
