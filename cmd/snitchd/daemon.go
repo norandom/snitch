@@ -37,6 +37,7 @@ var errStop = errors.New("stop requested")
 // writes. Built once by startup; the jobs read it. mode is written by setMode (startup, the
 // follow job) and read by every heartbeat.
 type daemon struct {
+	dns    *dnsState
 	cfg    config
 	objs   snitchbpf.SnitchObjects
 	links  []link.Link
@@ -90,6 +91,7 @@ func startup(cfg config) (*daemon, error) {
 	if err := d.attach(); err != nil {
 		return nil, err
 	}
+	d.dns = loadDNS(d)
 	fmt.Println(startupLine(version, modeName(trial.Mode(d.mode.Load())), cfg.source))
 	return d, nil
 }
@@ -225,6 +227,7 @@ func (d *daemon) jobList() []jobs.Job {
 		js = append(js, d.learn.job())
 	}
 	js = append(js, d.apiJobs(r)...)
+	js = append(js, d.dnsJobs(r)...)
 	return append(js, d.modeJobs()...)
 }
 

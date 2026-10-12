@@ -206,3 +206,15 @@ func TestHelpNamesTheOverlayAndAPIFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigDNSFlag(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{{nil, true}, {[]string{"-dns=false"}, false}, {[]string{"-dns"}, true}} {
+		cfg, err := parseFlags(tc.args)
+		if err != nil || cfg.dns != tc.want {
+			t.Fatalf("%v: dns %v error %v", tc.args, cfg.dns, err)
+		}
+	}
+}

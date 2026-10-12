@@ -37,6 +37,7 @@ type config struct {
 	overlay  string // "" = no overlay
 	learned  string
 	api      string // "" = no API
+	dns      bool
 	learn    bool
 	mode     string
 	source   modeSource
@@ -63,6 +64,7 @@ func parseFlagsTo(args []string, usage io.Writer) (config, error) {
 	fs.StringVar(&cfg.rules, "rules", defaultRules, "rules file; missing = no rules (everything is reported, nothing denied)")
 	fs.StringVar(&cfg.overlay, "overlay", defaultOverlay, "local rules file merged over -rules with precedence; missing = none, invalid = reported and skipped")
 	fs.StringVar(&cfg.api, "api", defaultAPI, "unix socket of the local API; empty disables it")
+	fs.BoolVar(&cfg.dns, "dns", true, "observe DNS answers for name rules; false disables the tap")
 	fs.BoolVar(&cfg.learn, "learn", false, "learning mode: monitor and record connections no rule covers")
 	fs.StringVar(&cfg.learned, "learned", defaultLearned, "where learning mode writes its rules file")
 	fs.StringVar(&cfg.mode, "mode", modeMonitor, "monitor (allow + report) or enforce (deny what no rule allows; needs -duration)")
