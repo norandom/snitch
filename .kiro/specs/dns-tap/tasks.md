@@ -70,7 +70,7 @@ task states the handshake that makes them safe; `(P)` tasks touch disjoint files
     validate_test.go, identity.go, merge.go, merge_test.go, write.go, write_test.go, encode.go,
     encode_test.go, file_test.go, decode_test.go_
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.8, 4.5_
-- [ ] 1.3 Address keys for the compiler and learning by name
+- [x] 1.3 Address keys for the compiler and learning by name
   - The encoder exports the key for one rule and one address (the same bits as an address rule's
     key), the rule's program id from the resolved programs, and the rule's protocol and port
     expansion, so the compiler reuses the encoder's shape instead of copying it; the learner
@@ -343,3 +343,4 @@ task states the handshake that makes them safe; `(P)` tasks touch disjoint files
 
 ## Implementation Notes
 - 1.2: implemented by Codex, reviewed by a Claude subagent (APPROVED, four reviewer mutations caught). The controller settled the grammar's open point: a label never starts or ends with a hyphen (RFC 1123), so `-x` stays an invalid value for 2.5's pinned test. New tests went to `decode_name_test.go`, `validate_name_test.go`, `merge_name_test.go` (same package, test-only). `checkNameSlots` hard-codes 4 with a comment (rules cannot import internal/dns); 1.4 may export the constant from rules and have dns reuse it. Downstream still assumes `To` until 1.3/2.x: `learn.go:75` seeds a name rule on the zero address, `apievent.go:75` and `events.go:109` print `invalid Prefix` for a name rule. A mistyped address such as `1.2.3` parses as a name (docs task warns).
+- 1.3: `EncodeAddr(r, program, addr)` returns the key with the rule's own proto and first port; the compiler overwrites `k.Proto`/`k.Port` on the returned key with each `Expand(r)` pair (as `encodeRule` does), never mutating a Rule. `ProgramID(res, name)` is 0 for `any`. A named `Observed` has a zero `Addr` by construction: `apievent.go:101` would print `invalid IP` once names reach the learner (2.6 wires `learnedView` Name). Reviewer approved on seven of its own mutations; the Codex MCP truncates long replies to their tail, so later briefs put the status block first.

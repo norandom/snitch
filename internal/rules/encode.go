@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"net/netip"
+
 	"github.com/norandom/snitch/internal/bpf"
 	"github.com/norandom/snitch/internal/contract"
 )
@@ -51,12 +53,14 @@ func Encode(r *Resolved) Entries {
 		if r.File.Rules[i].IsName() {
 			continue
 		}
-		encodeRule(&r.File.Rules[i], programID(r, r.File.Rules[i].Program), e.Rules)
+		encodeRule(&r.File.Rules[i], ProgramID(r, r.File.Rules[i].Program), e.Rules)
 	}
 	return e
 }
 
-func programID(r *Resolved, name string) uint32 {
+// ProgramID returns zero for "any", otherwise the id in Resolved.Names.
+// An undeclared name violates the validated-file invariant, just as in Encode.
+func ProgramID(r *Resolved, name string) uint32 {
 	if name == anyProgram {
 		return anyProgramID
 	}
@@ -70,25 +74,53 @@ func programID(r *Resolved, name string) uint32 {
 }
 
 func encodeRule(rule *Rule, program uint32, out map[RuleKey]RuleVal) {
-	contract.Require(rule.To.IsValid() && rule.To == rule.To.Masked(), "rule prefix must be valid and canonical")
-	val := RuleVal{Verdict: uint8(rule.Verdict), Id: rule.ID}
-	base := RuleKey{Prefixlen: fixedKeyBits + uint32(rule.To.Bits()), Program: program}
-	if rule.To.Addr().Is4() {
-		a := rule.To.Addr().As4()
+	base := prefixKey(rule.To, program)
+	for _, pp := range Expand(rule) {
+		k := base
+		k.Proto, k.Port = uint8(pp.Proto), pp.Port
+		out[k] = RuleVal{Verdict: uint8(rule.Verdict), Id: rule.ID}
+	}
+}
+
+// EncodeAddr builds one host key using r.Proto and the first port (zero if absent).
+// Callers use Expand and set Proto/Ports for each pair before calling.
+// IPv4-mapped addresses retain the same family and bits as encodeRule.
+func EncodeAddr(r *Rule, program uint32, addr netip.Addr) (RuleKey, RuleVal) {
+	k := prefixKey(netip.PrefixFrom(addr, addr.BitLen()), program)
+	k.Proto, k.Port = uint8(r.Proto), portsOf(r)[0]
+	return k, RuleVal{Verdict: uint8(r.Verdict), Id: r.ID}
+}
+
+func prefixKey(prefix netip.Prefix, program uint32) RuleKey {
+	contract.Require(prefix.IsValid() && prefix == prefix.Masked(), "rule prefix must be valid and canonical")
+	base := RuleKey{Prefixlen: fixedKeyBits + uint32(prefix.Bits()), Program: program}
+	if prefix.Addr().Is4() {
+		a := prefix.Addr().As4()
 		base.Family = familyV4
 		copy(base.Addr[:], a[:])
 	} else {
 		base.Family = familyV6
-		base.Addr = rule.To.Addr().As16()
-	}
-	for _, proto := range protosOf(rule) {
-		for _, port := range portsOf(rule) {
-			k := base
-			k.Proto, k.Port = uint8(proto), port
-			out[k] = val
-		}
+		base.Addr = prefix.Addr().As16()
 	}
 	contract.Ensure(base.Prefixlen >= fixedKeyBits, "prefixlen covers the fixed key part")
+	return base
+}
+
+// ProtoPort is one kernel lookup combination; zero denotes any protocol or port.
+type ProtoPort struct {
+	Proto Proto
+	Port  uint16
+}
+
+// Expand shares Encode's transport expansion so compiled rules use reachable keys.
+func Expand(r *Rule) []ProtoPort {
+	var out []ProtoPort
+	for _, proto := range protosOf(r) {
+		for _, port := range portsOf(r) {
+			out = append(out, ProtoPort{Proto: proto, Port: port})
+		}
+	}
+	return out
 }
 
 func protosOf(rule *Rule) []Proto {

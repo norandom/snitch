@@ -168,3 +168,64 @@ func TestEncodeSkipsNameRules(t *testing.T) {
 		t.Fatal("name rule must remain reachable by id")
 	}
 }
+
+func TestEncodeAddrMatchesEncode(t *testing.T) {
+	for _, addr := range []string{"1.1.1.1", "2001:db8::1", "::ffff:1.1.1.1"} {
+		for _, verdict := range []string{"allow", "deny"} {
+			r := resolved(t, curlProgram+ruleTable("curl", addr, "tcp", "443", verdict))
+			a := r.File.Rules[0].To.Addr()
+			k, v := rules.EncodeAddr(&r.File.Rules[0], 1, a)
+			want := rules.Encode(r).Rules
+			if len(want) != 1 || want[k] != v {
+				t.Fatalf("%s: got %+v/%+v, want %+v", addr, k, v, want)
+			}
+		}
+	}
+}
+
+func TestExpandMatchesEncode(t *testing.T) {
+	for _, body := range []string{"", "proto = \"tcp\"\n", "proto = \"udp\"\nport = 53\n", "port = \"80-82\"\n", "proto = \"tcp\"\nport = \"80-82\"\n"} {
+		r := resolved(t, rule("program = \"curl\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\n"+body))
+		got := map[rules.ProtoPort]bool{}
+		expansion := rules.Expand(&r.File.Rules[0])
+		for _, pp := range expansion {
+			got[pp] = true
+		}
+		want := map[rules.ProtoPort]bool{}
+		for k := range rules.Encode(r).Rules {
+			want[rules.ProtoPort{Proto: rules.Proto(k.Proto), Port: k.Port}] = true
+		}
+		if !reflect.DeepEqual(got, want) || len(expansion) != len(want) {
+			t.Fatalf("%q: got %v, want %v", body, expansion, want)
+		}
+	}
+}
+
+func TestProgramIDUsesResolvedNames(t *testing.T) {
+	r := resolved(t, programs)
+	for id, name := range r.Names {
+		if got := rules.ProgramID(r, name); got != id {
+			t.Fatalf("%s: got %d, want %d", name, got, id)
+		}
+	}
+	if rules.ProgramID(r, "any") != 0 {
+		t.Fatal("any program must use id zero")
+	}
+}
+
+func TestEncodeAddrMappedFamilyAndContracts(t *testing.T) {
+	a := netip.MustParseAddr("::ffff:1.1.1.1")
+	r := &rules.Rule{To: netip.PrefixFrom(a, 128), Proto: rules.UDP, Ports: []uint16{53}, Verdict: rules.Allow, ID: 7}
+	res := &rules.Resolved{File: &rules.File{Rules: []rules.Rule{*r}}}
+	res.File.Rules[0].Program = "any"
+	k, v := rules.EncodeAddr(r, 0, a)
+	if k.Family != 10 || k.Prefixlen != 192 || rules.Encode(res).Rules[k] != v {
+		t.Fatalf("mapped address must match raw prefix encoding: %+v/%+v", k, v)
+	}
+	contracttest.Panics(t, contract.Precondition, func() {
+		rules.EncodeAddr(r, 0, netip.Addr{})
+	})
+	contracttest.Panics(t, contract.InvariantKind, func() {
+		rules.ProgramID(res, "undeclared")
+	})
+}

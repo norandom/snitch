@@ -16,6 +16,7 @@ type Observation struct {
 	Path    string // executable path, "" when the process was gone before it could be read
 	Exe     ExeKey
 	Program string // configured program name when one maps the executable, else ""
+	Name    string // canonical DNS name; empty keeps the address destination
 	Addr    netip.Addr
 	Proto   Proto
 	Port    uint16
@@ -32,6 +33,7 @@ type subject struct {
 
 type learnKey struct {
 	subject
+	name  string
 	addr  netip.Addr
 	proto Proto
 	port  uint16
@@ -72,7 +74,7 @@ func NewLearned(seed *File) *Learned {
 		if len(r.Ports) > 0 {
 			port = r.Ports[0]
 		}
-		k := learnKey{subjects[r.Program], r.To.Addr(), r.Proto, port}
+		k := destinationKey(subjects[r.Program], r.Name, r.To.Addr(), r.Proto, port)
 		l.entries[k] = &learnEntry{count: max(r.Count, 1), first: r.First, last: r.Last}
 	}
 	return l
@@ -114,7 +116,7 @@ func (l *Learned) Observe(o Observation) bool {
 	if proto != TCP && proto != UDP {
 		proto = AnyProto
 	}
-	k := learnKey{s, o.Addr.Unmap(), proto, o.Port}
+	k := destinationKey(s, o.Name, o.Addr.Unmap(), proto, o.Port)
 	e, ok := l.entries[k]
 	if !ok {
 		e = &learnEntry{first: at, last: at}
@@ -148,6 +150,7 @@ type Observed struct {
 	Program string
 	Path    string // "" when only the kernel identity is known
 	Exe     ExeKey // the kernel identity, kept only when Path is "" (a pathed subject is keyed by its path)
+	Name    string // canonical DNS name; empty keeps the address destination
 	Addr    netip.Addr
 	Proto   Proto
 	Port    uint16
@@ -166,7 +169,7 @@ func (l *Learned) Observations() []Observed {
 	for _, k := range l.sortedKeys(names) {
 		e := l.entries[k]
 		out = append(out, Observed{Program: names[k.subject], Path: k.subject.path, Exe: k.subject.exe,
-			Addr: k.addr, Proto: k.proto, Port: k.port, Count: e.count, First: e.first, Last: e.last})
+			Name: k.name, Addr: k.addr, Proto: k.proto, Port: k.port, Count: e.count, First: e.first, Last: e.last})
 	}
 	contract.Ensure(l.dirty == was, "a read projection leaves the dirty flag alone")
 	return out
@@ -186,8 +189,9 @@ func (l *Learned) File() *File {
 	}
 	for _, k := range l.sortedKeys(names) {
 		e := l.entries[k]
-		r := Rule{Program: names[k.subject], To: netip.PrefixFrom(k.addr, k.addr.BitLen()), Proto: k.proto,
+		r := Rule{Program: names[k.subject], Proto: k.proto,
 			Verdict: Allow, Count: e.count, First: e.first, Last: e.last, ID: uint32(len(f.Rules) + 1)}
+		setLearnedDestination(&r, k)
 		if k.port != 0 {
 			r.Ports = []uint16{k.port}
 		}
@@ -262,6 +266,9 @@ func (l *Learned) sortedKeys(names map[subject]string) []learnKey {
 		a, b := out[i], out[j]
 		if names[a.subject] != names[b.subject] {
 			return names[a.subject] < names[b.subject]
+		}
+		if a.name != b.name {
+			return a.name < b.name
 		}
 		if c := a.addr.Compare(b.addr); c != 0 {
 			return c < 0
