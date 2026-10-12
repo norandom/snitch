@@ -185,8 +185,8 @@ func TestApiWriteRuleAddRefusalsLeaveTheFileAlone(t *testing.T) {
 	}{
 		{"verdict", `verdict "maybe": want allow or deny`, add("curl", "9.9.9.9", "", 0, "maybe")},
 		{"deny for any", "a deny for every program is deny by default without a deadline: use snitchd trial", add("any", "0.0.0.0/0", "", 0, "deny")},
-		{"to", `to "nowhere": not an address or prefix`, add("curl", "nowhere", "", 0, "deny")},
-		{"zone", `to "fe80::1%eth0": not an address or prefix`, add("curl", "fe80::1%eth0", "", 0, "deny")},
+		{"to", `to "bad..name": not an address, prefix or domain name`, add("curl", "bad..name", "", 0, "deny")},
+		{"zone", `to "fe80::1%eth0": not an address, prefix or domain name`, add("curl", "fe80::1%eth0", "", 0, "deny")},
 		{"proto", `proto "icmp": want tcp, udp or any`, add("curl", "9.9.9.9", "icmp", 0, "deny")},
 		{"port", "port 70000: want 1-65535, or 0 for any", add("curl", "9.9.9.9", "tcp", 70000, "deny")},
 		{"unknown program", `unknown program "wget": declare it in the rules file, or give its path`, add("wget", "9.9.9.9", "", 0, "deny")},
@@ -223,7 +223,7 @@ func TestApiWriteRuleRemoveRefusals(t *testing.T) {
 	}{
 		{"deployed", "rule 1 (curl to 1.1.1.1/32 tcp port 443) is in the deployed file: edit " + x.base, remove("curl", "1.1.1.1", "tcp", 443)},
 		{"unknown", "no overlay rule matches curl to 9.9.9.9/32 udp port 53", remove("curl", "9.9.9.9", "udp", 53)},
-		{"bad key", `to "x": not an address or prefix`, remove("curl", "x", "", 0)},
+		{"bad key", `to "-x": not an address, prefix or domain name`, remove("curl", "-x", "", 0)},
 	}
 	for _, c := range cases {
 		if text, err := x.edit(c.req); text != "" || errText(err) != c.want || x.overlayText() != before {

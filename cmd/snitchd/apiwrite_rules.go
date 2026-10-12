@@ -38,11 +38,12 @@ func (d *daemon) apiRuleEdit(req api.Request, _ uint32) (string, error) {
 	return "", fmt.Errorf("%s: not a rule edit", req.Type)
 }
 
-// editKey is a request's rule key, checked: the address or prefix canonical like the rules
+// editKey is a request's rule key, checked: the name or address/prefix canonical like the rules
 // file's (a bare address is a /32 or /128), the protocol (empty is any), the port (0 is any).
 type editKey struct {
 	program string
 	to      netip.Prefix
+	name    string
 	proto   rules.Proto
 	port    uint16
 }
@@ -50,7 +51,7 @@ type editKey struct {
 func parseEditKey(req api.Request) (editKey, error) {
 	k := editKey{program: req.Program}
 	var err error
-	if k.to, err = rules.ParsePrefix(req.To); err != nil {
+	if err = k.parseDestination(req.To); err != nil {
 		return k, err
 	}
 	switch req.Proto {
@@ -71,7 +72,7 @@ func parseEditKey(req api.Request) (editKey, error) {
 }
 
 func (k editKey) String() string {
-	s := k.program + " to " + k.to.String()
+	s := k.program + " to " + k.destination()
 	if k.proto != rules.AnyProto {
 		s += " " + protoWire(uint8(k.proto))
 	}
@@ -85,7 +86,7 @@ func (k editKey) String() string {
 // matches (the rules reply lists it with port 0: a schema limit, examples/api.md).
 func (k editKey) matches(r *rules.Rule) bool {
 	port := r.Ports == nil && k.port == 0 || len(r.Ports) == 1 && r.Ports[0] == k.port
-	return r.Program == k.program && r.To == k.to && r.Proto == k.proto && port
+	return r.Program == k.program && r.Dest() == k.destination() && r.Proto == k.proto && port
 }
 
 func (k editKey) ports() []uint16 {
@@ -116,6 +117,9 @@ func (d *daemon) ruleAdd(req api.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := key.allowVerdict(req.To, verdict); err != nil {
+		return "", err
+	}
 	snap := d.st.current()
 	contract.Require(snap != nil, "ruleAdd before the first snapshot")
 	ov, err := d.loadOverlay()
@@ -128,7 +132,7 @@ func (d *daemon) ruleAdd(req api.Request) (string, error) {
 	if key.program == "any" && verdict == rules.Deny {
 		return "", errors.New("a deny for every program is deny by default without a deadline: use snitchd trial")
 	}
-	ov.Rules = append(ov.Rules, rules.Rule{Program: key.program, To: key.to, Proto: key.proto, Ports: key.ports(),
+	ov.Rules = append(ov.Rules, rules.Rule{Program: key.program, To: key.to, Name: key.name, Proto: key.proto, Ports: key.ports(),
 		Verdict: verdict, Note: req.Note, Source: d.cfg.overlay})
 	if err := d.writeOverlay(ov); err != nil {
 		return "", err
