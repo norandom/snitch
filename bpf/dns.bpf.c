@@ -275,8 +275,7 @@ static __always_inline __u32 read_qname(struct pkt *p, __u32 off, __u8 *buf, __u
 		} else if (L & 0xC0) {
 			return 0;
 		} else {
-			if (i < LEVELS_MAX)
-				dots[i] = n;
+			dots[i] = n;  // i < LABELS_MAX by the loop bound
 			labels = i + 1;
 			n += 1 + L;
 			if (n >= NAME_MAX)
@@ -306,13 +305,14 @@ static __always_inline __u32 read_qname(struct pkt *p, __u32 off, __u8 *buf, __u
 		__u64 m = ge & ~gt & ~x & 0x8080808080808080ULL;
 		w[i] = x | (m >> 2);
 	}
-	for (int k = 0; k < LEVELS_MAX; k++) {
+	// Every length byte becomes a '.', so the key form equals what user space builds from the
+	// rule's name (internal/dns Key) for any suffix the lookup starts at, and the daemon decodes
+	// the record's name by splitting on '.'. Only the first LEVELS_MAX labels are lookup starts.
+	for (int k = 0; k < LABELS_MAX; k++) {
 		if (k >= labels)
 			break;
 		buf[dots[k] & (NAME_MAX - 1)] = '.';
 	}
-	// labels beyond LEVELS_MAX keep their length byte instead of a '.'; they are never a lookup
-	// start, and the key still differs from any other name's key
 	return labels;
 }
 
@@ -326,7 +326,7 @@ struct walk {
 	__u32 labels;            // of the question name
 	__u8  in_owner;          // 1: skipping the owner name of the current RR; 0: at its fixed part
 	__u8  err;
-	__u8  dots[LEVELS_MAX];  // only the first LEVELS_MAX label offsets are ever looked up
+	__u8  dots[LABELS_MAX];  // offset of every label's length byte; lookups start at the first LEVELS_MAX
 	__u8  buf[2 * NAME_MAX] __attribute__((aligned(8)));  // name key, 8-aligned for the u64 passes; twice NAME_MAX so buf + dots[k] covers NAME_MAX bytes
 };
 
@@ -525,7 +525,7 @@ int dns_query(struct __sk_buff *skb)
 		return 1;
 	struct q_val v = {};
 	__u8 buf[2 * NAME_MAX] __attribute__((aligned(8))) = {};
-	__u8 dots[LEVELS_MAX] = {};
+	__u8 dots[LABELS_MAX] = {};
 	__u32 wire = 0;
 	if (!read_qname(&p, l.dns_off + sizeof(h), buf, dots, &wire))
 		return 1;

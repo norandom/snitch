@@ -124,8 +124,8 @@
   socket the datagram is queued to): the same UDP socket sends the query and receives the
   answer, so `(cookie, dns id) -> qname` recorded at egress joins the answer to its question.
 - `bpf/dns.bpf.c` as committed (task 1.1: slots in the record, `BPF_NOEXIST`, `test_skip_question`,
-  5 s question age, `-mcpu=v3` on this object only): `dns_answer` 32,287 verified instructions,
-  `dns_query` 8,344, both accepted on 7.2.6 (`sudo go test -tags root ./internal/dns -run
+  5 s question age, `-mcpu=v3` on this object only; every label's length byte dotted, found by
+  1.4): `dns_answer` 33,023 verified instructions, `dns_query` 9,046, both accepted on 7.2.6 (`sudo go test -tags root ./internal/dns -run
   '^TestDNSProgLoads$'`, 2026-10-12). Two verifier lessons from the first round: clang drops a
   range check it has proven and the verifier then sees `R4 invalid zero-sized read` on the
   bounded `bpf_skb_load_bytes` of the question name; an `asm volatile("" : "+r"(len))` barrier
