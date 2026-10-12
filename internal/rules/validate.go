@@ -124,9 +124,10 @@ func checkNameSlots(f *File) error {
 		if !r.IsName() {
 			continue
 		}
-		counts[r.Name]++
+		// counted as the kernel's domain slots are filled: one per protocol/port combination
+		counts[r.Name] += len(Expand(&r))
 		if counts[r.Name] > 4 {
-			return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("name %q: at most 4 rules per name", r.Name)}
+			return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("name %q: at most 4 rules (protocol and port combinations) per name", r.Name)}
 		}
 	}
 	return nil

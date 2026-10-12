@@ -14,7 +14,16 @@ func TestValidateRefusesFiveRulesOnOneName(t *testing.T) {
 	}
 	parse(t, src)
 	e := parseErr(t, src+ruleTable("any", "github.com", "tcp", "5", "allow"))
-	if e.Msg != `name "github.com": at most 4 rules per name` {
+	if e.Msg != `name "github.com": at most 4 rules (protocol and port combinations) per name` {
+		t.Fatalf("got %v", e)
+	}
+}
+
+func TestValidateCountsProtocolPortCombinationsPerName(t *testing.T) {
+	// any-proto with a port is two kernel slots (tcp, udp): two such rules fill a name
+	two := ruleTable("any", "github.com", "", "443", "allow") + ruleTable("any", "github.com", "", "80", "allow")
+	parse(t, two)
+	if e := parseErr(t, two+ruleTable("any", "github.com", "tcp", "22", "allow")); !strings.Contains(e.Msg, `name "github.com"`) {
 		t.Fatalf("got %v", e)
 	}
 }
