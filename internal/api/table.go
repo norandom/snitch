@@ -28,6 +28,7 @@ type Key struct {
 
 // entry is a table row: totals, times, the per-window rings and the cookies that feed it.
 type entry struct {
+	name                     string
 	key                      Key
 	buckets                  window
 	allow, deny, bytes       uint64
@@ -102,6 +103,9 @@ func (t *Table) Observe(e Event) (fresh bool) {
 	fresh = !known || now.Sub(en.lastEvent) >= t.Dedupe || en.verdict != e.Verdict
 	if fresh {
 		en.lastEvent = now // the window counts from the last event that was sent (Req 2.2)
+	}
+	if e.Name != "" {
+		en.name = e.Name
 	}
 	en.record(e.Verdict, now)
 	t.touch(en, now)
@@ -224,7 +228,7 @@ func stamp(at time.Time) string {
 
 // view is the row with its all-time totals and the current rate.
 func (en *entry) view(now time.Time) Entry {
-	return Entry{Program: en.key.Program, Path: en.key.Path, Addr: en.key.Addr, Port: en.key.Port,
+	return Entry{Program: en.key.Program, Path: en.key.Path, Addr: en.key.Addr, Name: en.name, Port: en.key.Port,
 		Protocol: protoName(en.key.Proto), AllowCount: en.allow, DenyCount: en.deny,
 		FirstSeen: stamp(en.first), LastSeen: stamp(en.lastActive), LastAllowed: stamp(en.lastAllowed),
 		LastBlocked: stamp(en.lastBlocked), BytesSent: en.bytes, Rate: en.buckets.rate(now), Verdict: en.verdict}

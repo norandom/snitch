@@ -181,6 +181,7 @@ func TestWriteContracts(t *testing.T) {
 	}{
 		{"empty path", "", full},
 		{"newline in rules file", "/mem/status", Record{RulesFile: "a\nb"}},
+		{"newline in dns", "/mem/status", Record{DNS: "on\noff"}},
 		{"newline in mode", "/mem/status", Record{Mode: "monitor\nenforce"}},
 	}
 	for _, c := range cases {
@@ -221,4 +222,30 @@ func TestVersionIsTheLastKey(t *testing.T) {
 
 func TestReadRequiresAPath(t *testing.T) {
 	contracttest.Panics(t, contract.Precondition, func() { _, _ = Read("") })
+}
+
+func TestRecordDNSBeforeVersionAndRoundTrip(t *testing.T) {
+	for _, dns := range []string{"off: disabled", "on seen 1 ignored 2 cache 3 names 4 compiled 5"} {
+		r := full
+		r.DNS = dns
+		path := statusPath(t)
+		if err := Write(path, r); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(path)
+		want := strings.Replace(fullBody, "version=", "dns="+dns+"\nversion=", 1)
+		if err != nil || string(b) != want {
+			t.Fatalf("body=%s, %v; want %s", b, err, want)
+		}
+		got, err := Read(path)
+		if err != nil || got != r {
+			t.Fatalf("round trip=%+v, %v; want %+v", got, err, r)
+		}
+	}
+}
+
+func TestRecordEmptyDNSIsOmitted(t *testing.T) {
+	if body := format(full); strings.Contains(body, "dns=") || body != fullBody {
+		t.Fatalf("empty DNS record: %s", body)
+	}
 }

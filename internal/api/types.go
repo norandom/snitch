@@ -69,7 +69,8 @@ type Dropped struct {
 }
 
 // Event is one kernel decision ("event", id 0). Time marshals as RFC 3339 and lets the server
-// require a non-zero time.
+// require a non-zero time. Name is the name through which a compiled rule matched,
+// otherwise the most recently learned name; it is absent when unknown.
 type Event struct {
 	Type     string    `json:"type"`
 	Id       int       `json:"id"`
@@ -80,6 +81,7 @@ type Event struct {
 	Ppid     uint32    `json:"ppid"`
 	Comm     string    `json:"comm"`
 	Addr     string    `json:"addr"`
+	Name     string    `json:"name,omitempty"`
 	Port     uint16    `json:"port"`
 	Protocol string    `json:"protocol"` // tcp | udp
 	Verdict  string    `json:"verdict"`  // allow-local | allow-rule | deny-rule | allow-monitor | deny-default | allow-stale | allow-kill
@@ -96,10 +98,13 @@ type RuleRef struct {
 }
 
 // Entry is one row of the connection table, in Summary and snapshot replies.
+// Name is the name through which a compiled rule matched, otherwise the most
+// recently learned name; it is absent when unknown.
 type Entry struct {
 	Program     string  `json:"program"`
 	Path        string  `json:"path"`
 	Addr        string  `json:"addr"`
+	Name        string  `json:"name,omitempty"`
 	Port        uint16  `json:"port"`
 	Protocol    string  `json:"protocol"`
 	AllowCount  uint64  `json:"allowCount"`
@@ -152,6 +157,8 @@ type Status struct {
 	Evictions  int          `json:"evictions"`
 	Started    string       `json:"started"`
 	Counting   bool         `json:"counting"`
+	// DNS is absent only on daemons older than this version; an off tap has On false and a reason.
+	DNS *DNSStatus `json:"dns,omitempty"`
 }
 
 // RulesSummary is the startup line's numbers plus the files they came from.
@@ -185,14 +192,31 @@ type ProgramView struct {
 	Source      string   `json:"source"`
 }
 
-// Observation is one learned destination (the learned reply).
+// Observation is one learned destination (the learned reply). Name is the name
+// through which a compiled rule matched, otherwise the most recently learned
+// name; it is absent when unknown. A named observation may have Addr empty,
+// serialized as addr:"", because learning by name does not retain an address.
 type Observation struct {
 	Program  string `json:"program"`
 	Path     string `json:"path"`
 	Addr     string `json:"addr"`
+	Name     string `json:"name,omitempty"`
 	Protocol string `json:"protocol"`
 	Port     int    `json:"port"`
 	Count    int    `json:"count"`
 	First    string `json:"first"`
 	Last     string `json:"last"`
+}
+
+// DNSStatus reports whether the tap is on and its lifetime counters and current sizes.
+// An off tap reports On false with Reason; Ignored is the sum of rejected answers.
+type DNSStatus struct {
+	On        bool   `json:"on"`
+	Reason    string `json:"reason,omitempty"`
+	Seen      uint64 `json:"seen"`
+	Ignored   uint64 `json:"ignored"`
+	Entries   uint64 `json:"entries"`
+	Names     uint64 `json:"names"`
+	Compiled  uint64 `json:"compiled"`
+	Evictions uint64 `json:"evictions"`
 }

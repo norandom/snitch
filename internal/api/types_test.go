@@ -36,11 +36,11 @@ func wantKeys(t *testing.T, got []string, want ...string) {
 }
 
 // Req 2.6: the Python client's names where they map (design "Wire types").
-func TestEventJSONNames(t *testing.T) {
+func TestEventJSONKeys(t *testing.T) {
 	e := Event{Type: "event", Time: time.Unix(1, 0).UTC(), Program: "curl", Path: "/usr/bin/curl",
-		Addr: "1.2.3.4", Port: 443, Protocol: "tcp", Verdict: "allow-rule", Hook: "connect"}
+		Addr: "1.2.3.4", Name: "example.org", Port: 443, Protocol: "tcp", Verdict: "allow-rule", Hook: "connect"}
 	wantKeys(t, keysOf(t, e), "type", "id", "time", "program", "path", "pid", "ppid", "comm",
-		"addr", "port", "protocol", "verdict", "rule", "hook", "cookie")
+		"addr", "name", "port", "protocol", "verdict", "rule", "hook", "cookie")
 	b, _ := json.Marshal(e)
 	for _, frag := range []string{`"rule":null`, `"id":0`, `"time":"1970-01-01T00:00:01Z"`} {
 		if !strings.Contains(string(b), frag) {
@@ -49,25 +49,25 @@ func TestEventJSONNames(t *testing.T) {
 	}
 }
 
-func TestEntryJSONNames(t *testing.T) {
-	wantKeys(t, keysOf(t, Entry{}), "program", "path", "addr", "port", "protocol", "allowCount",
+func TestEntryJSONKeys(t *testing.T) {
+	wantKeys(t, keysOf(t, Entry{Name: "example.org"}), "program", "path", "addr", "name", "port", "protocol", "allowCount",
 		"denyCount", "firstSeen", "lastSeen", "lastAllowed", "lastBlocked", "bytesSent", "rate", "verdict")
 }
 
-func TestRuleRefAndViewsJSONNames(t *testing.T) {
+func TestRuleRefAndViewsJSONKeys(t *testing.T) {
 	wantKeys(t, keysOf(t, RuleRef{}), "id", "note", "source")
 	wantKeys(t, keysOf(t, RuleView{}), "id", "program", "to", "protocol", "port", "verdict", "note", "source")
 	wantKeys(t, keysOf(t, ProgramView{}), "name", "paths", "resolved", "executables", "source")
-	wantKeys(t, keysOf(t, Observation{}), "program", "path", "addr", "protocol", "port", "count", "first", "last")
+	wantKeys(t, keysOf(t, Observation{Name: "example.org"}), "program", "path", "addr", "name", "protocol", "port", "count", "first", "last")
 	wantKeys(t, keysOf(t, State{}), "type", "id", "mode", "trial", "kept", "rulesChanged", "reason")
 	wantKeys(t, keysOf(t, Summary{Type: "summary"}), "type", "id", "since", "entries")
 	wantKeys(t, keysOf(t, Dropped{Type: "dropped"}), "type", "id", "count")
 }
 
-func TestStatusJSONNames(t *testing.T) {
-	wantKeys(t, keysOf(t, Status{}), "running", "pid", "version", "mode", "source", "trial", "kept",
+func TestStatusJSONKeys(t *testing.T) {
+	wantKeys(t, keysOf(t, Status{DNS: &DNSStatus{}}), "running", "pid", "version", "mode", "source", "trial", "kept",
 		"kill", "learning", "rules", "rulesError", "clients", "dropped", "entries", "evictions",
-		"started", "counting")
+		"started", "counting", "dns")
 	wantKeys(t, keysOf(t, RulesSummary{}), "programs", "resolved", "executables", "rules", "file", "overlay")
 }
 
@@ -85,7 +85,7 @@ func TestReplyAndErrorEchoId(t *testing.T) {
 	wantKeys(t, keysOf(t, Reply{Type: "reply", Status: &Status{}, Window: "15m"}), "type", "id", "ok", "status", "window")
 }
 
-func TestRequestJSONNames(t *testing.T) {
+func TestRequestJSONKeys(t *testing.T) {
 	var r Request
 	line := `{"type":"rule.add","id":3,"program":"curl","path":"/p","to":"1.1.1.1/32","proto":"tcp",` +
 		`"port":443,"verdict":"allow","note":"n","window":"1h","events":true,"local":true,` +
@@ -112,5 +112,27 @@ func TestRequestYesMarshalsUnderItsName(t *testing.T) {
 	b, err := json.Marshal(Request{Type: "trial", Id: 1, Duration: "10m", Yes: true})
 	if err != nil || !strings.Contains(string(b), `"yes":true`) {
 		t.Fatalf("got %s, %v", b, err)
+	}
+}
+
+func TestDNSStatusJSONKeys(t *testing.T) {
+	wantKeys(t, keysOf(t, DNSStatus{Reason: "disabled"}), "on", "reason", "seen", "ignored", "entries", "names", "compiled", "evictions")
+	wantKeys(t, keysOf(t, DNSStatus{}), "on", "seen", "ignored", "entries", "names", "compiled", "evictions")
+}
+
+func TestOptionalNameAndDNSKeysOmitted(t *testing.T) {
+	for _, v := range []any{Event{}, Entry{}, Observation{}, Status{}} {
+		for _, k := range keysOf(t, v) {
+			if k == "name" || k == "dns" {
+				t.Fatalf("%T includes empty %s", v, k)
+			}
+		}
+	}
+}
+
+func TestObservationKeysAllowNameWithEmptyAddress(t *testing.T) {
+	b, err := json.Marshal(Observation{Name: "example.org"})
+	if err != nil || !strings.Contains(string(b), `"addr":""`) || !strings.Contains(string(b), `"name":"example.org"`) {
+		t.Fatalf("named observation: %s, %v", b, err)
 	}
 }

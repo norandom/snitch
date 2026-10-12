@@ -193,3 +193,40 @@ func BenchmarkTableObserveEvicting(b *testing.B) {
 		tb.Observe(cookieEv(ev("q", "10.0.0.2", uint16(i), "allow-rule"), cookie))
 	}
 }
+
+func TestTableNamesKeepAddressKeyAndLatestName(t *testing.T) {
+	c := newClock()
+	tb := newTable(c)
+	e := ev("curl", "1.2.3.4", 443, "allow-rule")
+	for i, name := range []string{"first.example", "second.example", ""} {
+		e.Name = name
+		if fresh := tb.Observe(e); fresh != (i == 0) {
+			t.Fatalf("observation %d fresh=%v", i, fresh)
+		}
+		want := name
+		if want == "" {
+			want = "second.example"
+		}
+		checkNamedTableRow(t, tb.Changed(c.now()), e.Addr, want, uint64(i+1))
+		if tb.Len() != 1 {
+			t.Fatalf("entries=%d, want one address key", tb.Len())
+		}
+		snapshot, err := tb.Snapshot(15 * time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkNamedTableRow(t, snapshot, e.Addr, want, uint64(i+1))
+		c.advance(time.Second)
+	}
+}
+
+func checkNamedTableRow(t *testing.T, rows []Entry, addr, name string, count uint64) {
+	t.Helper()
+	if len(rows) != 1 {
+		t.Fatalf("rows=%+v, want one", rows)
+	}
+	row := rows[0]
+	if row.Name != name || row.Addr != addr || row.AllowCount != count {
+		t.Fatalf("row=%+v, want addr=%s name=%s allowCount=%d", row, addr, name, count)
+	}
+}

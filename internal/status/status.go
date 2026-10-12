@@ -29,14 +29,16 @@ type Record struct {
 	Programs, Resolved, Executables, Rules int
 
 	Written time.Time // when the daemon wrote the file; read back in UTC to the second
-	Version string    // the daemon's build (spec deploy-service, Req 1.2); the record's last key
+	// DNS is omitted when empty; otherwise off: <reason> or on seen N ignored N cache N names N compiled N.
+	DNS     string
+	Version string // the daemon's build (spec deploy-service, Req 1.2); the record's last key
 }
 
 // keys is the file's line order, the same as the struct's, so a console `cat` reads top down
-// in the order the CLI prints. Read requires exactly these keys. version is last (added by
-// spec deploy-service) so the earlier lines keep their place.
+// in the order the CLI prints. Read requires these keys except the optional dns.
+// version is last (added by spec deploy-service) so the earlier lines keep their place.
 var keys = []string{"pid", "mode", "source", "learning", "trial", "kept", "rules_file",
-	"programs", "resolved", "executables", "rules", "written", "version"}
+	"programs", "resolved", "executables", "rules", "written", "dns", "version"}
 
 // Write replaces the file at path with r as key=value lines, one per field, a trailing
 // newline, Written in UTC to the second. The write is atomic (a 0600 temp file in the same
@@ -45,7 +47,7 @@ var keys = []string{"pid", "mode", "source", "learning", "trial", "kept", "rules
 // RuntimeDirectory. Requires a path and values without newlines (one line per field).
 func Write(path string, r Record) error {
 	contract.Require(path != "", "status: empty path")
-	contract.Require(!strings.ContainsAny(r.Mode+r.Source+r.Trial+r.RulesFile+r.Version, "\n"),
+	contract.Require(!strings.ContainsAny(r.Mode+r.Source+r.Trial+r.RulesFile+r.DNS+r.Version, "\n"),
 		"status: newline in a value")
 	return writeAtomic(path, []byte(format(r)))
 }
@@ -54,9 +56,12 @@ func format(r Record) string {
 	values := []string{strconv.Itoa(r.PID), r.Mode, r.Source, strconv.FormatBool(r.Learning),
 		r.Trial, strconv.FormatBool(r.Kept), r.RulesFile, strconv.Itoa(r.Programs),
 		strconv.Itoa(r.Resolved), strconv.Itoa(r.Executables), strconv.Itoa(r.Rules),
-		r.Written.UTC().Format(time.RFC3339), r.Version}
+		r.Written.UTC().Format(time.RFC3339), r.DNS, r.Version}
 	var b strings.Builder
 	for i, k := range keys {
+		if k == "dns" && r.DNS == "" {
+			continue
+		}
 		b.WriteString(k + "=" + values[i] + "\n")
 	}
 	return b.String()
@@ -123,14 +128,14 @@ func parseKV(b []byte) (map[string]string, error) {
 	return kv, nil
 }
 
-// recordOf converts the exact key set into a Record; the first bad value ends it.
+// recordOf converts the required and optional keys into a Record; the first bad value ends it.
 func recordOf(kv map[string]string) (Record, error) {
 	var r Record
 	if err := onlyKeys(kv); err != nil {
 		return r, err
 	}
 	r.Mode, r.Source, r.Trial, r.RulesFile = kv["mode"], kv["source"], kv["trial"], kv["rules_file"]
-	r.Version = kv["version"]
+	r.Version, r.DNS = kv["version"], kv["dns"]
 	ints := []struct {
 		key string
 		dst *int
@@ -165,10 +170,10 @@ func flagsAndTimes(kv map[string]string, r *Record) error {
 	return nil
 }
 
-// onlyKeys checks that kv holds exactly the keys Write produces.
+// onlyKeys checks that kv holds the required keys and only keys Write produces.
 func onlyKeys(kv map[string]string) error {
 	for _, k := range keys {
-		if _, ok := kv[k]; !ok {
+		if _, ok := kv[k]; !ok && k != "dns" {
 			return fmt.Errorf("missing key %q", k)
 		}
 	}
