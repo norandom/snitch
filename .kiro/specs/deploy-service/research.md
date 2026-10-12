@@ -350,3 +350,10 @@ daemon-api changed two things this spec deployed: `snitchd.service` now has
 directory) and the task deploys `/etc/snitch/operator`. Both landed in the VM repo at 44af244
 (lint incl. snitchd-rules green) and were deployed with pins v0.3.0; `deploy-check.sh` phase A
 passed 15/15 afterwards.
+
+## Revalidation by dns-tap (2026-10-12)
+The DNS tap spec changed the deployed rules file: the 16 `# deferred (DNS tap spec)` comments
+became 45 name rules (VM repo 30a1f57, pins at v0.4.0, sha256 adc33825…7256). The deploy task is
+unchanged; the deploy ran (`snitchd rules` and the binary changed, the unit did not), phase A of
+`deploy-check.sh` passed 15/15 on the new release, `api-check.sh` passed incl. its DNS phase.
+Task 4.5 (the learning run) stays open.

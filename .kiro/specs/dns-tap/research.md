@@ -195,3 +195,19 @@
   current snapshot's ids, tracks them with their expiry, deletes on expiry, and recompiles all of
   them inside `reload` after `publish` (the `domains` map is rewritten first). A kernel insert
   with a stale id is corrected by the daemon's re-put of the same record.
+
+## Release and verification on the dev VM (2026-10-12, task 3.3 part 1)
+- snitch `main` 083452a pushed; lint run 38234208337 success (ruff, go incl. `go vet -tags root`,
+  actionlint, shellcheck). Tag `v0.4.0`; release run 38234650944 success; asset `snitchd`
+  sha256 `adc33825de8990bc24364972da89d9c8e64e2fc615ff47b505327664047a7256`, `snitchd -version` v0.4.0.
+- VM repo 30a1f57: `files/snitchd/rules.toml` with 45 name rules for 15 programs (the 16 deferred
+  lines, line 44's duplicates collapsed; `github.com` has six rules, hence the 8-slot limit),
+  pins bumped; lint 38234778376 success (its `snitchd check` with the pinned release: 58 rules
+  effective). Deployed with `TARGET_HOSTS=@local TARGET_USER=mc uv run pyinfra -y inventory.py
+  tasks/snitchd.py`: binary replaced, service restarted in monitor mode from the files, log
+  `dns tap on: 1 resolvers`.
+- `scripts/api-check.sh` as the operator: every step PASS incl. phase C (C1 tap on, C2 curl name
+  rule event with rule and `www.example.org`, C3 literal 9.9.9.9 without a name, C4 remove,
+  C5 compiled count down from 18 within 30 s); `sudo scripts/deploy-check.sh` phase A 15/15.
+- `sudo snitchd status` minutes later: `dns: on seen 34 ignored 2 cache 26 names 30 compiled 56`.
+- Open: `deploy-check.sh --trial` with the five dev tools (operator's go, serial console).
