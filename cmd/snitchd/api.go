@@ -89,7 +89,7 @@ func (d *daemon) facts() api.Status {
 		Source: string(d.cfg.source), Trial: deadline, Kept: kept, Kill: a.kill(), Learning: d.cfg.learn,
 		Rules: api.RulesSummary{File: d.cfg.rules, Overlay: d.cfg.overlay}, RulesError: rulesErrorText(a.rulesErr()),
 		Clients: a.server.Clients(), Dropped: int(a.server.Dropped()), Entries: a.table.Len(), Evictions: a.table.Evictions(),
-		Started: a.started.UTC().Format(time.RFC3339), Counting: d.counting}
+		Started: a.started.UTC().Format(time.RFC3339), Counting: d.counting, DNS: d.dns.facts()}
 	s.Rules.Programs, s.Rules.Resolved, s.Rules.Executables, s.Rules.Rules = counts(d.st.current())
 	return s
 }

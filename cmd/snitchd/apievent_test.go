@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/netip"
 	"os"
@@ -40,7 +41,7 @@ func TestToEventVerdictAndHookNames(t *testing.T) {
 		for h, wantH := range hookNames {
 			e := sample()
 			e.Verdict, e.Hook = v, h
-			got := toEvent(&e, fakeSnap(t), noProc, evNow)
+			got := toEvent(&e, fakeSnap(t), noProc, evNow, nil)
 			if got.Verdict != wantV || got.Hook != wantH {
 				t.Fatalf("verdict %d hook %d: got %q %q, want %q %q", v, h, got.Verdict, got.Hook, wantV, wantH)
 			}
@@ -48,7 +49,7 @@ func TestToEventVerdictAndHookNames(t *testing.T) {
 	}
 	e := sample()
 	e.Verdict = 42
-	if got := toEvent(&e, fakeSnap(t), noProc, evNow); got.Verdict != "verdict-42" {
+	if got := toEvent(&e, fakeSnap(t), noProc, evNow, nil); got.Verdict != "verdict-42" {
 		t.Fatalf("an unknown verdict is named by its number, got %q", got.Verdict)
 	}
 }
@@ -56,7 +57,7 @@ func TestToEventVerdictAndHookNames(t *testing.T) {
 func TestToEventMappedProgramWithRuleReference(t *testing.T) {
 	e := sample()
 	e.Ppid = 1
-	got := toEvent(&e, notedSnap(t), func(uint32) string { return "/proc/says/this" }, evNow)
+	got := toEvent(&e, notedSnap(t), func(uint32) string { return "/proc/says/this" }, evNow, nil)
 	want := api.Event{Type: "event", Time: evNow, Program: "curl", Path: "/usr/bin/curl", Pid: 4242, Ppid: 1, Comm: "curl",
 		Addr: "1.1.1.1", Port: 443, Protocol: "tcp", Verdict: "allow-rule",
 		Rule: &api.RuleRef{Id: 1, Note: "dns", Source: "/etc/snitch/rules.toml"}, Hook: "connect", Cookie: 77}
@@ -68,11 +69,11 @@ func TestToEventMappedProgramWithRuleReference(t *testing.T) {
 func TestToEventWithoutARuleHasANilReference(t *testing.T) {
 	e := sample()
 	e.Rule, e.Verdict = 0, 0
-	if got := toEvent(&e, fakeSnap(t), noProc, evNow); got.Rule != nil || got.Program != "curl" {
+	if got := toEvent(&e, fakeSnap(t), noProc, evNow, nil); got.Rule != nil || got.Program != "curl" {
 		t.Fatalf("no rule decided: want a nil reference and the program name, got %+v", got)
 	}
 	e.Rule = 9 // a rule id the snapshot does not know (a reload raced the event)
-	if got := toEvent(&e, fakeSnap(t), noProc, evNow); got.Rule != nil {
+	if got := toEvent(&e, fakeSnap(t), noProc, evNow, nil); got.Rule != nil {
 		t.Fatalf("an unknown rule id is no reference, got %+v", got.Rule)
 	}
 }
@@ -81,12 +82,12 @@ func TestToEventIPv6AndUDP(t *testing.T) {
 	e := sample()
 	e.Family, e.Proto, e.Hook, e.Dport = 10, 17, 1, 53
 	e.Addr = netip.MustParseAddr("2001:db8::1").As16()
-	got := toEvent(&e, fakeSnap(t), noProc, evNow)
+	got := toEvent(&e, fakeSnap(t), noProc, evNow, nil)
 	if got.Addr != "2001:db8::1" || got.Port != 53 || got.Protocol != "udp" || got.Hook != "sendmsg" {
 		t.Fatalf("got %+v", got)
 	}
 	e.Proto = 1
-	if got := toEvent(&e, fakeSnap(t), noProc, evNow); got.Protocol != "1" {
+	if got := toEvent(&e, fakeSnap(t), noProc, evNow, nil); got.Protocol != "1" {
 		t.Fatalf("another protocol is its number, got %q", got.Protocol)
 	}
 }
@@ -96,16 +97,16 @@ func TestToEventUnknownProgramPath(t *testing.T) {
 	e := sample()
 	e.Program, e.Rule, e.Verdict = 0, 0, 0
 	setC(e.Path[:], "/tmp/curl-copy\x00")
-	got := toEvent(&e, fakeSnap(t), func(uint32) string { return "/proc/says/this" }, evNow)
+	got := toEvent(&e, fakeSnap(t), func(uint32) string { return "/proc/says/this" }, evNow, nil)
 	if got.Program != "unknown" || got.Path != "/tmp/curl-copy" {
 		t.Fatalf("want unknown with the kernel's path, got %q %q", got.Program, got.Path)
 	}
 	e.Path = [256]int8{}
-	got = toEvent(&e, fakeSnap(t), func(pid uint32) string { return "/proc/exe/of/" + fmt.Sprint(pid) }, evNow)
+	got = toEvent(&e, fakeSnap(t), func(pid uint32) string { return "/proc/exe/of/" + fmt.Sprint(pid) }, evNow, nil)
 	if got.Program != "unknown" || got.Path != "/proc/exe/of/4242" {
 		t.Fatalf("want the /proc fallback, got %q %q", got.Program, got.Path)
 	}
-	got = toEvent(&e, nil, noProc, evNow)
+	got = toEvent(&e, nil, noProc, evNow, nil)
 	if got.Program != "unknown" || got.Path != "" {
 		t.Fatalf("a vanished process without a path: unknown and no path, got %q %q", got.Program, got.Path)
 	}
@@ -113,8 +114,8 @@ func TestToEventUnknownProgramPath(t *testing.T) {
 
 func TestToEventContracts(t *testing.T) {
 	e := sample()
-	contracttest.Panics(t, contract.Precondition, func() { toEvent(&e, fakeSnap(t), nil, evNow) })
-	contracttest.Panics(t, contract.Precondition, func() { toEvent(&e, fakeSnap(t), noProc, time.Time{}) })
+	contracttest.Panics(t, contract.Precondition, func() { toEvent(&e, fakeSnap(t), nil, evNow, nil) })
+	contracttest.Panics(t, contract.Precondition, func() { toEvent(&e, fakeSnap(t), noProc, time.Time{}, nil) })
 	contracttest.Panics(t, contract.Precondition, func() { rulesView(nil) })
 }
 
@@ -176,4 +177,81 @@ func TestLearnedViewConverts(t *testing.T) {
 	if got := learnedView(nil); got == nil || len(got) != 0 {
 		t.Fatalf("no observations is an empty list, not null: %#v", got)
 	}
+}
+
+func TestToEventDNSNameAndReference(t *testing.T) {
+	e := sample()
+	snap := notedSnap(t)
+	snap.res.ByID[e.Rule].To = netip.Prefix{}
+	snap.res.ByID[e.Rule].Name = "example.org"
+	lookup := func(addr netip.Addr, id uint32) string {
+		if addr != netip.MustParseAddr("1.1.1.1") || id != e.Rule {
+			t.Fatalf("lookup %v %d", addr, id)
+		}
+		return "www.example.org"
+	}
+	got := toEvent(&e, snap, noProc, evNow, lookup)
+	if got.Name != "www.example.org" || got.Rule == nil || got.Rule.Id != 1 || got.Rule.Note != "dns" {
+		t.Fatalf("event: %+v", got)
+	}
+	b, _ := json.Marshal(got)
+	if !strings.Contains(string(b), `"name":"www.example.org"`) {
+		t.Fatal(string(b))
+	}
+	got = toEvent(&e, snap, noProc, evNow, nil)
+	b, _ = json.Marshal(got)
+	if strings.Contains(string(b), `"name"`) {
+		t.Fatal(string(b))
+	}
+}
+
+func TestToEventDNSNameReachesTable(t *testing.T) {
+	e := sample()
+	got := toEvent(&e, notedSnap(t), noProc, evNow, namedDNSState().nameOf)
+	table := api.NewTable(func() time.Time { return evNow })
+	table.Observe(got)
+	entries := table.Changed(evNow)
+	if len(entries) != 1 || entries[0].Name != "recent.example.net" || entries[0].Addr != got.Addr {
+		t.Fatalf("table: %+v", entries)
+	}
+}
+
+func TestFactsRulesViewNameDestination(t *testing.T) {
+	snap := notedSnap(t)
+	snap.res.File.Rules[0].To = netip.Prefix{}
+	snap.res.File.Rules[0].Name = "example.org"
+	rs, _ := rulesView(snap)
+	if rs[0].To != "example.org" {
+		t.Fatalf("destination: %q", rs[0].To)
+	}
+}
+
+func TestLearnedObservationNamedZeroAddress(t *testing.T) {
+	got := learnedView([]rules.Observed{{Name: "www.example.org", First: evNow, Last: evNow}})
+	b, _ := json.Marshal(got)
+	if got[0].Addr != "" || got[0].Name != "www.example.org" || !strings.Contains(string(b), `"addr":""`) {
+		t.Fatalf("named observation: %s", b)
+	}
+}
+
+func TestDescribeAndObservationDNSName(t *testing.T) {
+	e := sample()
+	snap := notedSnap(t)
+	r := snap.res.ByID[e.Rule]
+	r.To, r.Name = netip.Prefix{}, "example.org"
+	got := describe(&e, snap, noProc, "www.example.org")
+	want := "allow (rule)            connect  pid 4242    curl            tcp  -> 1.1.1.1:443 (www.example.org)  program curl  rule #1 curl example.org tcp 443 allow"
+	if got != want || strings.Contains(got+ruleText(r), "invalid Prefix") {
+		t.Fatalf("log: %q\nwant %q", got, want)
+	}
+	o := observation(&e, snap, noProc, evNow, "www.example.org")
+	if o.Name != "www.example.org" {
+		t.Fatalf("observation: %+v", o)
+	}
+	learned := rules.NewLearned(nil)
+	learned.Observe(o)
+	if got := learned.File().Rules[0].Dest(); got != "www.example.org" {
+		t.Fatalf("learned destination: %q", got)
+	}
+
 }

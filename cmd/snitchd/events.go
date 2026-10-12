@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
@@ -29,12 +30,15 @@ func (d *daemon) pump(ctx context.Context) error {
 		}
 		e := decodeEvent(rec.RawSample)
 		snap := d.st.current()
-		fmt.Println(describe(&e, snap, exeOf))
+		// one lookup per event: the log line, the API event and the learner carry the same name
+		name := d.dns.nameOf(addrOf(&e), e.Rule)
+		fixed := func(netip.Addr, uint32) string { return name }
+		fmt.Println(describe(&e, snap, exeOf, name))
 		if d.emit != nil {
-			d.emit(toEvent(&e, snap, exeOf, time.Now()))
+			d.emit(toEvent(&e, snap, exeOf, time.Now(), fixed))
 		}
 		if e.Verdict == verdictAllowMonitor && d.sink != nil {
-			d.sink(observation(&e, snap, exeOf, time.Now()))
+			d.sink(observation(&e, snap, exeOf, time.Now(), name))
 		}
 	}
 }
@@ -52,10 +56,14 @@ func exeOf(pid uint32) string {
 //
 //	DENY (default)  connect pid 4242 curl   tcp -> 9.9.9.9:443  program curl
 //	allow (rule)    connect pid 4242 curl   tcp -> 1.1.1.1:443  program curl  rule #1 curl 1.1.1.1/32 tcp 443 allow
-func describe(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string) string {
+func describe(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, names ...string) string {
 	name, _ := programOf(e, snap, exe)
+	dest := destination(e)
+	if len(names) != 0 && names[0] != "" {
+		dest += " (" + names[0] + ")"
+	}
 	s := fmt.Sprintf("%-23s %-8s pid %-7d %-15s %-4s -> %s  program %s",
-		verdictName(e), hookName(e), e.Pid, commOf(e), protoName(e.Proto), destination(e), name)
+		verdictName(e), hookName(e), e.Pid, commOf(e), protoName(e.Proto), dest, name)
 	if r := ruleOf(e, snap); r != nil {
 		s += "  rule " + ruleText(r)
 	}
@@ -106,7 +114,7 @@ func ruleText(r *rules.Rule) string {
 	} else if len(r.Ports) > 1 {
 		port = fmt.Sprintf("%d-%d", r.Ports[0], r.Ports[len(r.Ports)-1])
 	}
-	return fmt.Sprintf("#%d %s %s %s %s %s", r.ID, r.Program, r.To, protoName(uint8(r.Proto)), port, verdictWord(r.Verdict))
+	return fmt.Sprintf("#%d %s %s %s %s %s", r.ID, r.Program, r.Dest(), protoName(uint8(r.Proto)), port, verdictWord(r.Verdict))
 }
 
 func protoName(p uint8) string {
@@ -129,8 +137,11 @@ func verdictWord(v rules.Verdict) string {
 }
 
 // observation is what the learning sink gets for an uncovered connection.
-func observation(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, at time.Time) rules.Observation {
+func observation(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, at time.Time, names ...string) rules.Observation {
 	o := rules.Observation{Exe: rules.ExeKey{Ino: e.ExeIno, Dev: e.ExeDev}, Addr: addrOf(e), Proto: rules.Proto(e.Proto), Port: e.Dport, At: at}
+	if len(names) != 0 {
+		o.Name = names[0]
+	}
 	o.Path = pathOf(e)
 	if o.Path == "" {
 		o.Path = exe(e.Pid) // one /proc lookup; programOf would repeat it

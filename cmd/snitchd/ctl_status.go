@@ -186,17 +186,20 @@ func (f statusFacts) statusLine() string {
 
 // lines is the output in print order: the keys are the documented interface.
 func (f statusFacts) lines() [][2]string {
-	return [][2]string{
+	lines := [][2]string{
 		{"daemon", f.daemonLine()}, {"mode", f.modeLine()}, {"trial", f.trialLine()}, {"kept", f.keptLine()},
 		{"kill", f.killLine()}, {"learning", f.learningLine()}, {"rules", f.rulesLine()}, {"status", f.statusLine()},
-		{"version", f.versionLine()},
 	}
+	if f.recErr == nil && f.rec.DNS != "" {
+		lines = append(lines, [2]string{"dns", f.rec.DNS})
+	}
+	return append(lines, [2]string{"version", f.versionLine()})
 }
 
 func statusUsage(f *flag.FlagSet) func() {
 	return func() {
 		fmt.Fprint(f.Output(), `usage: snitchd status [flags]
-  one line per fact, a stable key each: daemon: mode: trial: kept: kill: learning: rules: status: version:
+  one line per fact, a stable key each: daemon: mode: trial: kept: kill: learning: rules: status: dns: version:
   exit 1 when the daemon is not running (no pinned maps or a heartbeat older than 15 s), 0 otherwise
 `)
 		f.PrintDefaults()

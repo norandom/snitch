@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"net/netip"
 	"time"
 
 	"github.com/norandom/snitch/internal/api"
@@ -22,7 +23,7 @@ var verdictWire = [...]string{"allow-monitor", "allow-rule", "deny-rule", "deny-
 // "unknown"; the path is what the kernel wrote (unknown programs, or with the flag), else one
 // /proc lookup through exe, else "". A rule reference needs a rule the snapshot knows: an id
 // from a rule set a reload just replaced is no reference.
-func toEvent(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, now time.Time) api.Event {
+func toEvent(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, now time.Time, nameOf func(netip.Addr, uint32) string) api.Event {
 	contract.Require(e != nil && exe != nil, "toEvent needs the event and the exe fallback")
 	contract.Require(!now.IsZero(), "an event carries its time")
 	name, known := programOf(e, snap, exe)
@@ -36,6 +37,9 @@ func toEvent(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, 
 	ev := api.Event{Type: "event", Time: now, Program: name, Path: path, Pid: e.Pid, Ppid: e.Ppid, Comm: commOf(e),
 		Addr: addrOf(e).String(), Port: e.Dport, Protocol: protoWire(e.Proto), Verdict: verdictWireOf(e.Verdict),
 		Hook: hookName(e), Cookie: e.Cookie}
+	if nameOf != nil {
+		ev.Name = nameOf(addrOf(e), e.Rule)
+	}
 	if r := ruleOf(e, snap); r != nil {
 		ev.Rule = &api.RuleRef{Id: int(r.ID), Note: r.Note, Source: r.Source}
 	}
@@ -72,7 +76,7 @@ func rulesView(snap *snapshot) ([]api.RuleView, []api.ProgramView) {
 	res := snap.res
 	rs := make([]api.RuleView, 0, len(res.File.Rules))
 	for _, r := range res.File.Rules {
-		rs = append(rs, api.RuleView{Id: int(r.ID), Program: r.Program, To: r.To.String(), Protocol: protoWire(uint8(r.Proto)),
+		rs = append(rs, api.RuleView{Id: int(r.ID), Program: r.Program, To: r.Dest(), Protocol: protoWire(uint8(r.Proto)),
 			Port: singlePort(r.Ports), Verdict: verdictWord(r.Verdict), Note: r.Note, Source: r.Source})
 	}
 	mapped := map[uint32]int{}
@@ -98,7 +102,11 @@ func singlePort(ports []uint16) int {
 func learnedView(in []rules.Observed) []api.Observation {
 	out := make([]api.Observation, 0, len(in))
 	for _, o := range in {
-		out = append(out, api.Observation{Program: o.Program, Path: o.Path, Addr: o.Addr.String(), Protocol: protoWire(uint8(o.Proto)),
+		addr := ""
+		if o.Addr.IsValid() {
+			addr = o.Addr.String()
+		}
+		out = append(out, api.Observation{Program: o.Program, Path: o.Path, Addr: addr, Name: o.Name, Protocol: protoWire(uint8(o.Proto)),
 			Port: int(o.Port), Count: int(o.Count), First: o.First.UTC().Format(time.RFC3339), Last: o.Last.UTC().Format(time.RFC3339)})
 	}
 	return out

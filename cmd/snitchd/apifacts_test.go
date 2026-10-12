@@ -16,6 +16,10 @@ func TestFactsOfAFlagDaemon(t *testing.T) {
 	var logs []string
 	d := newAPIDaemon(t, sourceFlag, &logs)
 	got := d.facts()
+	if got.DNS == nil || *got.DNS != (api.DNSStatus{On: false, Reason: "unavailable"}) {
+		t.Fatalf("DNS: %+v", got.DNS)
+	}
+	got.DNS = nil
 	want := api.Status{Running: true, Pid: os.Getpid(), Version: "dev", Mode: "monitor", Source: "flag", Kill: true, Learning: true,
 		Rules:   api.RulesSummary{Programs: 1, Resolved: 0, Executables: 0, Rules: 1, File: "/etc/snitch/rules.toml", Overlay: "/etc/snitch/rules.d/local.toml"},
 		Started: "2026-10-10T12:00:00Z", Counting: true}

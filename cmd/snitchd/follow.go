@@ -132,6 +132,7 @@ type statusWriter struct {
 	store     trial.Store
 	mode      func() trial.Mode
 	snap      func() *snapshot
+	dns       func() string
 	now       func() time.Time
 	write     func(string, status.Record) error // status.Write
 	log       func(string)
@@ -159,8 +160,12 @@ func (w *statusWriter) tick(context.Context) error {
 // (the version variable, through the same check that prints it: Req 1.2 of deploy-service).
 func (w *statusWriter) record() status.Record {
 	st := w.store.Read()
+	dns := ""
+	if w.dns != nil {
+		dns = w.dns()
+	}
 	r := status.Record{PID: w.pid, Mode: modeName(w.mode()), Source: string(w.source), Learning: w.learn,
-		Kept: st.Kept, RulesFile: w.rulesFile, Written: w.now(), Version: mustVersion(version)}
+		Kept: st.Kept, RulesFile: w.rulesFile, Written: w.now(), Version: mustVersion(version), DNS: dns}
 	if st.Trial != nil {
 		r.Trial = st.Trial.End.UTC().Format(time.RFC3339)
 	}
@@ -195,6 +200,6 @@ func (d *daemon) modeJobs() []jobs.Job {
 	}
 	w := &statusWriter{path: d.cfg.status, rulesFile: d.cfg.rules, source: d.cfg.source, learn: d.cfg.learn,
 		pid: os.Getpid(), store: d.follow.store, mode: func() trial.Mode { return trial.Mode(d.mode.Load()) },
-		snap: d.st.current, now: time.Now, write: status.Write, log: d.log}
+		snap: d.st.current, dns: d.dns.recordLine, now: time.Now, write: status.Write, log: d.log}
 	return []jobs.Job{d.follow.job(), w.job()}
 }
