@@ -23,6 +23,9 @@ const (
 // failure the previous snapshot stays current and the error is kept for the facts until a
 // full reload succeeds. Delegates for the maps, the loader and the clock keep it testable.
 type reloader struct {
+	after     func(*snapshot)
+	onFull    func(*snapshot) func() bool
+	compiled  func() int
 	mu        sync.Mutex // one reload at a time: the diff is computed against the current base
 	path      string
 	overlay   string
@@ -93,7 +96,7 @@ func (r *reloader) reload(full bool) bool {
 		return true // a re-resolve that changed nothing: no apply, no publish, no summary line
 	}
 	if err == nil {
-		err = apply(r.programs, r.rules, ch)
+		err = applyWith(r.programs, r.rules, ch, r.evictor(next))
 	}
 	if err != nil {
 		r.lastErr, r.lastErrAt = err, r.clock()
@@ -105,7 +108,11 @@ func (r *reloader) reload(full bool) bool {
 		r.lastErr = nil
 	}
 	r.st.publish(next)
-	fmt.Println(summary(next))
+	// Lock order: reloader.mu then dnsState.mu; the reader never takes reloader.mu.
+	if r.after != nil {
+		r.after(next)
+	}
+	fmt.Println(summaryWith(next, r.compiledCount()))
 	return true
 }
 
@@ -174,4 +181,18 @@ func (r *reloader) reResolve() jobs.Job {
 // onHUP reloads fully on SIGHUP.
 func (r *reloader) onHUP() jobs.Job {
 	return jobs.OnSignal(func(os.Signal) error { r.reload(true); return nil }, syscall.SIGHUP)
+}
+
+func (r *reloader) evictor(snap *snapshot) func() bool {
+	if r.onFull == nil {
+		return nil
+	}
+	return r.onFull(snap)
+}
+
+func (r *reloader) compiledCount() int {
+	if r.compiled == nil {
+		return 0
+	}
+	return r.compiled()
 }

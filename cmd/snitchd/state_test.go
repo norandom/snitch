@@ -243,3 +243,11 @@ func TestApplyFullRetryLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestSummaryCompiledDoesNotCountAsEffectiveRules(t *testing.T) {
+	snap := newReaderFixture().snap
+	base, got := summary(snap), summaryWith(snap, 12)
+	if got != base+" + 12 compiled" || !strings.Contains(got, "1 rules effective") {
+		t.Fatal(got)
+	}
+}

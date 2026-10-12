@@ -92,3 +92,66 @@ func (s *dnsState) expire(context.Context) error {
 	s.flush(snap)
 	return nil
 }
+
+// recompile holds the tap lock across both maps so readers cannot restore stale ids.
+func (s *dnsState) recompile(snap *snapshot) {
+	if s == nil || !s.on {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	slots, err := dns.Slots(snap.res)
+	if err != nil {
+		s.log("dns slots: " + err.Error())
+		return
+	}
+	s.rewriteDomains(slots)
+	puts, dels := s.comp.Recompile(snap.res, &s.cache, snap.ent.Rules)
+	// A failed old put carries an obsolete id; only the new diff may be retried.
+	s.pending = nil
+	s.queue(puts, dels)
+	s.flush(snap)
+}
+
+func (s *dnsState) rewriteDomains(slots map[[64]byte][4]dns.Slot) {
+	if s.domainKeys == nil {
+		s.domainKeys = make(map[[64]byte]struct{})
+	}
+	for key, slots := range slots {
+		var val bpf.DnsDomainVal
+		for i, slot := range slots {
+			val.Slot[i] = bpf.DnsDomainSlot{Program: slot.Program, Proto: uint8(slot.Proto), Port: slot.Port, Id: slot.ID}
+		}
+		if err := s.domains.put(bpf.DnsDomainKey{Name: key}, val); err != nil {
+			s.noteMap(err)
+			continue
+		}
+		s.domainKeys[key] = struct{}{}
+	}
+	for key := range s.domainKeys {
+		if _, kept := slots[key]; kept {
+			continue
+		}
+		if err := s.domains.del(bpf.DnsDomainKey{Name: key}); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+			s.noteMap(err)
+			continue
+		}
+		delete(s.domainKeys, key)
+	}
+}
+
+func (s *dnsState) evictorFor(snap *snapshot) func() bool {
+	if s == nil || !s.on {
+		return nil
+	}
+	return func() bool { return s.evictSomeFor(snap.ent.Rules) }
+}
+
+func (s *dnsState) compiledCount() int {
+	if s == nil || !s.on {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.comp.Len()
+}

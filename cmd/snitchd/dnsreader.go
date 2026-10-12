@@ -158,10 +158,12 @@ func (s *dnsState) evictOne(snap *snapshot) bool {
 }
 
 // evictSome is bounded so a full file put never waits for an unbounded purge.
-func (s *dnsState) evictSome() bool {
+func (s *dnsState) evictSome() bool { return s.evictSomeFor(s.current().ent.Rules) }
+
+func (s *dnsState) evictSomeFor(file map[rules.RuleKey]rules.RuleVal) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	snap := s.current()
+	snap := &snapshot{ent: rules.Entries{Rules: file}}
 	evicted := false
 	for range 64 {
 		if !s.evictOne(snap) {

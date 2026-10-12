@@ -167,3 +167,79 @@ func TestDNSJobsExpiryTickAndReaderClose(t *testing.T) {
 		t.Fatalf("closes %d dels %d compiled %d", closes, f.dels, f.s.comp.Len())
 	}
 }
+
+func recompileFixture() *readerFixture {
+	f := newReaderFixture()
+	f.s.on = true
+	f.s.domains = putDel{put: func(any, any) error { return nil }, del: func(any) error { return nil }}
+	return f
+}
+
+func TestRecompileRenumbersAndDropsPending(t *testing.T) {
+	f := recompileFixture()
+	rec := readerRecord()
+	rec.Addrs = append(rec.Addrs, netip.MustParseAddr("192.0.2.2"))
+	f.s.handle(rec)
+	stale := rules.RuleKey{Port: 999}
+	f.s.queue(map[rules.RuleKey]rules.RuleVal{stale: {Id: 1}}, nil)
+	nameRule := f.snap.res.File.Rules[0]
+	nameRule.ID = 8
+	f.snap.res.File.Rules = []rules.Rule{{Program: "any", To: netip.MustParsePrefix("198.51.100.1/32"), Verdict: rules.Allow, ID: 7}, nameRule}
+	f.s.recompile(f.snap)
+	f.s.flush(f.snap)
+	if _, ok := f.live[stale]; ok {
+		t.Fatal("stale pending put survived recompile")
+	}
+	if len(f.live) != 2 || f.puts != 4 {
+		t.Fatal(f.live, f.puts)
+	}
+	for _, v := range f.live {
+		if v.Id != 8 {
+			t.Fatal("old id", v)
+		}
+	}
+}
+
+func TestRecompileRewritesDomains(t *testing.T) {
+	f := recompileFixture()
+	live := map[bpf.DnsDomainKey]bpf.DnsDomainVal{}
+	f.s.domains = putDel{put: func(k, v any) error {
+		if f.s.mu.TryLock() {
+			f.s.mu.Unlock()
+			t.Fatal("domains rewrite needs tap lock")
+		}
+		live[k.(bpf.DnsDomainKey)] = v.(bpf.DnsDomainVal)
+		return nil
+	}, del: func(k any) error { delete(live, k.(bpf.DnsDomainKey)); return nil }}
+	f.s.recompile(f.snap)
+	old := bpf.DnsDomainKey{Name: dns.Key("example.org")}
+	want := bpf.DnsDomainSlot{Proto: uint8(rules.TCP), Port: 443, Id: 7}
+	if live[old].Slot[0] != want {
+		t.Fatal(live)
+	}
+	f.snap.res.File.Rules[0].Name = "new.org"
+	f.s.recompile(f.snap)
+	if _, ok := live[old]; ok {
+		t.Fatal("removed name still present")
+	}
+	if live[bpf.DnsDomainKey{Name: dns.Key("new.org")}].Slot[0] != want {
+		t.Fatal(live)
+	}
+}
+
+func TestEvictorForSubtractsPendingFileKeys(t *testing.T) {
+	f := recompileFixture()
+	f.s.handle(readerRecord())
+	next := newReaderFixture().snap
+	for k := range f.live {
+		next.ent.Rules[k] = rules.RuleVal{Id: 99}
+	}
+	if !f.s.evictorFor(next)() || f.dels != 0 {
+		t.Fatal("pending file key deleted", f.dels)
+	}
+	var off *dnsState
+	off.recompile(nil)
+	if off.evictorFor(nil) != nil {
+		t.Fatal("off evictor")
+	}
+}

@@ -83,7 +83,7 @@ func startup(cfg config) (*daemon, error) {
 	if err := d.beat(); err != nil {
 		return nil, fmt.Errorf("heartbeat: %w", err)
 	}
-	if err := apply(mapOps(d.objs.Programs), mapOps(d.objs.Rules), rules.Diff(rules.Entries{}, snap.ent)); err != nil {
+	if err := applyWith(mapOps(d.objs.Programs), mapOps(d.objs.Rules), rules.Diff(rules.Entries{}, snap.ent), d.dns.evictorFor(snap)); err != nil {
 		return nil, fmt.Errorf("rules: %w", err)
 	}
 	d.st.publish(snap)
@@ -92,6 +92,7 @@ func startup(cfg config) (*daemon, error) {
 		return nil, err
 	}
 	d.dns = loadDNS(d)
+	d.dns.recompile(d.st.current())
 	fmt.Println(startupLine(version, modeName(trial.Mode(d.mode.Load())), cfg.source))
 	return d, nil
 }
@@ -215,7 +216,7 @@ func (d *daemon) serve() int { return runJobs(d.log, d.jobList()...) }
 // when configured, the learned-file writer, the API and the mode follower with its status writer.
 func (d *daemon) jobList() []jobs.Job {
 	r := &reloader{path: d.cfg.rules, overlay: d.cfg.overlay, paths: []string{d.cfg.rules, d.cfg.overlay},
-		st: &d.st, programs: mapOps(d.objs.Programs), rules: mapOps(d.objs.Rules), load: loadRules, log: d.log}
+		st: &d.st, programs: mapOps(d.objs.Programs), rules: mapOps(d.objs.Rules), load: loadRules, log: d.log, after: d.dns.recompile, onFull: d.dns.evictorFor, compiled: d.dns.compiledCount}
 	js := []jobs.Job{
 		jobs.Every(heartbeatPeriod, func(context.Context) error { return d.beat() }),
 		jobs.After(d.cfg.duration),

@@ -21,6 +21,7 @@ import (
 const resolvPath = "/etc/resolv.conf"
 
 type dnsState struct {
+	domainKeys                       map[[64]byte]struct{}
 	capacityFailing                  bool
 	read                             func() ([]byte, error)
 	current                          func() *snapshot

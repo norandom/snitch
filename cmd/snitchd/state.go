@@ -131,7 +131,9 @@ func mergeOverlay(base *rules.File, overlay string) (*rules.File, error) {
 
 // summary is the one line printed after every successful apply. A program counts as resolved
 // when at least one of its executables is mapped; patterns that matched nothing are listed.
-func summary(snap *snapshot) string {
+func summary(snap *snapshot) string { return summaryWith(snap, 0) }
+
+func summaryWith(snap *snapshot, compiled int) string {
 	res := snap.res
 	mapped := map[uint32]bool{}
 	for _, id := range res.Programs {
@@ -152,7 +154,11 @@ func summary(snap *snapshot) string {
 	if len(unmatched) > 0 {
 		s += fmt.Sprintf(", %d patterns unmatched%s", len(unmatched), names(unmatched))
 	}
-	return s + fmt.Sprintf(", %d executables mapped, %d rules effective (%d entries)", len(snap.ent.Programs), len(res.File.Rules), len(snap.ent.Rules))
+	s += fmt.Sprintf(", %d executables mapped, %d rules effective (%d entries)", len(snap.ent.Programs), len(res.File.Rules), len(snap.ent.Rules))
+	if compiled > 0 {
+		s += fmt.Sprintf(" + %d compiled", compiled)
+	}
+	return s
 }
 
 func names(list []string) string {
