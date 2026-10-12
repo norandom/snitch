@@ -141,6 +141,15 @@ func (c *Cache) Names(addr netip.Addr) []string {
 	return names
 }
 
+// Each calls fn for every cached address with a detached snapshot of its names (most recently
+// learned first), in no particular order; the recompile on a reload needs every address, not
+// only those that already produced compiled entries. fn must not mutate the cache.
+func (c *Cache) Each(fn func(addr netip.Addr, names []string)) {
+	for addr := range c.entries {
+		fn(addr, c.Names(addr))
+	}
+}
+
 // Len returns the number of cached addresses and names.
 func (c *Cache) Len() (addrs, names int) {
 	for _, entry := range c.entries {

@@ -94,3 +94,20 @@ func TestCacheExpiryBoundaryAndPartial(t *testing.T) {
 		t.Fatalf("Len = %d,%d", x, y)
 	}
 }
+
+func TestCacheEachVisitsEveryAddressOnce(t *testing.T) {
+	var c Cache
+	now := time.Unix(1000, 0)
+	a, b := netip.MustParseAddr("10.1.1.1"), netip.MustParseAddr("10.1.1.2")
+	c.Learn("one.example", []netip.Addr{a, b}, time.Minute, now)
+	c.Learn("two.example", []netip.Addr{a}, time.Minute, now)
+	seen := map[netip.Addr][]string{}
+	c.Each(func(addr netip.Addr, names []string) { seen[addr] = names })
+	if len(seen) != 2 || len(seen[a]) != 2 || seen[a][0] != "two.example" || len(seen[b]) != 1 {
+		t.Fatalf("Each visited %v", seen)
+	}
+	seen[a][0] = "mutated"
+	if c.Names(a)[0] != "two.example" {
+		t.Fatal("Each handed out the cache's own slice")
+	}
+}
