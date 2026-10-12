@@ -6,8 +6,7 @@ these five rules. They are not features to schedule; a change that weakens one i
 
 ## The rules
 
-1. **Egress only.** Nothing looks at `accept()` or inbound traffic. Inbound RDP and SSH are
-   never in scope.
+1. Egress decisions only. Nothing decides on `accept()` or inbound traffic; inbound RDP and SSH are never in scope. The DNS tap reads answers addressed to this host's own sockets, alters nothing, and can only add allow entries.
 2. **The local network is allowed inside the BPF program**, not by a rule anyone can delete:
    RFC 1918, link-local 169.254/16, loopback, `fc00::/7`, `fe80::/10`, `::1`. The check runs
    before the rule lookup.

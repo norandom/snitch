@@ -137,12 +137,36 @@ reload as `<time>: <error>` (the error alone when the overlay was already invali
 
 ```json
 {"type": "reply", "id": 1, "ok": true, "status": {
-  "running": true, "pid": 1234, "version": "v0.3.0", "mode": "monitor", "source": "files",
+  "running": true, "pid": 1234, "version": "v0.4.0", "mode": "monitor", "source": "files",
   "trial": "", "kept": false, "kill": false, "learning": false,
   "rules": {"programs": 18, "resolved": 12, "executables": 15, "rules": 13,
             "file": "/etc/snitch/rules.toml", "overlay": "/etc/snitch/rules.d/local.toml"},
   "rulesError": "", "clients": 1, "dropped": 0, "entries": 42, "evictions": 0,
-  "started": "2026-10-11T06:00:00Z", "counting": true}}
+  "started": "2026-10-11T06:00:00Z", "counting": true,
+  "dns": {"on": true, "seen": 120, "ignored": 2, "entries": 30,
+          "names": 35, "compiled": 12, "evictions": 0}}}
+```
+
+`dns` reports the tap separately from the API counters. It is absent only on older daemons.
+`on` says whether the tap is attached. Optional `reason` is `flag` (`-dns=false`) or the load or
+attach error when the tap is off; with the tap on it is `no resolvers` when the resolver list is
+empty or unreadable (the tap trusts no resolver and learns nothing until the file changes) or
+`stats: <error>` when the counters could not be read.
+`seen` counts answers seen and `ignored` rejected answers over the daemon's life; `entries`
+counts cached addresses, `names` their live names, `compiled` live compiled allow entries,
+and `evictions` address evictions (discarding a fifth name does not increment it).
+An off tap retains address rules and reports its counters and sizes as zero:
+
+```json
+{"type": "reply", "id": 1, "ok": true, "status": {
+  "running": true, "pid": 1234, "version": "v0.4.0", "mode": "monitor", "source": "files",
+  "trial": "", "kept": false, "kill": false, "learning": false,
+  "rules": {"programs": 18, "resolved": 12, "executables": 15, "rules": 13,
+            "file": "/etc/snitch/rules.toml", "overlay": "/etc/snitch/rules.d/local.toml"},
+  "rulesError": "", "clients": 1, "dropped": 0, "entries": 42, "evictions": 0,
+  "started": "2026-10-11T06:00:00Z", "counting": true,
+  "dns": {"on": false, "reason": "flag", "seen": 0, "ignored": 0, "entries": 0,
+          "names": 0, "compiled": 0, "evictions": 0}}}
 ```
 
 ### rules
@@ -151,7 +175,8 @@ The effective rules in file order, base first, overlay after it, each with the f
 from. `port` is the rule's single port, or 0 for any; a port-range rule (`port = "8000-8010"`
 in the file) is reported with `port: 0` as well, since the view has one integer. `protocol` is
 `tcp`, `udp` or `""` for any. `id` is dense in merged order and changes on every reload: it
-names a rule in an event, never in a `rule.remove`.
+names a rule in an event, never in a `rule.remove`. A name rule's `to` is the name as written
+(`"github.com"`), whatever the number of addresses it currently matches.
 
 ```json
 {"type": "rules", "id": 2}
@@ -204,6 +229,16 @@ without touching its write cycle). Without learning the reply says so: `learning
 {"type": "reply", "id": 4, "ok": true, "text": "learning is off"}
 ```
 
+A learned observation carries optional `name` too. Learning by name retains the name
+instead of an address, so its always-present `addr` is `""`:
+
+```json
+{"type": "reply", "id": 4, "ok": true, "learning": true, "learned": [
+  {"program": "curl", "path": "/usr/bin/curl", "addr": "", "name": "www.example.org",
+   "protocol": "tcp", "port": 443, "count": 3,
+   "first": "2026-10-11T11:58:02Z", "last": "2026-10-11T12:00:01Z"}]}
+```
+
 ### snapshot
 
 The connection table over a time window. `window` is required (no default): one of `15m`,
@@ -219,8 +254,8 @@ no activity in the window are left out; the counts and bytes in an entry are all
 
 ```json
 {"type": "reply", "id": 5, "ok": true, "window": "15m", "entries": [
-  {"program": "curl", "path": "/usr/bin/curl", "addr": "1.1.1.1", "port": 443, "protocol": "tcp",
-   "allowCount": 3, "denyCount": 0, "firstSeen": "2026-10-11T11:58:02Z",
+  {"program": "curl", "path": "/usr/bin/curl", "addr": "1.1.1.1", "name": "www.example.org",
+   "port": 443, "protocol": "tcp", "allowCount": 3, "denyCount": 0, "firstSeen": "2026-10-11T11:58:02Z",
    "lastSeen": "2026-10-11T12:00:01Z", "lastAllowed": "2026-10-11T12:00:01Z", "lastBlocked": "",
    "bytesSent": 184320, "rate": 512.5, "verdict": "allow-monitor"},
   {"program": "unknown", "path": "", "addr": "", "port": 0, "protocol": "",
@@ -228,6 +263,9 @@ no activity in the window are left out; the counts and bytes in an entry are all
    "lastSeen": "2026-10-11T11:59:58Z", "lastAllowed": "", "lastBlocked": "",
    "bytesSent": 9216, "rate": 0, "verdict": ""}]}
 ```
+
+Entries carry optional `name`, with the same meaning as an event; the address stays the
+table key even when its name changes.
 
 The second entry is the `unknown` bucket: bytes of sockets the daemon never saw connect
 (older than the daemon, or counted before their event arrived and left unclaimed after two
@@ -340,12 +378,27 @@ it, do not parse it. A missing one answers `missing field: program or path`, `mi
 {"type": "reply", "id": 12, "ok": true, "text": "rule added: curl to 9.9.9.9/32 tcp port 443 deny (applies within 5 s)"}
 ```
 
+`to` accepts an address, prefix or domain name. A name covers its subdomains and is allow
+only; the grammar and shared-address semantics are in `examples/rules.toml`. Invalid values
+are refused with `to %q: not an address, prefix or domain name`; a deny by name is refused
+with `to %q: a deny by name is not supported (deny stays a timed trial)` (`%q` is the quoted
+value). Neither refusal changes the overlay.
+
+```json
+{"type": "rule.add", "id": 12, "program": "curl", "to": "example.org", "verdict": "allow"}
+```
+
+```json
+{"type": "reply", "id": 12, "ok": true, "text": "rule added: curl to example.org allow (applies within 5 s)"}
+```
+
 ### rule.remove
 
 Removes one overlay rule by its key: `program`, `to`, and `proto` and `port` as they were
 added (`proto` absent or `any` and `port` absent or 0 mean the any-proto, any-port rule).
 Required: `program`, `to`. A rule that lives in the deployed file is refused with the file to
 edit (`edit /etc/snitch/rules.toml`); ids are never used, they change on every reload.
+`to` accepts a domain name too, with the same invalid-destination refusal as `rule.add`.
 
 ```json
 {"type": "rule.remove", "id": 13, "program": "curl", "to": "9.9.9.9/32", "proto": "tcp", "port": 443}
@@ -353,6 +406,14 @@ edit (`edit /etc/snitch/rules.toml`); ids are never used, they change on every r
 
 ```json
 {"type": "reply", "id": 13, "ok": true, "text": "rule removed: curl to 9.9.9.9/32 tcp port 443 (applies within 5 s)"}
+```
+
+```json
+{"type": "rule.remove", "id": 13, "program": "curl", "to": "example.org"}
+```
+
+```json
+{"type": "reply", "id": 13, "ok": true, "text": "rule removed: curl to example.org (applies within 5 s)"}
 ```
 
 ## Unsolicited lines
@@ -367,8 +428,14 @@ programs, else one `/proc` lookup, else `""`). `rule` is the rule behind the ver
 `hook` is `connect` (TCP connect, UDP connect) or `sendmsg` (an unconnected UDP send). `cookie`
 is the socket's cookie, the key the byte counter uses.
 
+Optional `name` on an event, entry or observation is the name through which a compiled rule
+matched, else the most recently learned name for the address; it is absent for an unknown
+address. Names record this host's lookups, not a particular process's lookups: events with
+names are readable by every local user, like addresses. The cache starts empty at daemon start
+and is not persisted; TCP 53, DoH, DoT and `/etc/hosts` do not populate it.
+
 ```json
-{"type": "event", "id": 0, "time": "2026-10-11T12:00:01.123456789Z", "program": "curl", "path": "/usr/bin/curl", "pid": 4242, "ppid": 4100, "comm": "curl", "addr": "9.9.9.9", "port": 443, "protocol": "tcp", "verdict": "allow-monitor", "rule": null, "hook": "connect", "cookie": 18446744073709551615}
+{"type": "event", "id": 0, "time": "2026-10-11T12:00:01.123456789Z", "program": "curl", "path": "/usr/bin/curl", "pid": 4242, "ppid": 4100, "comm": "curl", "addr": "1.1.1.1", "name": "www.example.org", "port": 443, "protocol": "tcp", "verdict": "allow-monitor", "rule": null, "hook": "connect", "cookie": 18446744073709551615}
 ```
 
 ```json
@@ -449,7 +516,7 @@ a field maps, the API keeps the name, so the TUI's views port field for field:
 | `port`, `protocol` | `port`, `protocol` | `protocol` is `tcp` / `udp` |
 | `statistics.bytesReceived` | none | egress only (fail-safe 1) |
 | `viaExecutable` | none | the process trace comes with the popups spec |
-| `remoteName` | none | domain rules come with the DNS spec |
+| `remoteName` | `name` | optional; matched rule name, else the most recently learned name |
 
 ## Limits and timing
 
@@ -466,6 +533,10 @@ a field maps, the API keeps the name, so the TUI's views port field for field:
 | table | 4096 entries; one more evicts the entry seen longest ago and counts it in `evictions`; entries idle for 7 days are removed |
 | cookies | a socket cookie idle for 10 min (no bytes, no event) is forgotten; its entry's totals stay |
 | unknown bytes | bytes of a cookie the daemon never saw connect go to the `unknown` entry after two sweeps (4 s) |
+| DNS cache | 8192 addresses x 4 names; host-wide, empty at daemon start |
+| compiled name entries | 16384; file rules win capacity, compiled entries are evicted to make room |
+| DNS TTL | clamped to 60 s..24 h; expired compiled entries are removed on the 2 s sweep |
+| rules per exact name | 8 protocol/port combinations (`rules.NameSlots`); any-proto with a port counts twice, a port range counts per port |
 | byte counting | per socket on egress, swept every 2 s; `counting: false` in `status` when the counter could not attach (bytes stay 0, everything else works) |
 
 ## The overlay

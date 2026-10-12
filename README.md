@@ -25,8 +25,8 @@ sudo scripts/enforce-test.sh --check-only                            # the enfor
 ```
 
 * Rules: `examples/rules.toml` explains every field and the precedence. Programs are paths or
-  globs, resolved to the executable's identity; rules are program (or `any`), prefix, proto,
-  port, allow or deny. The file is reloaded within 5 s of a change, executables are checked
+  globs, resolved to the executable's identity; rules are program (or `any`), address/prefix
+  or name, proto, port, allow or deny (names are allow only). The file is reloaded within 5 s of a change, executables are checked
   every 10 s, `SIGHUP` reloads at once; a broken file keeps the previous rules.
 * Fail-safes live in the kernel program, not in rules: the local network is always allowed,
   a stale heartbeat (daemon gone) allows everything, and the kill switch
@@ -36,9 +36,21 @@ sudo scripts/enforce-test.sh --check-only                            # the enfor
   `scripts/enforce-test.sh`, which resets everything in a trap, or as a trial (below).
   Needs Linux >= 6.12.
 
+**Names.** A rule such as `program = "gh", to = "github.com", verdict = "allow"` allows
+addresses learned for that name and its subdomains from this host's plain UDP DNS answers
+(port 53, configured resolvers). The cache is host-wide: any matching name can allow a shared
+CDN address for the rule's program. TCP 53, DoH, DoT and `/etc/hosts` supply no names; see
+`examples/rules.toml` for the bounds and semantics. Egress decisions only: the DNS tap reads
+answers to this host's own sockets, alters nothing, and can only add allow entries.
+`-dns` defaults to true; `-dns=false` turns the tap off. Startup logs `dns tap on: N resolvers`
+or `dns tap off: <reason>`. Events show names as `-> 1.1.1.1:443 (www.example.org)`;
+`snitchd status` shows `dns: on seen N ignored N cache N names N compiled N` or
+`dns: off: <reason>`.
+
 **Service.** `systemd/snitchd.service` runs the daemon as root from boot with the default rules
 file (`/etc/snitch/rules.toml`), restarts it on failure and never passes `-mode`: the daemon
-starts in monitor mode and follows the trial and kept-enforce files under `/var/lib/snitch`.
+starts in monitor mode with the DNS tap on by default and follows the trial and kept-enforce
+files under `/var/lib/snitch`.
 `systemd/snitchd-trial-boot.service` is a oneshot ordered before it that runs
 `snitchd end -at-boot`, so a trial that was open at shutdown is gone before anything can
 enforce. The runtime directory `/run/snitch` is 0755 so that the API socket in it is

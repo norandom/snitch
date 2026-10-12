@@ -83,7 +83,7 @@ Little Snitch and the Python client were retired there on 2026-10-11, snitchd wa
 Deny by default with Little Snitch cut RDP and SSH once (2026-10-09, reboot + Proxmox console).
 Never again:
 
-1. Egress only. Nothing looks at accept() or inbound traffic.
+1. Egress decisions only. Nothing decides on `accept()` or inbound traffic; inbound RDP and SSH are never in scope. The DNS tap reads answers addressed to this host's own sockets, alters nothing, and can only add allow entries.
 2. The local network (RFC 1918, link-local, loopback, fc00::/7, fe80::/10, ::1) is allowed
    inside the BPF program, not by a rule anyone can delete.
 3. Heartbeat: the daemon writes a timestamp into the pinned `control` map every 2 s; stale for
@@ -99,7 +99,9 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
 
 ## Layout and commands
 
-- `bpf/snitch.bpf.c` the program; `bpf/vmlinux.h` CO-RE types (regenerate on a new kernel:
+- `bpf/snitch.bpf.c` the program; `bpf/dns.bpf.c` the DNS tap (its own bpf2go object `Dns`,
+  `-mcpu=v3`, shares the `rules` trie by map replacement; root tests: `sudo scripts/dns-progtest.sh`);
+  `bpf/vmlinux.h` CO-RE types (regenerate on a new kernel:
   `sudo bpftool btf dump file /sys/kernel/btf/vmlinux format c > bpf/vmlinux.h`)
 - `internal/bpf/` bpf2go output, committed (`go build` needs no clang). Regenerate after editing
   the C: `go generate ./internal/bpf/` (needs clang, llvm, libbpf-dev; cflags in `gen.go`).
@@ -148,11 +150,13 @@ reads status, rules, programs, learned, a windowed connection table, and subscri
 2 s summaries and state lines; root and the user in `/etc/snitch/operator` run the trial verbs and
 edit the overlay `/etc/snitch/rules.d/local.toml`, merged over the rules file), event dedupe,
 per-socket byte counting by socket cookie; `scripts/api-check.sh` is its check.
+Spec `dns-tap` (2026-10-12, see `.kiro/specs/dns-tap/`; implemented, release pending as
+v0.4.0): the plain UDP DNS tap, host-wide address-to-name cache and allow rules by name,
+compiled live; names on events, table entries and learned observations, tap counters in status.
 Not done yet, in order:
 
-1. Domain rules: BPF tap on DNS answers -> IP->name cache -> rules by name compile live.
-2. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
-3. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
+1. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
+2. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
    CrowdStrike-style graph (process tree -> socket -> destination) behind a verdict. OpenObserve
    (http://10.0.0.54:40002, org default; OTLP gateway in k3s :4317/:4318) gets one batch per
    host every 10 min and shows that graph as a (limited) Sankey: process -> destination -> verdict.

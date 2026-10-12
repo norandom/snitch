@@ -24,6 +24,11 @@ note  = "Claude Code: the session tooling"
 name  = "apt"
 paths = ["/usr/lib/apt/methods/http", "/usr/lib/apt/methods/https"]
 
+[[program]]
+name  = "gh"
+paths = ["/usr/bin/gh"]
+note  = "GitHub CLI: allowed to GitHub by name"
+
 # --- rules ----------------------------------------------------------------------------------
 
 [[rule]]
@@ -64,6 +69,25 @@ program = "any"                      # applies to every program, after program-s
 to      = "203.0.113.0/24"
 verdict = "deny"                     # an explicit deny also denies in monitor mode
 note    = "TEST-NET-3: an example of blocking a network for everything"
+
+# A name covers itself and its subdomains up to 8 levels; case is ignored and a trailing
+# dot is removed. Only names seen in this host's plain UDP DNS answers (port 53, configured
+# resolvers) match. TCP 53, DoH, DoT and /etc/hosts entries have no name and fall to address
+# rules unless the address was also learned from a plain UDP answer.
+# The cache is host-wide, not per process: a CDN address shared by many names is allowed
+# for the program by any one matching name rule. The cache starts empty at daemon start.
+# A name rule is allow only: a forged answer must never deny; deny stays the timed trial.
+# There is no Public Suffix List: github.io covers every site under it.
+# At most 8 rules per exact name, counted as protocol/port combinations (rules.NameSlots):
+# an any-proto rule with a port counts twice; a port range counts per port.
+# Names have at most 62 characters and 16 labels. Labels contain letters, digits and
+# hyphens, with no leading or trailing hyphen; no leading dot or wildcard is accepted.
+# Check a mistyped address carefully: 1.2.3 parses as a name.
+[[rule]]
+program = "gh"
+to      = "github.com"
+verdict = "allow"
+note    = "GitHub and its subdomains, as this host resolves them"
 
 # Learned files (snitchd -learn) use the same format and add, per rule:
 #   count = 12   first = 2026-10-10T06:00:00Z   last = 2026-10-10T06:30:00Z
