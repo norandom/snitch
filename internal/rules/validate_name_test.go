@@ -43,12 +43,11 @@ func TestValidateNameDuplicatePrintsDest(t *testing.T) {
 	}
 }
 
-func TestValidateNameSlotsCountRulesRatherThanExpandedKeys(t *testing.T) {
-	src := ruleTable("any", "github.com", "", `"1-256"`, "allow")
-	for i := 257; i <= 259; i++ {
-		src += ruleTable("any", "github.com", "tcp", strconv.Itoa(i), "allow")
+func TestValidateNamePortRangeExceedsTheKernelSlots(t *testing.T) {
+	// a port range expands to one kernel slot per port and protocol; a name has four slots
+	e := parseErr(t, ruleTable("any", "github.com", "tcp", `"1-8"`, "allow"))
+	if !strings.Contains(e.Msg, `name "github.com"`) {
+		t.Fatalf("got %v", e)
 	}
-	if f := parse(t, src); len(f.Rules) != 4 {
-		t.Fatalf("got %+v", f.Rules)
-	}
+	parse(t, ruleTable("any", "github.com", "tcp", `"1-4"`, "allow"))
 }
