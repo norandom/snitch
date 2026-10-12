@@ -13,7 +13,9 @@
 # Phase B (--trial, after the [y/N] prompt, with the serial console open): `snitchd trial 2m`
 # prints "enforce until", status says enforce, curl to DENY fails with EPERM, the local probe
 # (-l) and apt-get update still work, status is back to monitor by the deadline (130 s), and the
-# journal has the start and end lines. The trap on EXIT runs `snitchd end` (best effort) once a
+# journal has the start and end lines. The five dev tools run as the desktop user with
+# 15-second timeouts; each must exit 0 during enforce and have no DENY in the trial journal.
+# The trap on EXIT runs `snitchd end` (best effort) once a
 # trial was started, and prints the final state line in every case.
 # Both phases end with one line to paste into research.md:
 #   state: service <active|inactive> mode <m> trial <none|...> kept <no|yes> kill <clear|SET>
@@ -131,6 +133,53 @@ curl_eperm() { # curl must fail with EPERM: exit 7 and, in the verbose trace, th
 }
 local_ok() { timeout 3 bash -c "exec 3<>/dev/tcp/${local_probe%:*}/${local_probe#*:}" 2>/dev/null; }
 
+# -- dev tools: use the desktop user's home, login PATH and credentials, not root's.
+desktop_user=${SUDO_USER:-}
+if [ -z "$desktop_user" ] || [ "$desktop_user" = root ]; then
+  desktop_user=$(head -n1 /etc/snitch/operator 2>/dev/null | tr -d '[:space:]' || true)
+fi
+tool_results=()
+trial_journal=""
+dev_tools() {
+  local tool command rc
+  for tool in gh git uv cargo go; do
+    rc=1
+    case "$tool" in
+      gh) command='gh api /rate_limit' ;;
+      git) command='git ls-remote https://github.com/norandom/snitch' ;;
+      uv) command=$(cat <<'CMD'
+download_dir=$(mktemp -d) || exit 1
+trap 'rm -rf "$download_dir"' EXIT
+uv pip download --no-deps -d "$download_dir" six
+CMD
+        ) ;;
+      cargo) command='cargo search --limit 1 serde' ;;
+      go) command='go list -m -versions golang.org/x/sys' ;;
+    esac
+    if [ -n "$desktop_user" ] && [ "$desktop_user" != root ] && status_enforce; then
+      rc=0
+      timeout --kill-after=1s 15s runuser -u "$desktop_user" -- bash -lc "cd ~ && $command" </dev/null >/dev/null 2>&1 || rc=$?
+      # A command finishing after the trial ends cannot prove that enforce allowed it.
+      status_enforce || rc=1
+    fi
+    tool_results+=("$rc")
+  done
+}
+dev_tool_passed() {
+  local tool=$1 rc=$2
+  [ "$rc" -eq 0 ] || return 1
+  # describe() starts denial lines with DENY; programOf() supplies the configured name
+  # or an executable path plus " (unknown)". Match the field, never the comm column.
+  ! grep -Eq "^DENY .*  program ($tool|[^ ]*/$tool \(unknown\))([[:space:]]|$)" <<<"$trial_journal"
+}
+report_dev_tools() {
+  local tool index=0
+  for tool in gh git uv cargo go; do
+    step "T3 $tool as $desktop_user: exit 0 during trial, no DENY for its program in trial journal" dev_tool_passed "$tool" "${tool_results[$index]}"
+    index=$((index + 1))
+  done
+}
+
 # -- the verbs (phase B only)
 trial_ok() { # the trial verb exits 0 and announces the deadline
   local out rc=0
@@ -206,11 +255,14 @@ if [ "$failed" -gt 0 ]; then echo "phase A had failures: not starting the trial"
 take_cursor
 step "T1 snitchd trial 2m: exit 0, prints 'enforce until'"   trial_ok
 step "T1 status: mode enforce within 5 s"                    wait_for 5 0.5 status_enforce
+dev_tools
 step "T2 curl $deny denied with EPERM within 5 s"            wait_for 5 0.5 curl_eperm "$deny"
 if [ -n "$local_probe" ]; then step "T2 local probe $local_probe still works" local_ok; fi
 step "T2 apt-get update still exits 0"                       apt_ok
 step "T3 journal: mode: enforce (trial until"                after_has 'mode: enforce \(trial until'
 step "T4 status: mode monitor within 130 s (deadline)"       wait_for 130 2 status_monitor
+trial_journal=$(journal_after)
+report_dev_tools
 step "T4 journal: trial ended at its deadline"               after_has 'mode: monitor \(trial ended at its deadline\)'
 step "T4 curl $deny connects again within 5 s"               wait_for 5 0.5 curl_connects "$deny"
 finish

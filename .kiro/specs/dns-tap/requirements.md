@@ -184,7 +184,8 @@ proof that a trial leaves the dev tools working.
    no deny by name, no Public Suffix List).
 3. The check script shall prove on this VM, as the operator: the status shows the tap on, a curl
    to a name under a name rule for its program produces an event within 1 s carrying the rule and
-   the name, a curl to the same host by address produces an event without a name, and the
+   the name, a curl to an address this host never resolved produces an event without a name
+   (the cache is host-wide: an address learned under a name carries it for any program), and the
    compiled rule disappears after the entry expires (a short-TTL name after the 60 s floor, or
    a daemon restart); the script adds and removes its own curl name rule in the overlay.
 4. The trial check (`deploy-check.sh --trial`, with the operator's go and the serial console

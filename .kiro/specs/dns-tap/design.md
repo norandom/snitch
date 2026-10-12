@@ -525,8 +525,9 @@ read func() ([]byte, error)
   to=example.org verdict=allow` (the deployed file has no curl rule; the trap removes it), then
   `curl https://www.example.org/` → event within 1 s with `rule.id` and a `name` ending in
   `example.org` (a name not curled earlier in the run, because of the 10 s dedupe); C3
-  `curl https://<that address>/` → event with no `name` for a destination resolved by no lookup
-  (curl given the literal address); C4 `rule.remove`; C5 `status.dns.compiled` decreases within
+  `curl http://<an address no lookup on this host produced>/` → event with no `name` (the
+  cache is host-wide and keyed by address, so the address C2 learned would carry its name for
+  the TTL; the script uses its B-phase literal on port 80); C4 `rule.remove`; C5 `status.dns.compiled` decreases within
   TTL + 10 s after C4 (the rule is gone, so the recompile drops the entries: this exercises 4.3;
   2.3's expiry is covered by the unit tests and the progtest, since public TTLs exceed the floor).
 - `scripts/deploy-check.sh --trial`: during the 2 min trial run `gh api /rate_limit`,

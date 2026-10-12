@@ -23,6 +23,9 @@
 #    deny-rule; rule.remove restores: curl connects again and the event says allow-monitor. The
 #    trap removes the rule when the script dies in between, with the key the add reply named
 #    (ad hoc programs can be curl-2 on a name collision).
+# C  as the operator: tap on, name-rule event, literal-address event (an address never resolved
+#    on this host) without a name, remove the rule and check that the compiled count drops
+#    within 30 s.
 # A5 only after A4 was refused: trial as a non-operator -> refused. The trial request is never
 #    sent on a connection the daemon just accepted a write from: a mis-detected operator would
 #    start an enforce trial, and no check script switches a mode.
@@ -46,6 +49,7 @@ usage: scripts/api-check.sh [-s socket] [-x deny-addr] [--fake] [-h]
   A3 bytes grow within 5 s (when counting)    A4 rule.add refused for a reader
   B  as the operator: deny rule -> curl fails with EPERM and the event says deny-rule,
      remove -> curl connects again, allow-monitor again
+  C  as the operator: DNS tap, name rule/event, address event, remove and compiled drop
   A5 trial refused for a non-operator         A6 status: running, same pid
   -s <socket>  the API socket (default /run/snitch/api.sock; -api of a hand-started daemon)
   -x <addr>    address no rule covers (default 9.9.9.9); an IPv6 address bare, no brackets
@@ -86,13 +90,15 @@ last_status=""   # the last status reply, for the state line
 overlay=""       # the overlay path from status: the api-check rule must come from it
 rule_added=0     # the trap removes the rule once B1 added it
 rule_program=curl; rule_to=$deny_prefix   # the remove key; the add reply's text sets the real one
+rule_proto=any; rule_port=0
 sub_pid=0; sub_log=""
 
-# -- the socket client (python3: this VM's nc has no -U). One program, seven modes:
+# -- the socket client (python3: this VM's nc has no -U). One program, eight modes:
 #    call <sock> <type> [field=value ...]  one request, prints the reply line with its id
 #    sub <sock> <seconds>                  subscribe, prints every line for N seconds
 #    get <json> <dotted.path>              a field: true/false, a string, a number
 #    event <log> <addr> <path> <verdict>   exit 0 and the line when an event matches
+#    dns-event <log> <program> <addr>     named rule event, or literal-address event without name
 #    bytes <reply> <addr> <path>           the bytesSent summed over the matching entries (a declared program changes the key)
 #    rule <reply> <note> <source>          "program<TAB>to" of the first rule with the note (and source, when given)
 #    added <reply>                         "program<TAB>to" from the add reply's text
@@ -175,6 +181,26 @@ elif mode == "event":
         except ValueError:
             continue
         if obj.get("type") == "event" and obj.get("addr") == addr and is_curl(obj, path) and obj.get("verdict") == verdict:
+            sys.stdout.write(line)
+            sys.exit(0)
+    sys.exit(1)
+elif mode == "dns-event":
+    log, program, addr = args
+    for line in open(log, encoding="utf-8", errors="replace"):
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if obj.get("type") != "event" or obj.get("program") != program:
+            continue
+        if addr:
+            matches = obj.get("addr") == addr and obj.get("port") == 80 and "name" not in obj
+            if obj.get("addr") == addr and obj.get("port") == 80 and "name" in obj:
+                sys.stderr.write("literal-address event carries name %r\n" % obj.get("name"))
+        else:
+            name = obj.get("name", "")
+            matches = (name == "example.org" or name.endswith(".example.org")) and (obj.get("rule") or {}).get("id", 0) > 0 and bool(obj.get("addr"))
+        if matches:
             sys.stdout.write(line)
             sys.exit(0)
     sys.exit(1)
@@ -302,9 +328,57 @@ rule_add() { # the path first (curl is undeclared in the deployed rules); a run 
 }
 remove_reply=""
 rule_remove() {
-  remove_reply=$(api rule.remove "program=$rule_program" "to=$rule_to" 2>&1) || true
+  remove_reply=$(api rule.remove "program=$rule_program" "to=$rule_to" "proto=$rule_proto" "port=$rule_port" 2>&1) || true
   reply_ok "$remove_reply" && rule_added=0
   reply_ok "$remove_reply"
+}
+
+# -- DNS (C): example.org has not been curled in A or B.
+dns_compiled=0
+dns_add() {
+  local key
+  rule_to=example.org; rule_proto=tcp; rule_port=443
+  add_reply=$(api rule.add "path=$curl_path" to=example.org verdict=allow proto=tcp port=443 note=api-check 2>&1) || true
+  if ! reply_ok "$add_reply" && ! reply_refused "$add_reply" rule.add; then
+    add_reply=$(api rule.add "program=$rule_program" to=example.org verdict=allow proto=tcp port=443 note=api-check 2>&1) || true
+  fi
+  reply_ok "$add_reply" || { show "$add_reply"; return 1; }
+  rule_added=1
+  key=$(pyrun added "$add_reply") || return 1
+  IFS=$'\t' read -r rule_program rule_to <<<"$key"
+  wait_for 5 0.5 rule_listed
+}
+dns_event_seen() {
+  pyrun dns-event "$sub_log" "$rule_program" "$1" >/dev/null
+}
+dns_probe() {
+  local addr=$1 url rc=0
+  if [ -z "$addr" ]; then url=https://www.example.org/
+  else
+    case "$addr" in *:*) url="http://[$addr]/" ;; *) url="http://$addr/" ;; esac
+  fi
+  start_sub 8 || { stop_sub; return 1; }
+  curl -sS --max-time 3 -o /dev/null "$url" >"$tmp/dns-curl" 2>&1 || true
+  wait_for 1 0.1 dns_event_seen "$addr" || rc=1
+  if [ "$rc" -ne 0 ]; then note "DNS probe events: $(head -c 500 "$sub_log")"; fi
+  stop_sub
+  return "$rc"
+}
+dns_name_probe() {
+  dns_add && dns_probe "" || return 1
+  # The kernel emits before the answer reader mirrors the compiled count in Go.
+  wait_for 5 0.1 dns_compiled_read
+}
+dns_compiled_read() {
+  status_read || return 1
+  dns_compiled=$(jget "$last_status" status.dns.compiled)
+  [[ "$dns_compiled" =~ ^[0-9]+$ ]] && [ "$dns_compiled" -gt 0 ]
+}
+dns_compiled_lower() {
+  local count
+  status_read || return 1
+  count=$(jget "$last_status" status.dns.compiled)
+  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -lt "$dns_compiled" ]
 }
 
 # -- the final line, from the trap: an aborted run still shows the state
@@ -380,6 +454,31 @@ if [ "$rule_added" -eq 1 ]; then
   else echo "  skip  B2 curl reconnect: --fake (curl exit $curl_rc)"; fi
 else
   echo "  skip  B: rule.add was not accepted for $me (run as the operator to cover B)"
+fi
+
+if [ "$operator" = "$me" ]; then
+  if [ "$rule_added" -eq 1 ]; then
+    echo "C1 FAIL: phase B rule still present; refusing to overwrite its trap key"
+    failed=$((failed + 1)); exit 1
+  fi
+  echo "-- C: DNS tap as the operator"
+  must "C1 status reply" status_read
+  if [ -z "$(jget "$last_status" status.dns)" ]; then
+    echo "C1 FAIL: status has no dns block (daemon older than the DNS tap)"
+    failed=$((failed + 1)); exit 1
+  fi
+  must "C1 status.dns.on == true" test "$(jget "$last_status" status.dns.on)" = true
+  must "C2 curl name rule accepted; event within 1 s with program $rule_program, non-zero rule.id and name ending example.org" dns_name_probe
+  # The cache is host-wide and keyed by address (Req 5.1): the address C2 learned carries its
+  # name for at least the 60 s TTL floor, so the no-name probe uses an address no lookup on
+  # this host produced (the literal B-phase address, port 80: a different dedupe key than B).
+  must "C3 curl http://${deny%%/*}/ (literal, never resolved here) event within 1 s without a name key" dns_probe "${deny%%/*}"
+  must "C4 rule.remove by the add reply's key accepted" rule_remove
+  # Rule removal exercises Req 4.3. Expiry itself (Req 2.3, TTL >= 60 s) is
+  # covered by the unit tests and scripts/dns-progtest.sh.
+  must "C5 status.dns.compiled lower than $dns_compiled within 30 s (poll every 2 s)" wait_for 30 2 dns_compiled_lower
+else
+  echo "  skip  C: run as the operator to cover DNS"
 fi
 
 if reply_refused "$add_reply" rule.add; then
