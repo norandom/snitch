@@ -123,6 +123,15 @@
   ingress is the receiving socket's cookie (`__cgroup_bpf_run_filter_skb` swaps `skb->sk` to the
   socket the datagram is queued to): the same UDP socket sends the query and receives the
   answer, so `(cookie, dns id) -> qname` recorded at egress joins the answer to its question.
+- `bpf/dns.bpf.c` as committed (task 1.1: slots in the record, `BPF_NOEXIST`, `test_skip_question`,
+  5 s question age, `-mcpu=v3` on this object only): `dns_answer` 32,287 verified instructions,
+  `dns_query` 8,344, both accepted on 7.2.6 (`sudo go test -tags root ./internal/dns -run
+  '^TestDNSProgLoads$'`, 2026-10-12). Two verifier lessons from the first round: clang drops a
+  range check it has proven and the verifier then sees `R4 invalid zero-sized read` on the
+  bounded `bpf_skb_load_bytes` of the question name; an `asm volatile("" : "+r"(len))` barrier
+  before the check keeps it, and `-mcpu=v3` (32-bit subregister ops) lets the verifier carry the
+  bound into the helper call. bpf2go refuses a record struct named like the program, hence
+  `dns_answer_record`.
 - The hook runs in `sk_filter_trim_cap()` from `udp_queue_rcv_one_skb()`, per receiving socket,
   AF_INET/AF_INET6 only, `skb->data` at the network header, read-only; loopback deliveries take
   the same path (a future local stub would be seen). Return 1 on every path; 0 would drop.

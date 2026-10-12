@@ -23,7 +23,7 @@ name them, after the no-secrets check. Tasks in the same Go package run one at a
 task states the handshake that makes them safe; `(P)` tasks touch disjoint files.
 
 - [ ] 1. Kernel, names in rules, and the pure DNS package
-- [ ] 1.1 The DNS programs and their bindings
+- [x] 1.1 The DNS programs and their bindings
   - A second BPF object from the verified probe (`dnsprobe.bpf.c` in the spec directory) with
     the two changes the design requires over the probe: trie updates with `BPF_NOEXIST` (the
     probe used `BPF_ANY`; `EEXIST` counted as `exists`) and the counters map named `dns_stats`;
@@ -344,3 +344,4 @@ task states the handshake that makes them safe; `(P)` tasks touch disjoint files
 ## Implementation Notes
 - 1.2: implemented by Codex, reviewed by a Claude subagent (APPROVED, four reviewer mutations caught). The controller settled the grammar's open point: a label never starts or ends with a hyphen (RFC 1123), so `-x` stays an invalid value for 2.5's pinned test. New tests went to `decode_name_test.go`, `validate_name_test.go`, `merge_name_test.go` (same package, test-only). `checkNameSlots` hard-codes 4 with a comment (rules cannot import internal/dns); 1.4 may export the constant from rules and have dns reuse it. Downstream still assumes `To` until 1.3/2.x: `learn.go:75` seeds a name rule on the zero address, `apievent.go:75` and `events.go:109` print `invalid Prefix` for a name rule. A mistyped address such as `1.2.3` parses as a name (docs task warns).
 - 1.3: `EncodeAddr(r, program, addr)` returns the key with the rule's own proto and first port; the compiler overwrites `k.Proto`/`k.Port` on the returned key with each `Expand(r)` pair (as `encodeRule` does), never mutating a Rule. `ProgramID(res, name)` is 0 for `any`. A named `Observed` has a zero `Addr` by construction: `apievent.go:101` would print `invalid IP` once names reach the learner (2.6 wires `learnedView` Name). Reviewer approved on seven of its own mutations; the Codex MCP truncates long replies to their tail, so later briefs put the status block first.
+- 1.1: the C file has no line cap (caps are Go-only); round 1 was rejected for squashing the probe into one-liners. Verifier: keep the `asm volatile` barrier in `read_qname` and `-mcpu=v3` on the Dns go:generate line (see research.md). The record struct is `dns_answer_record` (Go `DnsDnsAnswerRecord`); `rec.slots` carries the slots the kernel ATTEMPTED (EEXIST and failures included), the daemon subtracts file keys and re-puts anyway. A stale `questions` entry is deleted when it is refused. bpf2go also emits `DnsRuleKey`/`DnsRuleVal`; the Go side still addresses the trie with `rules.RuleKey`/`RuleVal`. Root tests: build tag `root`, `sudo go test -tags root ./internal/dns -run DNSProg`.

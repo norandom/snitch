@@ -44,7 +44,7 @@ in the steering.
 ### This Spec Owns
 - `bpf/dns.bpf.c`: `dns_query` (egress) and `dns_answer` (ingress), the maps `resolvers`,
   `domains`, `questions`, `dns_answers`, `dns_stats`, and the layout of `domain_key`,
-  `domain_val`, `dns_answer`; the bindings `internal/bpf` `Dns*`.
+  `domain_val`, `dns_answer_record` (bpf2go refuses a struct named like the program `dns_answer`); the bindings `internal/bpf` `Dns*`.
 - `internal/dns`: the address-to-name cache with lifetimes and bounds, the compiler from name
   rules and addresses to trie keys, the domain-key and resolver encodings, the resolv.conf
   parser; its JSON-free, BPF-free types.
@@ -80,7 +80,7 @@ in the steering.
 - Host: `/etc/resolv.conf` (read), `/sys/fs/cgroup` root, the existing pinned maps untouched.
 
 ### Revalidation Triggers
-- A change to the `dns_answer` record or the `domain_key` layout (bindings, `internal/dns`).
+- A change to the `dns_answer_record` record or the `domain_key` layout (bindings, `internal/dns`).
 - A change to `RuleKey`/`RuleVal` (both objects declare the trie; `MapReplacements` checks the
   spec at load).
 - A change to the API field names `name`, `dns` (the TUI and popups read them).
@@ -157,7 +157,7 @@ graph TB
 | Layer | Choice / Version | Role in Feature | Notes |
 |---|---|---|---|
 | Kernel | `cgroup_skb/ingress` + `/egress` at the cgroup2 root, `bpf_loop`, `bpf_skb_load_bytes`, LPM trie update, ring buffer | parse answers, record questions, insert entries | Linux >= 6.12 already required; verified on 7.2.6 (26k insns) |
-| Bindings | bpf2go second object `Dns` (`-type dns_answer -type domain_key -type domain_val -type resolver_key -type q_key -type q_val`) | Go structs for maps and records | `rules` declared in both objects, shared via `MapReplacements` |
+| Bindings | bpf2go second object `Dns` (`-type dns_answer_record -type domain_key -type domain_val -type domain_slot -type resolver_key -type q_key -type q_val`, cflags `-mcpu=v3` on this object only) | Go structs for maps and records | `rules` declared in both objects, shared via `MapReplacements` |
 | Daemon | Go 1.26, cilium/ebpf v0.22 | attach, reader, ticks, map writes | no new runtime module |
 | Pure logic | `internal/dns` | cache, compiler, encodings, resolv.conf | tests without root |
 | Tests | `golang.org/x/net/dns/dnsmessage` (test-only), `Program.Run` | datagrams for the kernel parser | root test under `scripts/dns-progtest.sh` |
@@ -352,7 +352,7 @@ flowchart TD
   parsed, updates, exists, update_fail, queries, ringbuf_full`.
 
 **Contracts**: Event [x] / State [x]
-- Event: `dns_answer` record `{qname[64] (key form), ttl u32 (min over collected RRs), n u8,
+- Event: `dns_answer_record` `{qname[64] (key form), ttl u32 (min over collected RRs), n u8,
   family[8], addrs[8][16], slots[LEVELS_MAX*SLOTS_MAX] domain_slot}`: the slots the kernel
   inserted for this answer (zero id = unused; the same slots apply to every address), submitted
   only when `n > 0`. The record is reserved before the walk; when the ring buffer is full nothing

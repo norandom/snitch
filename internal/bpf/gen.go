@@ -2,3 +2,7 @@
 package bpf
 
 //go:generate go tool bpf2go -cc clang -cflags "-O2 -g -Wall -Werror -Wno-missing-declarations" -target amd64 -type event -type rule_key -type exe_key -type control_state -type rule_val -type byte_count Snitch ../../bpf/snitch.bpf.c -- -I../../bpf
+
+// v3 gives 32-bit subregister ops so the verifier tracks the bounded lengths read_qname proves.
+// Without it the load is rejected.
+//go:generate go tool bpf2go -cc clang -cflags "-O2 -g -Wall -Werror -Wno-missing-declarations -mcpu=v3" -target amd64 -type dns_answer_record -type domain_key -type domain_val -type domain_slot -type resolver_key -type q_key -type q_val Dns ../../bpf/dns.bpf.c -- -I../../bpf
