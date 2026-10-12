@@ -212,7 +212,7 @@ func TestRecompileRewritesDomains(t *testing.T) {
 		return nil
 	}, del: func(k any) error { delete(live, k.(bpf.DnsDomainKey)); return nil }}
 	f.s.recompile(f.snap)
-	old := bpf.DnsDomainKey{Name: dns.Key("example.org")}
+	old := bpf.DnsDomainKey{Name: testDomainKey("example.org")}
 	want := bpf.DnsDomainSlot{Proto: uint8(rules.TCP), Port: 443, Id: 7}
 	if live[old].Slot[0] != want {
 		t.Fatal(live)
@@ -222,7 +222,7 @@ func TestRecompileRewritesDomains(t *testing.T) {
 	if _, ok := live[old]; ok {
 		t.Fatal("removed name still present")
 	}
-	if live[bpf.DnsDomainKey{Name: dns.Key("new.org")}].Slot[0] != want {
+	if live[bpf.DnsDomainKey{Name: testDomainKey("new.org")}].Slot[0] != want {
 		t.Fatal(live)
 	}
 }
@@ -242,4 +242,10 @@ func TestEvictorForSubtractsPendingFileKeys(t *testing.T) {
 	if off.evictorFor(nil) != nil {
 		t.Fatal("off evictor")
 	}
+}
+
+func testDomainKey(name string) [dns.NameMax]byte {
+	var key [dns.NameMax]byte
+	copy(key[:], "."+name)
+	return key
 }

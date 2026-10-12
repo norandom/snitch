@@ -39,7 +39,7 @@ func Slots(res *rules.Resolved) (map[[NameMax]byte][SlotsMax]Slot, error) {
 		// One slot per protocol/port combination the encoder would produce, so the kernel's
 		// inserts are exactly the keys decide() looks up (an any-proto rule with a port is tcp
 		// and udp, never proto 0 with a port). The validator counts the same combinations.
-		key := Key(r.Name)
+		key := key(r.Name)
 		program := rules.ProgramID(res, r.Program)
 		for _, pp := range rules.Expand(r) {
 			n := counts[key]
@@ -79,7 +79,7 @@ func (c *Compiled) Compute(res *rules.Resolved, addr netip.Addr, names []string)
 
 func coveringName(rule string, names []string) (string, bool) {
 	for _, name := range names {
-		if Covers(rule, name) {
+		if covers(rule, name) {
 			return name, true
 		}
 	}
@@ -150,7 +150,7 @@ func (c *Compiled) Recompile(res *rules.Resolved, cache *Cache, file map[rules.R
 	contract.Require(res != nil && res.File != nil, "Recompile needs resolved rules")
 	puts = make(map[rules.RuleKey]rules.RuleVal)
 	seen := make(map[netip.Addr]bool)
-	cache.Each(func(addr netip.Addr, names []string) {
+	cache.each(func(addr netip.Addr, names []string) {
 		seen[addr] = true
 		dels = append(dels, c.apply(addr, c.Compute(res, addr, names), file, puts, true)...)
 	})

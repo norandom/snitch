@@ -83,7 +83,8 @@ func encodeRule(rule *Rule, program uint32, out map[RuleKey]RuleVal) {
 }
 
 // EncodeAddr builds one host key using r.Proto and the first port (zero if absent).
-// Callers use Expand and set Proto/Ports for each pair before calling.
+// The returned Proto/Port are the rule's own (first port, zero when absent).
+// The compiler overwrites them for each Expand(r) pair, as encodeRule does.
 // IPv4-mapped addresses retain the same family and bits as encodeRule.
 func EncodeAddr(r *Rule, program uint32, addr netip.Addr) (RuleKey, RuleVal) {
 	k := prefixKey(netip.PrefixFrom(addr, addr.BitLen()), program)

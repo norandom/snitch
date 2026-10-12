@@ -23,7 +23,7 @@ func TestResolversCap(t *testing.T) {
 		fmt.Fprintf(&input, "nameserver 192.0.2.%d\n", i)
 	}
 	got := Resolvers(strings.NewReader(input.String()))
-	if len(got) != ResolversMax || got[15].String() != "192.0.2.16" {
+	if len(got) != resolversMax || got[15].String() != "192.0.2.16" {
 		t.Fatal(got)
 	}
 }

@@ -8,14 +8,14 @@ import (
 	"strings"
 )
 
-const ResolversMax = 16
+const resolversMax = 16
 
 // Resolvers preserves configuration order while bounding the kernel resolver map.
 func Resolvers(r io.Reader) []netip.Addr {
 	var out []netip.Addr
 	seen := make(map[netip.Addr]bool)
 	scanner := bufio.NewScanner(r)
-	for scanner.Scan() && len(out) < ResolversMax {
+	for scanner.Scan() && len(out) < resolversMax {
 		a, ok := resolverLine(scanner.Text())
 		if !ok || seen[a] {
 			continue

@@ -173,11 +173,11 @@ bpf/snitch.bpf.c                 # unchanged (decide, count_egress)
 internal/bpf/gen.go              # + second go:generate line: object Dns from ../../bpf/dns.bpf.c with its -type flags
 internal/bpf/dns_x86_bpfel.{go,o}# generated
 internal/dns/
-├── name.go                      # NEW Covers(rule, name), Key(name) [64]byte (".github.com" form), Suffixes; the grammar lives in rules.ParseName
-├── cache.go                     # NEW Cache: Learn(name, addrs, ttl, now) []Change, Expire(now) []Change, NameOf(addr), Names(addr), Len, bounds, eviction, counters
-├── compile.go                   # NEW Compiler: Slots(rules) map[Key]Slots (domains map content, 8 per name), Keys(rule, addr) []RuleKey, Compiled set with ids and expiry, Recompile(snapshot rules, cache)
+├── name.go                      # NEW covers(rule, name), key(name) [64]byte (".github.com" form); the grammar lives in rules.ParseName
+├── cache.go                     # NEW Cache: Learn(name, addrs, ttl, now) []Change, Expire(now) []Change, Names(addr), Len, Evict, bounds, eviction counters
+├── compile.go                   # NEW Slots(resolved rules) (map[[NameMax]byte][SlotsMax]Slot, error); Compiled: Compute, Apply, Recompile, NameOf, Len; entries carry ids and names, cache owns expiry
 ├── resolv.go                    # NEW Resolvers(r io.Reader) []netip.Addr from resolv.conf "nameserver" lines; ResolverKey(addr)
-├── record.go                    # NEW Record{Name, TTL, Addrs} from bpf.DnsDnsAnswer (decode, bounds), Stats from the stats array
+├── record.go                    # NEW Record{Name, TTL, Addrs, Slots} from bpf.DnsDnsAnswerRecord (Decode, bounds), Stats and StatsCount from the counters array
 └── *_test.go                    # name_test, cache_test + cache_bounds_test, compile_test + compile_recompile_test, resolv_test, record_test (split to stay under 300)
 internal/rules/
 ├── file.go                      # + Rule.Name string; Dest() string; IsName() bool
@@ -378,27 +378,25 @@ flowchart TD
 
 ##### Service Interface
 ```go
-// name.go
-const NameMax = 64; LabelsMax = 16; LevelsMax = 8; SlotsMax = 4; AddrsMax = 8
-// the grammar is rules.ParseName (one parser); internal/dns re-exports nothing
-func Covers(rule, name string) bool           // rule == name || strings.HasSuffix(name, "."+rule)
-func Key(name string) [NameMax]byte           // "." + name, zero padded
-func Suffixes(name string) []string           // name, then dropping leading labels, at most LevelsMax
+// name.go (as built: the kernel bounds, exported only where the daemon reads them)
+const NameMax = 64; SlotsMax = rules.NameSlots (8)   // labelsMax 16, levelsMax 8, addrsMax 8 unexported; a test pins the C defines
+// the grammar is rules.ParseName (one parser); covers(rule, name) and key(name) are package-private
+// (the kernel walks the suffixes; the daemon never needs them)
 
 // cache.go
-type Cache struct{ ... }                      // zero value ready; MaxAddrs 8192, MaxNames 4
+type Cache struct{ ... }                      // zero value ready; maxAddrs 8192, maxNames 4 (unexported)
 type Change struct{ Addr netip.Addr; Names []string; Gone bool }
-func (c *Cache) Learn(name string, addrs []netip.Addr, ttl time.Duration, now time.Time) []Change
+func (c *Cache) Learn(name string, addrs []netip.Addr, ttl time.Duration, now time.Time) []Change  // clamps the TTL to [60 s, 24 h]; never expires
 func (c *Cache) Expire(now time.Time) []Change
-func (c *Cache) Names(addr netip.Addr) []string   // live names, most recent first
+func (c *Cache) Evict() (netip.Addr, bool)    // the address whose latest expiry is soonest, counted
+func (c *Cache) Names(addr netip.Addr) []string   // live names, most recently learned first
 func (c *Cache) Len() (addrs, names int)
-func (c *Cache) Evictions() uint64
-func Clamp(ttl time.Duration) time.Duration   // [60 s, 24 h]
+func (c *Cache) Evictions() uint64            // address evictions only
 
-// compile.go
-type Slot struct{ Program uint32; Proto rules.Proto; Port uint16; ID uint32 }
-func Slots(res *rules.Resolved) (map[[NameMax]byte][SlotsMax]Slot, error)  // name rules -> domains content; error if > SlotsMax for one name (validator refuses first)
-type Compiled struct{ ... }                   // RuleKey -> {ID, Name, Expiry}; Max 16384
+// compile.go (Slot lives in record.go)
+func Slots(res *rules.Resolved) (map[[NameMax]byte][SlotsMax]Slot, error)  // name rules -> domains content, one slot per Expand(rule) pair; error if > SlotsMax for one name (validator refuses first)
+type Entry struct{ ID uint32; Name string }   // no expiry: lifetimes belong to the cache
+type Compiled struct{ ... }                   // addr -> RuleKey -> Entry; Max 16384 (the daemon evicts)
 func (c *Compiled) Compute(res *rules.Resolved, addr netip.Addr, names []string) map[rules.RuleKey]Entry  // every name rule covering a live name of addr, expanded over proto/port like encodeRule, id = rule.ID
 func (c *Compiled) Apply(addr netip.Addr, want map[rules.RuleKey]Entry, file map[rules.RuleKey]rules.RuleVal) (puts map[rules.RuleKey]rules.RuleVal, dels []rules.RuleKey)  // diff against what it holds for addr, minus file keys
 func (c *Compiled) Recompile(res *rules.Resolved, cache *Cache, file map[rules.RuleKey]rules.RuleVal) (puts, dels)
@@ -410,8 +408,11 @@ func Resolvers(r io.Reader) []netip.Addr     // "nameserver" lines, zones droppe
 func ResolverKey(a netip.Addr) [16]byte
 
 // record.go
-type Record struct{ Name string; TTL time.Duration; Addrs []netip.Addr }
-func Decode(raw []byte) (Record, error)       // from bpf.DnsDnsAnswer; key form -> name
+type Slot struct{ Program uint32; Proto rules.Proto; Port uint16; ID uint32 }
+type Record struct{ Name string; TTL time.Duration; Addrs []netip.Addr; Slots []Slot }  // Slots: the slots the kernel attempted
+func Decode(raw []byte) (Record, error)       // from bpf.DnsDnsAnswerRecord; key form -> name
+const StatsCount = 11
+func DecodeStats(values []uint64) (Stats, error)
 type Stats struct{ Seen, NotResolver, NotAnswer, NoQuestion, NameTooLong, Parsed, Updates, Exists, UpdateFail, Queries, RingbufFull uint64 }
 ```
 - Preconditions: `Learn` requires a parsed name and valid addrs (contract); `Compute` requires
@@ -552,7 +553,10 @@ read func() ([]byte, error)
   the `domains` rewrite and `Recompile`; the reader never takes `reloader.mu`.
 - The Dns bpf2go line passes no `-type rule_key`/`rule_val`: the shared trie is addressed with
   `rules.RuleKey`/`RuleVal`.
-- Both kernel programs: `return 1` on every path (a grep in a test over the C: no `return 0`).
+- Both kernel programs: every `return` inside the bodies of the two `SEC("cgroup_skb/ingress")`/
+  `SEC("cgroup_skb/egress")` functions is `return 1` (`TestDNSFailSafeShape` in
+  `internal/dns/shape_test.go` strips comments and checks each body; helpers and the `bpf_loop`
+  callback may `return 0`).
 - No deny from a name anywhere: `domain_slot` has no verdict field; `Compiled` values are
   `Allow` by construction (Invariant); the validator and `ruleAdd` refuse `deny` names.
 - File keys are subtracted before every compiled put and delete (Ensure in `Apply`).
@@ -560,12 +564,12 @@ read func() ([]byte, error)
 - The daemon never parses DNS bytes; `Decode` reads the kernel's record only.
 
 ### Contracts
-- `dns.Cache.Learn`: Require parsed name and valid addrs; Ensure bounds (test `TestContractLearnNeedsAName`, `TestCacheNeverExceedsBounds`).
-- `dns.Compiled.Apply`/`Recompile`: Ensure no file key in puts/dels; Invariant every put is Allow (`TestContractApplyNeverTouchesFileKeys`, `TestCompiledValuesAreAllow`).
-- `rules.Encode`: existing precondition on prefixes holds because name rules are skipped (`TestEncodeSkipsNameRules`).
-- `rules.validate`: name rules with Deny refused; > 8 per name refused (`TestValidateRefusesDenyByName`, `TestValidateRefusesFiveRulesOnOneName`).
-- `dnsState.handle`: Require snapshot non-nil (`TestContractHandleNeedsASnapshot`).
-- `reloader.after` called with the published snapshot (`TestReloadCallsAfterWithTheNewSnapshot`).
+- `dns.Cache.Learn`: Require a non-empty parsed name and valid addresses (violation tests `TestContractLearnNeedsAName`, `TestContractLearnNeedsValidAddresses`); Ensure cache bounds. The bounds are untrippable through the public API because Learn evicts before inserting (`TestCacheNeverExceedsBounds`).
+- `dns.Compiled.Apply`/`Recompile` call `compiledOutputs`: Ensure no file key in puts/deletes (violation test `TestContractApplyNeverTouchesFileKeys`); Invariant every put is Allow (violation test `TestCompiledInvariantRejectsDeny`, behaviour test `TestCompiledValuesAreAllow`).
+- `rules.Encode` calls `prefixKey`: Require valid canonical prefixes (violation test `TestEncodeContracts`); name rules are skipped before that check (`TestEncodeSkipsNameRules`).
+- `rules.convertRule` refuses deny by name and `checkNameSlots` (called by `validate`) refuses more than 8 protocol/port combinations per name (`TestValidateRefusesDenyByName`, `TestValidateRefusesFiveRulesOnOneName`, `TestValidateCountsProtocolPortCombinationsPerName`). These are operator-error returns, not panic contracts, so no contract violation is trippable.
+- `dnsState.handle`: Require a snapshot accessor and non-nil snapshot (violation tests `TestContractHandleNeedsAnAccessor`, `TestContractHandleNeedsASnapshot`).
+- `reloader.reload` calls `reloader.after` with the published snapshot (`TestReloadCallsAfterWithTheNewSnapshot`). This sequencing guarantee has no panic check to trip; the behaviour test checks snapshot identity and publication inside the hook.
 
 ## Error Handling
 - Attach or load failure: log `dns tap off: <err>` once, `DNSStatus{On:false, Reason}`, daemon

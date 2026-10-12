@@ -11,7 +11,7 @@ import (
 
 func TestMergeNameSlotLimitAppliesToTheUnion(t *testing.T) {
 	src := baseCurl
-	for i := 1; i <= 4; i++ {
+	for i := 1; i <= rules.NameSlots; i++ {
 		src += ruleTable("curl", "github.com", "tcp", strconv.Itoa(i), "allow")
 	}
 	base := parseNamed(t, "base.toml", src)
@@ -25,11 +25,11 @@ func TestMergeNameSlotLimitAppliesToTheUnion(t *testing.T) {
 
 func TestMergeNameReplacementDoesNotConsumeAnotherSlot(t *testing.T) {
 	src := ""
-	for i := 1; i <= 4; i++ {
+	for i := 1; i <= rules.NameSlots; i++ {
 		src += ruleTable("any", "github.com", "tcp", strconv.Itoa(i), "allow")
 	}
 	m := merge(t, parseNamed(t, "base.toml", src), overlay(t, ruleTable("any", "github.com", "tcp", "1", "allow")))
-	if len(m.Rules) != 4 || m.Rules[3].Source != "overlay.toml" {
+	if len(m.Rules) != rules.NameSlots || m.Rules[rules.NameSlots-1].Source != "overlay.toml" {
 		t.Fatalf("got %+v", m.Rules)
 	}
 }

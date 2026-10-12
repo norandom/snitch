@@ -81,7 +81,7 @@ func TestDecodeEventReadsTheCookieAtTheKernelOffset(t *testing.T) {
 
 func TestDescribeMappedProgramWithRule(t *testing.T) {
 	e := sample()
-	got := describe(&e, fakeSnap(t), func(uint32) string { return "/proc/says/this" })
+	got := describe(&e, fakeSnap(t), func(uint32) string { return "/proc/says/this" }, "")
 	for _, want := range []string{"allow (rule)", "connect", "pid 4242", "curl", "tcp", "1.1.1.1:443", "program curl", "rule #1 curl 1.1.1.1/32 tcp 443 allow"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("%q lacks %q", got, want)
@@ -96,7 +96,7 @@ func TestDescribeUnknownProgramUsesTheKernelPath(t *testing.T) {
 	e := sample()
 	e.Program, e.Rule, e.Verdict = 0, 0, 0
 	setC(e.Path[:], "/tmp/curl-copy\x00")
-	got := describe(&e, fakeSnap(t), func(uint32) string { return "/proc/says/this" })
+	got := describe(&e, fakeSnap(t), func(uint32) string { return "/proc/says/this" }, "")
 	if !strings.Contains(got, "allow (monitor)") || !strings.Contains(got, "program /tmp/curl-copy (unknown)") || strings.Contains(got, "rule #") {
 		t.Fatalf("got %q", got)
 	}
@@ -106,11 +106,11 @@ func TestDescribeFallsBackToProcWhenThePathIsEmpty(t *testing.T) {
 	e := sample()
 	e.Program, e.Rule = 0, 3
 	e.Path = [256]int8{}
-	got := describe(&e, fakeSnap(t), func(pid uint32) string { return "/proc/exe/of/" + fmt.Sprint(pid) })
+	got := describe(&e, fakeSnap(t), func(pid uint32) string { return "/proc/exe/of/" + fmt.Sprint(pid) }, "")
 	if !strings.Contains(got, "program /proc/exe/of/4242 (unknown)") || strings.Contains(got, "rule #") {
 		t.Fatalf("got %q", got)
 	}
-	gone := describe(&e, nil, func(uint32) string { return "" })
+	gone := describe(&e, nil, func(uint32) string { return "" }, "")
 	if !strings.Contains(gone, "program unknown") {
 		t.Fatalf("a vanished process without a path is plain unknown: %q", gone)
 	}
@@ -120,7 +120,7 @@ func TestDescribeV6AndSendmsg(t *testing.T) {
 	e := sample()
 	e.Family, e.Proto, e.Hook, e.Dport, e.Program, e.Rule = 10, 17, 1, 53, 0, 0
 	e.Addr = netip.MustParseAddr("2001:db8::1").As16()
-	got := describe(&e, nil, func(uint32) string { return "" })
+	got := describe(&e, nil, func(uint32) string { return "" }, "")
 	if !strings.Contains(got, "sendmsg") || !strings.Contains(got, "udp") || !strings.Contains(got, "[2001:db8::1]:53") {
 		t.Fatalf("got %q", got)
 	}
@@ -130,7 +130,7 @@ func TestObservationCarriesIdentityPathAndProgram(t *testing.T) {
 	e := sample()
 	e.Rule, e.Verdict = 0, 0
 	at := time.Unix(1_000_000, 0)
-	o := observation(&e, fakeSnap(t), func(uint32) string { return "" }, at)
+	o := observation(&e, fakeSnap(t), func(uint32) string { return "" }, at, "")
 	want := rules.Observation{Path: "/usr/bin/curl", Exe: rules.ExeKey{Ino: 100, Dev: 8<<20 | 1}, Program: "curl",
 		Addr: netip.MustParseAddr("1.1.1.1"), Proto: rules.TCP, Port: 443, At: at}
 	if o != want {
@@ -138,7 +138,7 @@ func TestObservationCarriesIdentityPathAndProgram(t *testing.T) {
 	}
 	e.Program = 0
 	e.Path = [256]int8{}
-	o = observation(&e, fakeSnap(t), func(uint32) string { return "/from/proc" }, at)
+	o = observation(&e, fakeSnap(t), func(uint32) string { return "/from/proc" }, at, "")
 	if o.Program != "" || o.Path != "/from/proc" {
 		t.Fatalf("unknown program: no name, path from /proc: %+v", o)
 	}

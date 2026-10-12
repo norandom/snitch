@@ -58,7 +58,7 @@ func putDomain(t *testing.T, c *ebpf.Collection, name string, slots []Slot) {
 	for i, s := range slots {
 		v.Slot[i] = snitchbpf.DnsDomainSlot{Program: s.Program, Proto: uint8(s.Proto), Port: s.Port, Id: s.ID}
 	}
-	mustProg(t, c.Maps["domains"].Put(Key(name), v))
+	mustProg(t, c.Maps["domains"].Put(key(name), v))
 }
 
 func progStats(t *testing.T, c *ebpf.Collection) Stats {

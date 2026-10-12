@@ -34,7 +34,7 @@ func Decode(raw []byte) (Record, error) {
 	if err := binary.Read(bytes.NewReader(raw), binary.LittleEndian, &wire); err != nil {
 		return Record{}, fmt.Errorf("DNS record: %w", err)
 	}
-	if wire.N == 0 || wire.N > AddrsMax {
+	if wire.N == 0 || wire.N > addrsMax {
 		return Record{}, fmt.Errorf("DNS record has invalid address count %d", wire.N)
 	}
 	name, err := keyName(wire.Qname)
@@ -74,8 +74,11 @@ type Stats struct {
 	Updates, Exists, UpdateFail, Queries, RingbufFull             uint64
 }
 
+// StatsCount is the number of counters in the kernel dns_stat enum.
+const StatsCount = 11
+
 func DecodeStats(values []uint64) (Stats, error) {
-	if len(values) < 11 {
+	if len(values) < StatsCount {
 		return Stats{}, fmt.Errorf("DNS stats: need eleven counters, got %d", len(values))
 	}
 	return Stats{values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10]}, nil

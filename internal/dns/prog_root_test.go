@@ -92,7 +92,7 @@ func TestDNSProgQuery(t *testing.T) {
 	q := progQuestions(t, c)
 	equalProg(t, len(q), 1)
 	for k, v := range q {
-		equalProg(t, v.Qname, Key(o.name))
+		equalProg(t, v.Qname, key(o.name))
 		// The ABI stores the header ID in network byte order, without ntohs.
 		equalProg(t, k.Id, uint16(0x3412))
 		if v.Ns == 0 {

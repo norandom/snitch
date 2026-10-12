@@ -21,8 +21,8 @@ func cacheNames(t *testing.T, c *Cache, a netip.Addr, want ...string) {
 
 func TestClamp(t *testing.T) {
 	for _, tc := range []struct{ in, want time.Duration }{{59 * time.Second, time.Minute}, {25 * time.Hour, 24 * time.Hour}, {300 * time.Second, 300 * time.Second}} {
-		if got := Clamp(tc.in); got != tc.want {
-			t.Fatalf("Clamp(%v) = %v, want %v", tc.in, got, tc.want)
+		if got := clamp(tc.in); got != tc.want {
+			t.Fatalf("clamp(%v) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }
@@ -102,13 +102,13 @@ func TestCacheEachVisitsEveryAddressOnce(t *testing.T) {
 	c.Learn("one.example", []netip.Addr{a, b}, time.Minute, now)
 	c.Learn("two.example", []netip.Addr{a}, time.Minute, now)
 	seen := map[netip.Addr][]string{}
-	c.Each(func(addr netip.Addr, names []string) { seen[addr] = names })
+	c.each(func(addr netip.Addr, names []string) { seen[addr] = names })
 	if len(seen) != 2 || len(seen[a]) != 2 || seen[a][0] != "two.example" || len(seen[b]) != 1 {
-		t.Fatalf("Each visited %v", seen)
+		t.Fatalf("each visited %v", seen)
 	}
 	seen[a][0] = "mutated"
 	if c.Names(a)[0] != "two.example" {
-		t.Fatal("Each handed out the cache's own slice")
+		t.Fatal("each handed out the cache's own slice")
 	}
 }
 

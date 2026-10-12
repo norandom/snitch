@@ -31,7 +31,7 @@ func TestCacheNeverExceedsBounds(t *testing.T) {
 	now := time.Unix(0, 0)
 	for i := 0; i < 9000; i++ {
 		c.Learn("one.example", []netip.Addr{cacheAddr(i)}, time.Hour, now)
-		if x, _ := c.Len(); x > MaxAddrs {
+		if x, _ := c.Len(); x > maxAddrs {
 			t.Fatalf("addresses = %d", x)
 		}
 	}
@@ -39,7 +39,7 @@ func TestCacheNeverExceedsBounds(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		c.Learn(fmt.Sprintf("n%d.example", i), []netip.Addr{a}, time.Hour, now)
 	}
-	if len(c.Names(a)) != MaxNames {
+	if len(c.Names(a)) != maxNames {
 		t.Fatal(c.Names(a))
 	}
 	if c.Evictions() != 809 {
@@ -60,7 +60,7 @@ func TestCacheEvictsSoonestName(t *testing.T) {
 func TestCacheEvictsAddressWithSoonestLatestExpiry(t *testing.T) {
 	var c Cache
 	now := time.Unix(0, 0)
-	addrs := make([]netip.Addr, MaxAddrs)
+	addrs := make([]netip.Addr, maxAddrs)
 	for i := range addrs {
 		addrs[i] = cacheAddr(i)
 	}
@@ -68,7 +68,7 @@ func TestCacheEvictsAddressWithSoonestLatestExpiry(t *testing.T) {
 	c.Learn("short.example", []netip.Addr{addrs[0]}, time.Minute, now)
 	c.Learn("later.example", []netip.Addr{addrs[0]}, 2*time.Hour, now)
 	c.Learn("victim.example", []netip.Addr{addrs[1]}, 2*time.Minute, now)
-	changes := c.Learn("new.example", []netip.Addr{cacheAddr(MaxAddrs)}, time.Hour, now)
+	changes := c.Learn("new.example", []netip.Addr{cacheAddr(maxAddrs)}, time.Hour, now)
 	gone := 0
 	for _, ch := range changes {
 		if ch.Gone {
@@ -85,7 +85,7 @@ func TestCacheEvictsAddressWithSoonestLatestExpiry(t *testing.T) {
 }
 
 func BenchmarkLearnExpire8192(b *testing.B) {
-	addrs := make([]netip.Addr, MaxAddrs)
+	addrs := make([]netip.Addr, maxAddrs)
 	for i := range addrs {
 		addrs[i] = cacheAddr(i)
 	}

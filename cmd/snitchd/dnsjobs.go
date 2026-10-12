@@ -107,8 +107,12 @@ func (s *dnsState) recompile(snap *snapshot) {
 	}
 	s.rewriteDomains(slots)
 	puts, dels := s.comp.Recompile(snap.res, &s.cache, snap.ent.Rules)
-	// A failed old put carries an obsolete id; only the new diff may be retried.
-	s.pending = nil
+	// Drop obsolete puts, but keep failed deletes of stray kernel inserts.
+	for k, v := range s.pending {
+		if v != nil {
+			delete(s.pending, k)
+		}
+	}
 	s.queue(puts, dels)
 	s.flush(snap)
 }

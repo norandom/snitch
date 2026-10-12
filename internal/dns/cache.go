@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	MaxAddrs = 8192
-	MaxNames = 4
+	maxAddrs = 8192
+	maxNames = 4
 )
 
 // Change is a detached snapshot; Gone tells the compiler to forget the address.
@@ -33,8 +33,8 @@ type Cache struct {
 	evictions uint64
 }
 
-// Clamp bounds how long a learned answer may contribute allows.
-func Clamp(ttl time.Duration) time.Duration {
+// clamp bounds how long a learned answer may contribute allows.
+func clamp(ttl time.Duration) time.Duration {
 	if ttl < time.Minute {
 		return time.Minute
 	}
@@ -55,21 +55,21 @@ func (c *Cache) Learn(name string, addrs []netip.Addr, ttl time.Duration, now ti
 		c.entries = make(map[netip.Addr][]cacheName)
 	}
 	changes := make(map[netip.Addr]Change)
-	expiry := now.Add(Clamp(ttl))
+	expiry := now.Add(clamp(ttl))
 	for _, addr := range addrs {
 		before := c.Names(addr)
-		if _, ok := c.entries[addr]; !ok && len(c.entries) == MaxAddrs {
+		if _, ok := c.entries[addr]; !ok && len(c.entries) == maxAddrs {
 			victim := c.evictAddress()
 			changes[victim] = Change{Addr: victim, Gone: true}
 		}
 		c.entries[addr] = cacheLearnName(c.entries[addr], name, expiry)
-		contract.Ensure(len(c.entries[addr]) <= MaxNames, "cache name bound holds")
+		contract.Ensure(len(c.entries[addr]) <= maxNames, "cache name bound holds")
 		after := c.Names(addr)
 		if !slices.Equal(before, after) {
 			changes[addr] = Change{Addr: addr, Names: after}
 		}
 	}
-	contract.Ensure(len(c.entries) <= MaxAddrs, "cache address bound holds")
+	contract.Ensure(len(c.entries) <= maxAddrs, "cache address bound holds")
 	return cacheChanges(changes)
 }
 
@@ -83,7 +83,7 @@ func cacheLearnName(names []cacheName, name string, expiry time.Time) []cacheNam
 			break
 		}
 	}
-	if len(names) == MaxNames {
+	if len(names) == maxNames {
 		victim := 0
 		for i, n := range names {
 			if n.expiry.Before(names[victim].expiry) {
@@ -141,10 +141,10 @@ func (c *Cache) Names(addr netip.Addr) []string {
 	return names
 }
 
-// Each calls fn for every cached address with a detached snapshot of its names (most recently
+// each calls fn for every cached address with a detached snapshot of its names (most recently
 // learned first), in no particular order; the recompile on a reload needs every address, not
 // only those that already produced compiled entries. fn must not mutate the cache.
-func (c *Cache) Each(fn func(addr netip.Addr, names []string)) {
+func (c *Cache) each(fn func(addr netip.Addr, names []string)) {
 	for addr := range c.entries {
 		fn(addr, c.Names(addr))
 	}

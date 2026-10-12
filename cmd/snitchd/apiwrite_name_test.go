@@ -119,3 +119,16 @@ func TestApiWriteNameByPathLoadsAsStandaloneFile(t *testing.T) {
 		t.Fatalf("file %+v err %v", f, err)
 	}
 }
+
+func TestApiWriteNameNinthRuleReturnsValidatorText(t *testing.T) {
+	x := newEditFixture(t, baseCurl)
+	for port := 1; port <= rules.NameSlots; port++ {
+		x.must(add("curl", "x", "tcp", port, "allow"))
+	}
+	before := x.overlayText()
+	text, err := x.edit(add("curl", "x", "tcp", rules.NameSlots+1, "allow"))
+	want := `name "x": at most 8 rules (protocol and port combinations) per name`
+	if text != "" || !strings.Contains(errText(err), want) || x.overlayText() != before {
+		t.Fatalf("text %q err %v overlay changed %v", text, err, x.overlayText() != before)
+	}
+}

@@ -169,7 +169,7 @@ func (s *dnsState) close() {
 }
 
 func readDNSStats(lookup func(any, any) error) (dns.Stats, error) {
-	counters := make([]uint64, 11)
+	counters := make([]uint64, dns.StatsCount)
 	for i := range counters {
 		if err := lookup(uint32(i), &counters[i]); err != nil {
 			return dns.Stats{}, err

@@ -56,14 +56,14 @@ func exeOf(pid uint32) string {
 //
 //	DENY (default)  connect pid 4242 curl   tcp -> 9.9.9.9:443  program curl
 //	allow (rule)    connect pid 4242 curl   tcp -> 1.1.1.1:443  program curl  rule #1 curl 1.1.1.1/32 tcp 443 allow
-func describe(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, names ...string) string {
-	name, _ := programOf(e, snap, exe)
+func describe(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, name string) string {
+	program, _ := programOf(e, snap, exe)
 	dest := destination(e)
-	if len(names) != 0 && names[0] != "" {
-		dest += " (" + names[0] + ")"
+	if name != "" {
+		dest += " (" + name + ")"
 	}
 	s := fmt.Sprintf("%-23s %-8s pid %-7d %-15s %-4s -> %s  program %s",
-		verdictName(e), hookName(e), e.Pid, commOf(e), protoName(e.Proto), dest, name)
+		verdictName(e), hookName(e), e.Pid, commOf(e), protoName(e.Proto), dest, program)
 	if r := ruleOf(e, snap); r != nil {
 		s += "  rule " + ruleText(r)
 	}
@@ -137,11 +137,9 @@ func verdictWord(v rules.Verdict) string {
 }
 
 // observation is what the learning sink gets for an uncovered connection.
-func observation(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, at time.Time, names ...string) rules.Observation {
+func observation(e *snitchbpf.SnitchEvent, snap *snapshot, exe func(uint32) string, at time.Time, name string) rules.Observation {
 	o := rules.Observation{Exe: rules.ExeKey{Ino: e.ExeIno, Dev: e.ExeDev}, Addr: addrOf(e), Proto: rules.Proto(e.Proto), Port: e.Dport, At: at}
-	if len(names) != 0 {
-		o.Name = names[0]
-	}
+	o.Name = name
 	o.Path = pathOf(e)
 	if o.Path == "" {
 		o.Path = exe(e.Pid) // one /proc lookup; programOf would repeat it
