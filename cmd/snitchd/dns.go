@@ -12,18 +12,28 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/norandom/snitch/internal/bpf"
 	"github.com/norandom/snitch/internal/dns"
+	"github.com/norandom/snitch/internal/rules"
 )
 
 const resolvPath = "/etc/resolv.conf"
 
 type dnsState struct {
-	on     bool
-	reason string
-	objs   *bpf.DnsObjects
-	cache  dns.Cache
-	comp   dns.Compiled
+	capacityFailing                  bool
+	read                             func() ([]byte, error)
+	current                          func() *snapshot
+	cap                              int
+	readErrors, mapErrors, malformed uint64
+	readFailing, mapFailing          bool
+	pending                          map[rules.RuleKey]*rules.RuleVal
+	readerClose                      io.Closer
+	on                               bool
+	reason                           string
+	objs                             *bpf.DnsObjects
+	cache                            dns.Cache
+	comp                             dns.Compiled
 	// Held briefly, never while reading the ring buffer. Lock order: reloader then
 	// dnsState; the reader never takes the reloader's lock.
 	mu                        sync.Mutex
@@ -67,11 +77,25 @@ func loadDNS(d *daemon) *dnsState {
 		},
 		now: time.Now, log: d.log,
 	}
-	return loadDNSWith(d.cfg, d.objs.Rules, deps)
+	s := loadDNSWith(d.cfg, d.objs.Rules, deps)
+	s.current = d.st.current
+	if s.on {
+		rd, err := ringbuf.NewReader(s.objs.DnsAnswers)
+		if err != nil {
+			return s.off(err)
+		}
+		s.readerClose = rd
+		s.read = func() ([]byte, error) {
+			rd.SetDeadline(time.Now().Add(500 * time.Millisecond))
+			rec, err := rd.Read()
+			return rec.RawSample, err
+		}
+	}
+	return s
 }
 
 func loadDNSWith(cfg config, trie *ebpf.Map, deps dnsDeps) *dnsState {
-	s := &dnsState{now: deps.now, log: deps.log, readResolv: deps.readResolv, stamp: deps.stamp,
+	s := &dnsState{cap: dns.Max, now: deps.now, log: deps.log, readResolv: deps.readResolv, stamp: deps.stamp,
 		closeObjects: deps.closeObjects, trusted: make(map[bpf.DnsResolverKey]bool)}
 	if !cfg.dns {
 		return s.off(errors.New("flag"))
@@ -129,6 +153,10 @@ func (s *dnsState) off(err error) *dnsState {
 }
 
 func (s *dnsState) close() {
+	if s.readerClose != nil {
+		_ = s.readerClose.Close()
+		s.readerClose = nil
+	}
 	for _, l := range s.links {
 		_ = l.Close()
 	}

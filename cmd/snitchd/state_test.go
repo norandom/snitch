@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/norandom/snitch/internal/contract"
@@ -208,5 +209,37 @@ func TestLoadRulesRequiresABasePath(t *testing.T) {
 	v := contracttest.Panics(t, contract.Precondition, func() { loadRules("", "", func(string) {}) })
 	if !strings.Contains(v.Msg, "rules path") {
 		t.Fatalf("want the precondition to name the rules path, got %q", v.Msg)
+	}
+}
+
+func TestApplyFullRetriesOnce(t *testing.T) {
+	calls, evictions := 0, 0
+	ops := putDel{put: func(any, any) error {
+		calls++
+		if calls == 1 {
+			return syscall.ENOSPC
+		}
+		return nil
+	}}
+	ch := rules.Changes{PutRules: map[rules.RuleKey]rules.RuleVal{{}: {Verdict: 1}}}
+	err := applyWith(putDel{}, ops, ch, func() bool { evictions++; return true })
+	if err != nil || calls != 2 || evictions != 1 {
+		t.Fatalf("%v calls %d evictions %d", err, calls, evictions)
+	}
+}
+
+func TestApplyFullRetryLimits(t *testing.T) {
+	for _, full := range []func() bool{nil, func() bool { return false }, func() bool { return true }} {
+		calls := 0
+		ops := putDel{put: func(any, any) error { calls++; return syscall.ENOSPC }}
+		ch := rules.Changes{PutRules: map[rules.RuleKey]rules.RuleVal{{}: {Verdict: 1}}}
+		err := applyWith(putDel{}, ops, ch, full)
+		want := 1
+		if full != nil && full() {
+			want = 2
+		}
+		if !errors.Is(err, syscall.ENOSPC) || calls != want {
+			t.Fatalf("%v calls %d want %d", err, calls, want)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/norandom/snitch/internal/bpf"
@@ -75,7 +76,19 @@ func (d *daemon) dnsJobs(_ *reloader) []jobs.Job {
 		return nil
 	}
 	s := d.dns
-	// Reader and expiry jobs join this list in task 2.2; one owner closes after all finish.
-	js := []jobs.Job{jobs.Every(filePollPeriod, s.watchResolv)}
+	// One owner closes the ring reader and objects after all jobs finish.
+	js := []jobs.Job{s.reader, jobs.Every(2*time.Second, s.expire), jobs.Every(filePollPeriod, s.watchResolv)}
 	return []jobs.Job{func(ctx context.Context) error { defer s.close(); return jobs.Run(ctx, js...) }}
+}
+
+// expire is one tick; remaining names are recomputed so partial expiry preserves allows.
+func (s *dnsState) expire(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snap := s.current()
+	for _, ch := range s.cache.Expire(s.now()) {
+		s.change(snap, ch)
+	}
+	s.flush(snap)
+	return nil
 }

@@ -168,3 +168,11 @@ func cacheChanges(changes map[netip.Addr]Change) []Change {
 	}
 	return out
 }
+
+// Evict removes the address whose latest name expiry is soonest, counting it once.
+func (c *Cache) Evict() (netip.Addr, bool) {
+	if len(c.entries) == 0 {
+		return netip.Addr{}, false
+	}
+	return c.evictAddress(), true
+}

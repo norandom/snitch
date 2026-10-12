@@ -4,9 +4,12 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/norandom/snitch/internal/rules"
 	"net/netip"
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/norandom/snitch/internal/bpf"
@@ -112,5 +115,55 @@ func TestResolvMapFailureRetriesSameStamp(t *testing.T) {
 	}
 	if !reflect.DeepEqual(f.logs, []string{"dns tap on: 1 resolvers", "dns resolvers: map full"}) {
 		t.Fatal(f.logs)
+	}
+}
+
+func TestDNSExpirePartialNames(t *testing.T) {
+	f := newReaderFixture()
+	rec := readerRecord()
+	f.s.handle(rec)
+	rec.Name = "other.example.org"
+	rec.TTL = 2 * time.Minute
+	f.s.handle(rec)
+	f.at = f.at.Add(time.Minute)
+	_ = f.s.expire(context.Background())
+	if f.dels != 0 || f.s.comp.Len() != 1 {
+		t.Fatal("partial expiry removed shared key")
+	}
+	f.at = f.at.Add(time.Minute)
+	_ = f.s.expire(context.Background())
+	if f.dels != 1 {
+		t.Fatal("last name expiry did not remove key")
+	}
+}
+
+func TestDNSEvictSomePreservesFileKeys(t *testing.T) {
+	f := newReaderFixture()
+	f.s.handle(readerRecord())
+	for k := range f.live {
+		f.snap.ent.Rules[k] = rules.RuleVal{Id: 99, Verdict: 2}
+	}
+	if !f.s.evictSome() || f.s.evictSome() || f.dels != 0 || f.s.comp.Len() != 0 {
+		t.Fatal("evictor touched file or did not clear compiled")
+	}
+}
+
+func TestDNSJobsExpiryTickAndReaderClose(t *testing.T) {
+	f := newReaderFixture()
+	f.s.handle(readerRecord())
+	f.at = f.at.Add(time.Minute)
+	f.s.on = true
+	f.s.stamp = func() (fileStamp, error) { return fileStamp{}, nil }
+	closes := 0
+	f.s.readerClose = dnsCloser{&closes}
+	f.s.read = func() ([]byte, error) { time.Sleep(10 * time.Millisecond); return nil, os.ErrDeadlineExceeded }
+	ctx, cancel := context.WithTimeout(context.Background(), 2200*time.Millisecond)
+	defer cancel()
+	js := (&daemon{dns: f.s}).dnsJobs(nil)
+	if err := js[0](ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
+	if closes != 1 || f.dels != 1 || f.s.comp.Len() != 0 {
+		t.Fatalf("closes %d dels %d compiled %d", closes, f.dels, f.s.comp.Len())
 	}
 }

@@ -111,3 +111,20 @@ func TestCacheEachVisitsEveryAddressOnce(t *testing.T) {
 		t.Fatal("Each handed out the cache's own slice")
 	}
 }
+
+func TestCacheEvictLatestExpiry(t *testing.T) {
+	var c Cache
+	now := time.Unix(100, 0)
+	a, b := netip.MustParseAddr("192.0.2.1"), netip.MustParseAddr("192.0.2.2")
+	c.Learn("a", []netip.Addr{a}, time.Minute, now)
+	c.Learn("b", []netip.Addr{a}, 3*time.Minute, now)
+	c.Learn("a", []netip.Addr{b}, 2*time.Minute, now)
+	got, ok := c.Evict()
+	if !ok || got != b || c.Evictions() != 1 {
+		t.Fatalf("%v %v %d", got, ok, c.Evictions())
+	}
+	c.Evict()
+	if _, ok := c.Evict(); ok || c.Evictions() != 2 {
+		t.Fatal("empty eviction counted")
+	}
+}

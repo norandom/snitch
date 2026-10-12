@@ -1,3 +1,5 @@
+// File rules keep precedence over compiled allows; a failed write retains the
+// previous snapshot, and contract failures detach enforcement and fail open.
 package main
 
 import (
@@ -7,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/cilium/ebpf"
 
@@ -53,13 +56,18 @@ func mapOps(m *ebpf.Map) putDel { return putDel{put: m.Put, del: m.Delete} }
 // reload never has a moment with neither the old nor the new rule in place. Stops at the
 // first error and leaves the rest untouched; the caller keeps its previous snapshot.
 func apply(programs, rules putDel, ch rules.Changes) error {
+	return applyWith(programs, rules, ch, nil)
+}
+
+// applyWith gives file rules one retry after compiled allows release capacity.
+func applyWith(programs, rules putDel, ch rules.Changes, onFull func() bool) error {
 	for k, id := range ch.PutPrograms {
 		if err := programs.put(exeKey(k), id); err != nil {
 			return fmt.Errorf("programs: %w", err)
 		}
 	}
 	for k, v := range ch.PutRules {
-		if err := rules.put(k, v); err != nil {
+		if err := putFile(rules, k, v, onFull); err != nil {
 			return fmt.Errorf("rules: %w", err)
 		}
 	}
@@ -152,4 +160,12 @@ func names(list []string) string {
 		return ""
 	}
 	return " (" + strings.Join(list, ", ") + ")"
+}
+
+func putFile(ops putDel, k rules.RuleKey, v rules.RuleVal, onFull func() bool) error {
+	err := ops.put(k, v)
+	if errors.Is(err, syscall.ENOSPC) && onFull != nil && onFull() {
+		return ops.put(k, v)
+	}
+	return err
 }
