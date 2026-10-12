@@ -21,7 +21,7 @@ type DnsDnsAnswerRecord struct {
 	Pad    [3]uint8
 	Family [8]uint8
 	Addrs  [8][16]uint8
-	Slots  [32]DnsDomainSlot
+	Slots  [64]DnsDomainSlot
 }
 
 type DnsDomainKey struct {
@@ -40,7 +40,7 @@ type DnsDomainSlot struct {
 
 type DnsDomainVal struct {
 	_    structs.HostLayout
-	Slot [4]DnsDomainSlot
+	Slot [8]DnsDomainSlot
 }
 
 type DnsQ_key struct {

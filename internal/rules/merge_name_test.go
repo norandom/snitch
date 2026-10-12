@@ -18,7 +18,7 @@ func TestMergeNameSlotLimitAppliesToTheUnion(t *testing.T) {
 	over := overlay(t, ruleTable("any", "github.com", "udp", "53", "allow"))
 	_, err := rules.Merge(base, over)
 	var e *rules.Error
-	if !errors.As(err, &e) || e.File != "overlay.toml" || e.Line != 2 || e.Msg != `name "github.com": at most 4 rules (protocol and port combinations) per name` {
+	if !errors.As(err, &e) || e.File != "overlay.toml" || e.Line != 2 || e.Msg != `name "github.com": at most 8 rules (protocol and port combinations) per name` {
 		t.Fatalf("got %v", err)
 	}
 }

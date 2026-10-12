@@ -14,7 +14,7 @@ const (
 	NameMax   = 64
 	LabelsMax = 16
 	LevelsMax = 8
-	SlotsMax  = 4
+	SlotsMax  = rules.NameSlots
 	AddrsMax  = 8
 )
 

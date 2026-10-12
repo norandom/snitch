@@ -113,7 +113,7 @@ func (s *dnsState) recompile(snap *snapshot) {
 	s.flush(snap)
 }
 
-func (s *dnsState) rewriteDomains(slots map[[64]byte][4]dns.Slot) {
+func (s *dnsState) rewriteDomains(slots map[[dns.NameMax]byte][dns.SlotsMax]dns.Slot) {
 	if s.domainKeys == nil {
 		s.domainKeys = make(map[[64]byte]struct{})
 	}

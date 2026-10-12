@@ -117,7 +117,12 @@ func assertDenseIDs(f *File) {
 	}
 }
 
-// checkNameSlots counts rules rather than expanded ports: the kernel has four slots per name.
+// NameSlots is the kernel's number of rule slots per exact name (SLOTS_MAX in bpf/dns.bpf.c);
+// internal/dns mirrors it and a test pins the C define. Six programs share github.com on the
+// dev VM, so four was too few.
+const NameSlots = 8
+
+// checkNameSlots counts expanded protocol/port combinations: that is how the kernel's slots fill.
 func checkNameSlots(f *File) error {
 	counts := map[string]int{}
 	for _, r := range f.Rules {
@@ -126,8 +131,8 @@ func checkNameSlots(f *File) error {
 		}
 		// counted as the kernel's domain slots are filled: one per protocol/port combination
 		counts[r.Name] += len(Expand(&r))
-		if counts[r.Name] > 4 {
-			return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("name %q: at most 4 rules (protocol and port combinations) per name", r.Name)}
+		if counts[r.Name] > NameSlots {
+			return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("name %q: at most %d rules (protocol and port combinations) per name", r.Name, NameSlots)}
 		}
 	}
 	return nil

@@ -133,6 +133,11 @@
   before the check keeps it, and `-mcpu=v3` (32-bit subregister ops) lets the verifier carry the
   bound into the helper call. bpf2go refuses a record struct named like the program, hence
   `dns_answer_record`.
+- Slot limit raised from 4 to 8 per exact name (2026-10-12, before the release): converting the
+  deployed file's 16 deferred lines gives `github.com` six rules (copilot, gh, git, ssh, uv, helm),
+  so the approved 4-slot limit would refuse the real file. `rules.NameSlots = 8` is the one source;
+  `dns.SlotsMax` mirrors it and `TestMirrorKernelConstants` pins the C define. Req 3.8 and the
+  design say 8. Root tests (`scripts/dns-progtest.sh`) pass with the larger record.
 - The hook runs in `sk_filter_trim_cap()` from `udp_queue_rcv_one_skb()`, per receiving socket,
   AF_INET/AF_INET6 only, `skb->data` at the network header, read-only; loopback deliveries take
   the same path (a future local stub would be seen). Return 1 on every path; 0 would drop.

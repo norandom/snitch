@@ -175,7 +175,7 @@ internal/bpf/dns_x86_bpfel.{go,o}# generated
 internal/dns/
 ├── name.go                      # NEW Covers(rule, name), Key(name) [64]byte (".github.com" form), Suffixes; the grammar lives in rules.ParseName
 ├── cache.go                     # NEW Cache: Learn(name, addrs, ttl, now) []Change, Expire(now) []Change, NameOf(addr), Names(addr), Len, bounds, eviction, counters
-├── compile.go                   # NEW Compiler: Slots(rules) map[Key]Slots (domains map content, 4 per name), Keys(rule, addr) []RuleKey, Compiled set with ids and expiry, Recompile(snapshot rules, cache)
+├── compile.go                   # NEW Compiler: Slots(rules) map[Key]Slots (domains map content, 8 per name), Keys(rule, addr) []RuleKey, Compiled set with ids and expiry, Recompile(snapshot rules, cache)
 ├── resolv.go                    # NEW Resolvers(r io.Reader) []netip.Addr from resolv.conf "nameserver" lines; ResolverKey(addr)
 ├── record.go                    # NEW Record{Name, TTL, Addrs} from bpf.DnsDnsAnswer (decode, bounds), Stats from the stats array
 └── *_test.go                    # name_test, cache_test + cache_bounds_test, compile_test + compile_recompile_test, resolv_test, record_test (split to stay under 300)
@@ -183,7 +183,7 @@ internal/rules/
 ├── file.go                      # + Rule.Name string; Dest() string; IsName() bool
 ├── decode.go                    # convertRule: ParsePrefix, else dns-free ParseName (lives in rules: nameparse.go); deny-by-name refusal
 ├── nameparse.go                 # NEW ParseName grammar (rules owns the grammar; internal/dns re-exports or imports it)
-├── validate.go                  # ruleKey gains name; message uses Dest(); at most 4 rules per exact name
+├── validate.go                  # ruleKey gains name; message uses Dest(); at most 8 rules per exact name
 ├── write.go                     # formatRule writes Dest()
 ├── encode.go                    # Encode skips IsName(); EncodeAddr(rule, program, addr) reusing encodeRule; ProgramID(res, name) and Expand(rule) exported for the compiler
 ├── learn.go                     # learnKey.name, Observation.Name, Observed.Name
@@ -290,7 +290,7 @@ flowchart TD
 | 3.5 | identity program+name+proto+port | `ruleKey.name`, `Merge` | | |
 | 3.6 | rules view shows the name; counted once | `rulesView`, `summary` | `RuleView.To` | |
 | 3.7 | docs | `examples/rules.toml`, README | | |
-| 3.8 | at most 4 rules per exact name | validator | error text | |
+| 3.8 | at most 8 rules per exact name | validator | error text | |
 | 4.1 | entry in place before the program can use the answer | dns_answer in-kernel insert | | answer |
 | 4.2 | expired entries removed within 10 s | expiry tick 2 s | | expiry |
 | 4.3 | rule change recompiles in the same reload | `reloader.after` -> `Recompile` | | expiry |
@@ -346,7 +346,7 @@ flowchart TD
   `BPF_F_NO_PREALLOC`) so `MapReplacements` accepts the shared handle; no `PinPath` on this object
   (all its maps die with the daemon, Req 2.6).
 - Bounds (`#define`s, mirrored as constants in `internal/dns`): `NAME_MAX` 64, `LABELS_MAX` 16,
-  `LEVELS_MAX` 8, `SLOTS_MAX` 4, `RR_MAX` 32, `ADDRS_MAX` 8, `questions` 4096 LRU, `resolvers` 16,
+  `LEVELS_MAX` 8, `SLOTS_MAX` 8, `RR_MAX` 32, `ADDRS_MAX` 8, `questions` 4096 LRU, `resolvers` 16,
   `domains` 4096, `dns_answers` 256 KiB.
 - `dns_stats` array (u64 per index): `seen, not_resolver, not_answer, no_question, name_too_long,
   parsed, updates, exists, update_fail, queries, ringbuf_full`.
@@ -357,7 +357,7 @@ flowchart TD
   inserted for this answer (zero id = unused; the same slots apply to every address), submitted
   only when `n > 0`. The record is reserved before the walk; when the ring buffer is full nothing
   is compiled and `ringbuf_full` counts it, so every kernel insert has a record.
-- State: `domains` key `[64]u8` `.label.label` lowercase zero-padded; value 4 slots
+- State: `domains` key `[64]u8` `.label.label` lowercase zero-padded; value 8 slots
   `{program u32 (0 any), proto u8 (0 any), port u16 (0 any), id u32 (0 empty)}`; `resolvers` key
   `[16]u8` (v4 in `[0..3]`); `questions` key `{cookie u64, id u16}`.
 
@@ -442,7 +442,8 @@ type Stats struct{ Seen, NotResolver, NotAnswer, NoQuestion, NameTooLong, Parsed
   stays a timed trial)`.
 - `ruleKey{program, to, name, proto, port}`; duplicate message prints `Dest()`; a parent and a
   child name are distinct keys. New check: more than `SlotsMax` rules sharing one exact name →
-  `name %q: at most 4 rules per name`.
+  `name %q: at most 8 rules (protocol and port combinations) per name` (8 = `rules.NameSlots`, mirrored by
+  `dns.SlotsMax` and the C define; six programs share github.com on the dev VM, so 4 was too few).
 - `Encode` skips `IsName()` rules; `EncodeAddr(rule *Rule, program uint32, addr netip.Addr) (RuleKey, RuleVal)`
   exports the key construction for the compiler (same `fixedKeyBits + bits`, `protosOf`, `portsOf`
   expansion happens in the compiler via `Expand(rule) []struct{Proto; Port}`).
@@ -518,7 +519,7 @@ read func() ([]byte, error)
 
 ### Docs, scripts, VM file, steering
 - `examples/rules.toml`: a name rule example and the semantics (subdomains, plain UDP only, CDN
-  sharing, no deny, no PSL, 4 rules per name). `examples/api.md`: `name` on event/entry/
+  sharing, no deny, no PSL, 8 rules per name). `examples/api.md`: `name` on event/entry/
   observation, `dns` on status, the `remoteName` row updated, the `rule.add` `to` accepting a
   name, limits table rows (cache 8192x4, compiled 16384, TTL clamp).
 - `scripts/api-check.sh` phase C (operator): C1 `status.dns.on`; C2 `rule.add path=/usr/bin/curl
@@ -562,7 +563,7 @@ read func() ([]byte, error)
 - `dns.Cache.Learn`: Require parsed name and valid addrs; Ensure bounds (test `TestContractLearnNeedsAName`, `TestCacheNeverExceedsBounds`).
 - `dns.Compiled.Apply`/`Recompile`: Ensure no file key in puts/dels; Invariant every put is Allow (`TestContractApplyNeverTouchesFileKeys`, `TestCompiledValuesAreAllow`).
 - `rules.Encode`: existing precondition on prefixes holds because name rules are skipped (`TestEncodeSkipsNameRules`).
-- `rules.validate`: name rules with Deny refused; > 4 per name refused (`TestValidateRefusesDenyByName`, `TestValidateRefusesFiveRulesOnOneName`).
+- `rules.validate`: name rules with Deny refused; > 8 per name refused (`TestValidateRefusesDenyByName`, `TestValidateRefusesFiveRulesOnOneName`).
 - `dnsState.handle`: Require snapshot non-nil (`TestContractHandleNeedsASnapshot`).
 - `reloader.after` called with the published snapshot (`TestReloadCallsAfterWithTheNewSnapshot`).
 

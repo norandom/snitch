@@ -31,12 +31,16 @@ func TestSlotsLayout(t *testing.T) {
 	}
 }
 
-func TestSlotsRefusesFifth(t *testing.T) {
-	res := compilerRules(nameRule(1, 0), nameRule(2, 0), nameRule(3, 0), nameRule(4, 0))
+func TestSlotsRefusesOneOverTheKernelSlots(t *testing.T) {
+	var full []rules.Rule
+	for id := uint32(1); id <= SlotsMax; id++ {
+		full = append(full, nameRule(id, 0))
+	}
+	res := compilerRules(full...)
 	if _, err := Slots(res); err != nil {
 		t.Fatal(err)
 	}
-	res.File.Rules = append(res.File.Rules, nameRule(5, 0))
+	res.File.Rules = append(res.File.Rules, nameRule(SlotsMax+1, 0))
 	if _, err := Slots(res); err == nil || !strings.Contains(err.Error(), "example.com") {
 		t.Fatalf("missing domain error: %v", err)
 	}
@@ -51,8 +55,9 @@ func TestSlotsExpandLikeTheEncoder(t *testing.T) {
 	if err != nil || got[Key("example.com")] != want {
 		t.Fatalf("Slots = %v, %v; want %v", got, err, want)
 	}
-	if _, err := Slots(compilerRules(r, nameRule(2, rules.AnyProto, 80), nameRule(3, rules.TCP, 22))); err == nil {
-		t.Fatal("five combinations on one name must be refused")
+	nine := compilerRules(r, nameRule(2, rules.AnyProto, 80), nameRule(3, rules.AnyProto, 8080), nameRule(4, rules.AnyProto, 8443), nameRule(5, rules.TCP, 22))
+	if _, err := Slots(nine); err == nil {
+		t.Fatal("nine combinations on one name must be refused")
 	}
 }
 

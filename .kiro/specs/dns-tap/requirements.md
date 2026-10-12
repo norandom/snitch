@@ -119,7 +119,7 @@ the Python client ran by name are expressible without listing addresses.
 7. The documented rules format shall say that a name covers its subdomains, that only names seen
    in plain DNS answers of this host match, and that an address shared by many names (a CDN) is
    allowed for the program by any one of its matching name rules.
-8. If more than 4 rules name the same exact domain, the daemon shall refuse the file, overlay or
+8. If more than 8 rules name the same exact domain, the daemon shall refuse the file, overlay or
    request with a message that names the domain (the limit is documented).
 
 ### Requirement 4: Live compilation and the fail-safes

@@ -35,7 +35,7 @@
 #define RR_MAX 32       // answer records walked
 #define ADDRS_MAX 8     // A/AAAA records collected per answer
 #define LEVELS_MAX 8    // suffixes tried: name, then dropping one leading label at a time
-#define SLOTS_MAX 4     // rules per domain entry
+#define SLOTS_MAX 8     // rules per domain entry (six programs share github.com on the dev VM)
 #define STEPS_MAX (RR_MAX * (LABELS_MAX + 1))  // bpf_loop iterations: one label or one RR each
 
 char LICENSE[] SEC("license") = "GPL";
