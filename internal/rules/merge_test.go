@@ -57,7 +57,7 @@ func ruleTable(program, to, proto, port, verdict string) string {
 const baseCurl = "[[program]]\nname  = \"curl\"\npaths = [\"/usr/bin/curl\"]\n"
 
 func keyOf(r rules.Rule) string {
-	return r.Program + " " + r.To.String() + " " + map[rules.Proto]string{rules.TCP: "tcp", rules.UDP: "udp", rules.AnyProto: "any"}[r.Proto]
+	return r.Program + " " + r.Dest() + " " + map[rules.Proto]string{rules.TCP: "tcp", rules.UDP: "udp", rules.AnyProto: "any"}[r.Proto]
 }
 
 func TestMergeOverlayRuleReplacesTheBaseRuleWithTheSameKey(t *testing.T) {
@@ -166,7 +166,7 @@ func TestMergeIDsAreDenseInMergedOrder(t *testing.T) {
 	}
 	wantTo := []string{"1.1.1.1/32", "4.4.4.4/32", "3.3.3.3/32", "5.5.5.5/32"}
 	for i, r := range m.Rules {
-		if r.ID != uint32(i+1) || r.To.String() != wantTo[i] {
+		if r.ID != uint32(i+1) || r.Dest() != wantTo[i] {
 			t.Fatalf("rule %d: id %d to %s, want id %d to %s", i, r.ID, r.To, i+1, wantTo[i])
 		}
 	}
@@ -224,4 +224,30 @@ func TestMergeContracts(t *testing.T) {
 	bare := &rules.File{Programs: []rules.Program{{Name: "a", Source: "x"}},
 		Rules: []rules.Rule{{Program: "a", To: netip.MustParsePrefix("1.1.1.1/32"), Verdict: rules.Allow}}}
 	contracttest.Panics(t, contract.Postcondition, func() { rules.Merge(bare, &rules.File{}) })
+}
+
+func TestMergeNameShadowingKeepsOtherIdentitiesAndDenseIDs(t *testing.T) {
+	base := parseNamed(t, "base.toml", baseCurl+
+		ruleTable("curl", "github.com", "", "443", "allow")+
+		ruleTable("curl", "api.github.com", "tcp", "443", "allow")+
+		ruleTable("any", "github.com", "tcp", "443", "allow")+
+		ruleTable("curl", "github.com", "udp", "53", "allow"))
+	over := overlay(t, ruleTable("curl", "GitHub.COM.", "tcp", "443", "allow"))
+	m := merge(t, base, over)
+	if len(m.Rules) != 4 || m.Rules[0].Name != "api.github.com" || m.Rules[3].Source != "overlay.toml" {
+		t.Fatalf("got %+v", m.Rules)
+	}
+	r, err := rules.Resolve(m, world.fs())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range m.Rules {
+		id := uint32(i + 1)
+		if m.Rules[i].ID != id || r.ByID[id] != &m.Rules[i] {
+			t.Fatalf("bad ids: %+v", r.ByID)
+		}
+	}
+	if base.Rules[0].ID != 1 || len(base.Rules) != 4 {
+		t.Fatal("Merge changed base")
+	}
 }

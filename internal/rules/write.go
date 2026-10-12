@@ -61,7 +61,7 @@ func format(f *File, header string) string {
 }
 
 func formatRule(b *strings.Builder, r *Rule) {
-	fmt.Fprintf(b, "\n[[rule]]\nprogram = %s\nto      = %s\n", quote(r.Program), quote(r.To.String()))
+	fmt.Fprintf(b, "\n[[rule]]\nprogram = %s\nto      = %s\n", quote(r.Program), quote(r.Dest()))
 	if r.Proto != AnyProto {
 		fmt.Fprintf(b, "proto   = %s\n", quote(protoName(r.Proto)))
 	}

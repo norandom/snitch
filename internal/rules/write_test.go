@@ -97,3 +97,21 @@ func TestWriteFileKeepsTheLearnedHeader(t *testing.T) {
 		t.Fatalf("second header line changed: %q", lines[1])
 	}
 }
+
+func TestWriteNameRoundTrip(t *testing.T) {
+	want := parse(t, ruleTable("any", "GitHub.COM.", "tcp", "443", "allow"))
+	path := filepath.Join(t.TempDir(), "names.toml")
+	if err := rules.WriteWith(path, want, localHeader); err != nil {
+		t.Fatal(err)
+	}
+	got, err := rules.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Rules[0].Name != "github.com" || got.Rules[0].To.IsValid() || got.Rules[0].Source != path {
+		t.Fatalf("got %+v", got.Rules)
+	}
+	if !sameRule(want.Rules[0], got.Rules[0], path) {
+		t.Fatal("rule changed")
+	}
+}

@@ -28,6 +28,9 @@ func validate(f *File, declared bool) error {
 		}
 		r.ID = uint32(i + 1)
 	}
+	if err := checkNameSlots(f); err != nil {
+		return err
+	}
 	if err := checkDuplicateKeys(f); err != nil {
 		return err
 	}
@@ -40,6 +43,7 @@ func validate(f *File, declared bool) error {
 type ruleKey struct {
 	program string
 	to      netip.Prefix
+	name    string
 	proto   Proto
 	port    uint16
 }
@@ -50,7 +54,7 @@ func expandedKeys(r *Rule) []ruleKey {
 	var keys []ruleKey
 	for _, proto := range protosOf(r) {
 		for _, port := range portsOf(r) {
-			keys = append(keys, ruleKey{r.Program, r.To, proto, port})
+			keys = append(keys, ruleKey{r.Program, r.To, r.Name, proto, port})
 		}
 	}
 	return keys
@@ -64,7 +68,7 @@ func checkDuplicateKeys(f *File) error {
 		r := &f.Rules[i]
 		for _, k := range expandedKeys(r) {
 			if other, dup := seen[k]; dup {
-				return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("rule duplicates the rule %s (%s %s %s port %d)", at(other.Source, other.Line, r.Source), r.Program, r.To, protoName(k.proto), k.port)}
+				return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("rule duplicates the rule %s (%s %s %s port %d)", at(other.Source, other.Line, r.Source), r.Program, r.Dest(), protoName(k.proto), k.port)}
 			}
 			seen[k] = r
 		}
@@ -111,4 +115,19 @@ func assertDenseIDs(f *File) {
 	for i, r := range f.Rules {
 		contract.Invariant(r.ID == uint32(i+1), "rule ids must be 1..n in declaration order")
 	}
+}
+
+// checkNameSlots counts rules rather than expanded ports: the kernel has four slots per name.
+func checkNameSlots(f *File) error {
+	counts := map[string]int{}
+	for _, r := range f.Rules {
+		if !r.IsName() {
+			continue
+		}
+		counts[r.Name]++
+		if counts[r.Name] > 4 {
+			return &Error{File: r.Source, Line: r.Line, Msg: fmt.Sprintf("name %q: at most 4 rules per name", r.Name)}
+		}
+	}
+	return nil
 }

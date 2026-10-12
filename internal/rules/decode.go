@@ -116,7 +116,9 @@ func convertRule(r rawRule, line int) (Rule, error) {
 	rule := Rule{Program: r.Program, Note: r.Note, Count: r.Count, First: r.First, Last: r.Last, Line: line}
 	var err error
 	if rule.To, err = ParsePrefix(r.To); err != nil {
-		return rule, err
+		if rule.Name, err = ParseName(r.To); err != nil {
+			return rule, err
+		}
 	}
 	if rule.Proto, err = parseProto(r.Proto); err != nil {
 		return rule, err
@@ -125,6 +127,9 @@ func convertRule(r rawRule, line int) (Rule, error) {
 		return rule, err
 	}
 	rule.Verdict, err = parseVerdict(r.Verdict)
+	if err == nil && rule.IsName() && rule.Verdict == Deny {
+		err = fmt.Errorf("rule %d: a deny by name is not supported (deny stays a timed trial)", line)
+	}
 	return rule, err
 }
 

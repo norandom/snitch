@@ -157,3 +157,14 @@ func TestEncodeContracts(t *testing.T) {
 	r.File.Rules[0].To = netip.MustParsePrefix("1.1.1.7/24") // not canonical: host bits set
 	contracttest.Panics(t, contract.Precondition, func() { rules.Encode(r) })
 }
+
+func TestEncodeSkipsNameRules(t *testing.T) {
+	r := resolved(t, curlProgram+ruleTable("curl", "github.com", "tcp", "443", "allow")+ruleTable("curl", "1.1.1.1", "tcp", "443", "allow"))
+	e := rules.Encode(r)
+	if len(e.Rules) != 1 || e.Rules[key(96, 1, 2, 6, 443, "1.1.1.1")].Id != 2 || len(e.Programs) != 1 {
+		t.Fatalf("got %+v", e)
+	}
+	if r.ByID[1].Name != "github.com" {
+		t.Fatal("name rule must remain reachable by id")
+	}
+}

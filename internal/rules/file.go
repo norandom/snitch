@@ -41,10 +41,11 @@ type Program struct {
 	Source string // the file the program was parsed from (a merged File mixes sources)
 }
 
-// Rule allows or denies one program (or any) to a destination prefix, protocol and ports.
+// Rule allows or denies one program (or any) to a destination prefix or name, protocol and ports.
 type Rule struct {
 	Program string
-	To      netip.Prefix
+	To      netip.Prefix // zero when Name is set
+	Name    string
 	Proto   Proto
 	Ports   []uint16 // expanded; nil = any port
 	Verdict Verdict
@@ -56,6 +57,17 @@ type Rule struct {
 	Line    int       // line of the [[rule]] header
 	Source  string    // the file the rule was parsed from (a merged File mixes sources)
 }
+
+// Dest returns the canonical destination for both file writing and diagnostics.
+func (r Rule) Dest() string {
+	if r.IsName() {
+		return r.Name
+	}
+	return r.To.String()
+}
+
+// IsName distinguishes destinations awaiting DNS compilation from direct prefixes.
+func (r Rule) IsName() bool { return r.Name != "" }
 
 // File is a parsed rules file. Name is what Parse was given (the base's name after a Merge);
 // errors name each record's Source.

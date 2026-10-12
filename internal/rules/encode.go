@@ -48,6 +48,9 @@ func Encode(r *Resolved) Entries {
 		e.Programs[k] = id
 	}
 	for i := range r.File.Rules {
+		if r.File.Rules[i].IsName() {
+			continue
+		}
 		encodeRule(&r.File.Rules[i], programID(r, r.File.Rules[i].Program), e.Rules)
 	}
 	return e

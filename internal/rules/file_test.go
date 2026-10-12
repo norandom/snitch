@@ -118,3 +118,14 @@ func TestExampleRulesFileLoads(t *testing.T) {
 		t.Fatalf("the last example rule should be the any-program deny, got %+v", f.Rules[5])
 	}
 }
+
+func TestRuleDestAndIsName(t *testing.T) {
+	f := parse(t, ruleTable("any", "GitHub.COM.", "", "", "allow")+ruleTable("any", "1.1.1.1", "", "", "allow"))
+	n, p := f.Rules[0], f.Rules[1]
+	if n.Name != "github.com" || n.Dest() != "github.com" || !n.IsName() || n.To != (netip.Prefix{}) {
+		t.Fatalf("got %+v", n)
+	}
+	if p.Dest() != "1.1.1.1/32" || p.IsName() || p.Name != "" {
+		t.Fatalf("got %+v", p)
+	}
+}

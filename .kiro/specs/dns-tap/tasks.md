@@ -49,7 +49,7 @@ task states the handshake that makes them safe; `(P)` tasks touch disjoint files
     internal/bpf/dns_x86_bpfel.o, internal/dns/doc.go, internal/dns/shape_test.go,
     internal/dns/load_root_test.go, .kiro/specs/dns-tap/research.md_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.6, 1.8, 4.1, 4.5_
-- [ ] 1.2 (P) A name is a destination in the rules model
+- [x] 1.2 (P) A name is a destination in the rules model
   - One name parser in the rules package (lowercase, trailing dot removed, labels of letters,
     digits and hyphens of 1 to 63 characters, no leading dot, no wildcard, at most 62 characters
     and 16 labels) with the design's error texts; a rule carries a name instead of a prefix,
@@ -342,3 +342,4 @@ task states the handshake that makes them safe; `(P)` tasks touch disjoint files
   - _Requirements: 1.2, 2.7, 4.4, 4.6_
 
 ## Implementation Notes
+- 1.2: implemented by Codex, reviewed by a Claude subagent (APPROVED, four reviewer mutations caught). The controller settled the grammar's open point: a label never starts or ends with a hyphen (RFC 1123), so `-x` stays an invalid value for 2.5's pinned test. New tests went to `decode_name_test.go`, `validate_name_test.go`, `merge_name_test.go` (same package, test-only). `checkNameSlots` hard-codes 4 with a comment (rules cannot import internal/dns); 1.4 may export the constant from rules and have dns reuse it. Downstream still assumes `To` until 1.3/2.x: `learn.go:75` seeds a name rule on the zero address, `apievent.go:75` and `events.go:109` print `invalid Prefix` for a name rule. A mistyped address such as `1.2.3` parses as a name (docs task warns).
