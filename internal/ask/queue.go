@@ -100,6 +100,22 @@ func (q Queue) Settle(o Outcome, now time.Time) Queue {
 	return q.checked()
 }
 
+// Forget lifts the snooze of a key, so its next offer asks at once: the rule an answer asked
+// for was refused or never arrived (6.8). Open and waiting questions are untouched.
+func (q Queue) Forget(k Key) Queue {
+	if _, ok := q.snoozed[k]; !ok {
+		return q.checked()
+	}
+	snoozed := make(map[Key]time.Time, len(q.snoozed))
+	for key, t := range q.snoozed {
+		if key != k {
+			snoozed[key] = t
+		}
+	}
+	q.snoozed = snoozed
+	return q.checked()
+}
+
 // Flush drops the waiting questions for which keep returns false (their reason is gone, 5.8).
 // A flushed question is neither snoozed nor counted as dropped.
 func (q Queue) Flush(keep func(Question) bool) Queue {

@@ -33,10 +33,12 @@ func step(t *testing.T, m Model, msg any, at time.Time) (Model, []Post) {
 	return m2, posts
 }
 
-// started is a tray that has seen st as its first facts: the baseline.
+// started is a tray with a notification service (notices are gated on it, 8.6) that has seen
+// st as its first facts: the baseline.
 func started(t *testing.T, st api.Status) Model {
 	t.Helper()
-	m, posts := step(t, NewModel(Options{Loc: zone}), client.Up{}, now)
+	m, _ := step(t, NewModel(Options{Loc: zone}), Capabilities{Available: true, Actions: true}, now)
+	m, posts := step(t, m, client.Up{}, now)
 	m, more := step(t, m, client.Facts{Status: st}, now)
 	if len(posts)+len(more) != 0 {
 		t.Fatalf("start posted %v", append(posts, more...))
@@ -259,11 +261,13 @@ func TestGoneAtStartNoNotice(t *testing.T) {
 	none(t, "gone from the start", posts)
 }
 
-// The message types later tasks handle pass through unchanged, with a view.
+// Messages that concern nothing the model holds (an event that asks nothing, an answer and a
+// press without a question, capabilities as they are) and the types later tasks handle pass
+// through unchanged, with a view.
 func TestFactsPassThrough(t *testing.T) {
 	m := started(t, running())
 	for _, msg := range []any{client.EventLine{}, client.Answered{Token: 3}, Pressed{NoteID: 1},
-		MenuClick{Row: RowPause}, Capabilities{Available: true}, Stop{}} {
+		MenuClick{Row: RowPause}, Capabilities{Available: true, Actions: true}, Stop{}} {
 		m2, posts := step(t, m, msg, now)
 		none(t, "pass through", posts)
 		if !reflect.DeepEqual(m, m2) {

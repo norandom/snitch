@@ -1,5 +1,5 @@
 // update.go: Update, the one entry of the tray's behaviour. It only dispatches by message type
-// (facts.go, and the question files of later tasks hold the logic) and ends every effect list
+// (facts.go and questions.go hold the logic) and ends every effect list
 // with the view of the new model, which the loop shows only when it changed (8.7).
 //
 // Fail-safe implications: a message type outside the design's list is a wiring error and a
@@ -23,12 +23,16 @@ func Update(m Model, msg any, now time.Time) (Model, []any) {
 	case Tick:
 		m, fx = goneTick(m, now)
 	case Posted:
-		m = noticePosted(m, v)
+		m = postedID(m, v, now)
 	case PostFailed:
-		m = noticeSettled(m, v.Token)
+		m, fx = postFailed(m, v, now)
+	case Pressed:
+		m, fx = pressed(m, v, now)
+	case Capabilities:
+		m = capabilities(m, v)
 	case Closed:
 		m = closed(m, v.NoteID)
-	case Pressed, MenuClick, Capabilities, Stop: // questions, pause, quit: 3.3 to 3.5
+	case MenuClick, Stop: // pause, quit: 3.4 and 3.5
 	default:
 		contract.Require(false, fmt.Sprintf("tray.Update: unknown message %T", msg))
 	}
@@ -45,7 +49,10 @@ func fromDaemon(m Model, msg client.Msg, now time.Time) (Model, []any) {
 		return facts(m, v.Status)
 	case client.StateLine:
 		return stateLine(m, v.State)
-	case client.EventLine, client.Answered: // questions: 3.3
+	case client.EventLine:
+		return event(m, v, now)
+	case client.Answered:
+		return answered(m, v)
 	default:
 		contract.Require(false, fmt.Sprintf("tray.Update: unknown client message %T", msg))
 	}

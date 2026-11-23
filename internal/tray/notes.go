@@ -1,4 +1,5 @@
-// notes.go: the texts of the state notices (7.1 to 7.6), one function per kind. Texts are
+// notes.go: the texts of the state notices (7.1 to 7.6), the question (5.1, 5.2, 5.6) and the
+// outcome of an answer (6.7, 6.8), one function per kind. Texts are
 // plain; the notification adapter escapes them for body markup. A notice never has actions
 // and closes on its own: 10 s, or 30 s and urgent for the attention states (kill switch,
 // rules error, daemon gone), so those are not missed (7.8, design "Notices").
@@ -9,15 +10,20 @@
 package tray
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/norandom/snitch/internal/ask"
 	"github.com/norandom/snitch/internal/client"
 )
 
-// The two lifetimes of a notice.
+// The lifetimes of a notice, and of a question's note.
 const (
 	noticeTime    = 10 * time.Second
 	attentionTime = 30 * time.Second
+	questionTime  = 60 * time.Second
 )
 
 // notice is a plain note that closes after 10 s.
@@ -95,4 +101,61 @@ func noteGone(reason string, since time.Time, loc *time.Location) Note {
 // noteBack is the daemon back after a noticed loss (7.6).
 func noteBack() Note {
 	return notice("daemon back", "snitchd answers again.")
+}
+
+// noteQuestion is the question about one connection (5.1, 5.2, 5.6): who, where, how, what
+// happened, the counts when not zero, and the actions for a writer whose notification service
+// shows buttons (6.1). A reader's note says only the operator can decide (6.9), an unanswerable
+// one that the program cannot be identified (6.5); neither has actions. There is never a
+// "default" action, so a click on the body answers nothing (6.10). The note expires after 60 s,
+// the same time after which the tray itself closes it as unanswered (5.7, task 3.4); a blocked
+// connection is urgent.
+func noteQuestion(q ask.Question, waiting, dropped int, act, writer bool) Note {
+	e := q.Event
+	lines := []string{"Program: " + e.Program}
+	if e.Path != "" {
+		lines = append(lines, "Path: "+e.Path)
+	}
+	if e.Name != "" {
+		lines = append(lines, "Name: "+e.Name)
+	}
+	lines = append(lines, "Address: "+e.Addr, "Port: "+strconv.Itoa(int(e.Port)), "Protocol: "+e.Protocol)
+	if q.Blocked {
+		lines = append(lines, "The connection was blocked: no rule allows it.")
+	} else {
+		lines = append(lines, "The connection was allowed, not yet decided: the daemon monitors.")
+	}
+	if waiting > 0 || dropped > 0 {
+		lines = append(lines, fmt.Sprintf("%d more waiting, %d dropped.", waiting, dropped))
+	}
+	who := q.Key.Who
+	if who == "" { // an unknown program without a path
+		who = e.Program
+	}
+	n := Note{Summary: "snitch: " + who + " wants " + q.Key.Dest,
+		Timeout: questionTime, Urgent: q.Blocked}
+	switch {
+	case !ask.Answerable(q):
+		lines = append(lines, "No answer: the program cannot be identified.")
+	case !writer:
+		lines = append(lines, "No answer here: only the operator can decide.")
+	case act:
+		n.Actions = []Action{{Key: "allow", Label: "Allow"}, {Key: "block", Label: "Block"}}
+	}
+	n.Body = strings.Join(lines, "\n")
+	return n
+}
+
+// noteRuleAdded is the daemon's outcome sentence for an accepted rule (6.7).
+func noteRuleAdded(text string) Note {
+	if text == "" {
+		text = "The daemon added the rule."
+	}
+	return notice("rule added", text)
+}
+
+// noteRuleFailed is a rule the daemon refused or did not answer about (6.8): no rule was
+// written, and the connection may ask again.
+func noteRuleFailed(err string) Note {
+	return notice("rule not added", err+"\nNo rule was written; the connection may ask again.")
 }

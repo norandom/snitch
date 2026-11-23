@@ -82,6 +82,8 @@ type Model struct {
 	canAct      bool               // and it shows action buttons (8.6)
 	writer      bool               // this user may answer: operator (3.1, 6.9)
 	queue       ask.Queue          // the waiting list and the open question; the zero value is empty
+	askToken    uint64             // the token of the open question's Post until Posted/PostFailed, 0 when none
+	openActs    bool               // the open question's note was posted with Allow and Block (6.5, 6.9)
 	openNote    uint32             // the posted note of the open question, 0 when none (6.11)
 	openSince   time.Time          // when that note was posted: the tray's own 60 s timeout (6.10)
 	notices     map[uint32]bool    // ids of posted notices until their Closed, retracted on Quit (1.4)

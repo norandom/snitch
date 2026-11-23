@@ -111,9 +111,10 @@ func modeChange(old, cur api.Status, reason string, loc *time.Location) (Note, b
 }
 
 // post turns notices into Post effects, each under a fresh token remembered as a notice's
-// until its Posted or PostFailed (questions' tokens are 3.3's).
+// until its Posted or PostFailed (a question's token is askToken, questions.go). Without a
+// notification service nothing is posted (8.6): the view still shows the state.
 func post(m Model, notes []Note) (Model, []any) {
-	if len(notes) == 0 {
+	if len(notes) == 0 || !m.canNotify {
 		return m, nil
 	}
 	posting := make(map[uint64]bool, len(m.posting)+len(notes))
