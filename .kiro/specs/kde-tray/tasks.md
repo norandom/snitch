@@ -184,7 +184,7 @@ at a time; `(P)` tasks touch disjoint files.
     post failed, pressed, answered, capabilities), notes.go (the question and outcome texts),
     questions_test.go_
   - _Requirements: 5.1, 5.2, 5.6, 6.1, 6.5, 6.7, 6.8, 6.9, 6.11, 6.12, 8.1, 8.6_
-- [ ] 3.4 Questions: closing, timing out, discarding, pausing
+- [x] 3.4 Questions: closing, timing out, discarding, pausing
   - Closed by the user or the server, or open for 60 s on the tick: settled unanswered,
     nothing sent; a state line with a rules change flushes the waiting ones; a mode change
     flushes the waiting ones whose wording no longer fits and retracts an open one that no
@@ -377,3 +377,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 3.1: `Model` (internal/tray/model.go) declares every field 3.2–3.5 need; its maps (`notices`, `pending`) and `facts` are copy-on-write. `gone` starts true and stays true after `Up` until that session's first `Facts`; the last facts stay as the notice baseline. `nextToken` is incremented before use (0 is never a token). Enforce without a deadline renders as Trial "(no deadline)". Menu labels may contain `_`: the sni menu adapter (4.3) escapes it as `__` for dbusmenu. `canNotify`/`canAct` start false until `Capabilities` arrives.
 - 3.2: `Update` (update.go) is a type switch; notices come from facts.go's diff, each change told once; a trial extension is silent; "daemon back" is posted on the first `Facts` after a noticed loss. `Model.posting` (notice tokens awaiting `Posted`) was added under a controller authorization; question tokens are 3.3's. Notices are not yet gated on `canNotify`: 3.3 gates them in update.go (its boundary may also touch facts.go's `post` for that one condition).
 - 3.3: question posts use `Model.askToken`; a press counts only when the open note was posted with actions (`Model.openActs`), for the open note id, allow or block. A failed `rule.add` calls `ask.Queue.Forget(key)` (added under authorization). Notices and questions are gated on `canNotify`; `facts_test.go`'s `started` helper sends full `Capabilities` first. `questions_test.go` is at the 300-line cap: 3.4 puts its tests in `discard_test.go`. Not handled yet (3.4): the notification service disappearing while a question is open or waiting.
+- 3.4: closing, the 60 s timeout, discards and the pause live in `discard.go`. Closed and the timeout settle Unanswered (snoozed); tray-initiated retractions (mode change, Down, pause, notification service gone) settle Failed (no snooze). Fit is judged on the mode before and after each message. Quit and Stop still pass through `Update` for 3.5.

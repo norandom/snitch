@@ -162,7 +162,7 @@ func noticeSettled(m Model, token uint64) Model {
 	return m
 }
 
-// closed forgets a closed note. The open question's side of Closed is 3.4's: it goes here.
+// closed forgets a closed notice. The open question's side of Closed is discard.go's closedNote.
 func closed(m Model, id uint32) Model {
 	if !m.notices[id] {
 		return m

@@ -267,7 +267,7 @@ func TestGoneAtStartNoNotice(t *testing.T) {
 func TestFactsPassThrough(t *testing.T) {
 	m := started(t, running())
 	for _, msg := range []any{client.EventLine{}, client.Answered{Token: 3}, Pressed{NoteID: 1},
-		MenuClick{Row: RowPause}, Capabilities{Available: true, Actions: true}, Stop{}} {
+		MenuClick{Row: RowHeader}, Capabilities{Available: true, Actions: true}, Stop{}} {
 		m2, posts := step(t, m, msg, now)
 		none(t, "pass through", posts)
 		if !reflect.DeepEqual(m, m2) {
