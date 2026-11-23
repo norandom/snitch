@@ -96,7 +96,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Depends: 1.3_
   - _Boundary: internal/client/msg.go, session.go, client.go, session_test.go, client_test.go_
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.8, 5.11, 6.7, 6.8_
-- [ ] 2.2 The role guess
+- [x] 2.2 The role guess
   - Writer for uid 0 and for the user named on the first line of the operator file when the
     file is a regular file owned by root and not writable by group or others; reader
     otherwise and on any read error; file access through delegates
@@ -371,3 +371,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 1.2: godbus v5.2.4 facts are in research.md "godbus v5.2.4, verified" (use SessionBusPrivateNoAutoStartup, never the autolaunching variants; RequestName has no context, call it through CallWithContext). Bus tests use t.Setenv(DBUS_SESSION_BUS_ADDRESS) and cannot run in parallel.
 - 1.3: the stand-in (`internal/client/clienttest`) replies to `rule.add` before it announces the reload (`Options.ReloadAfter`, default 100 ms), as the daemon does; tests that depend on the order must not assume the state line comes first. The fact setters live in `commands.go`.
 - 2.1: the client's `Config.Gap` (minimum between status requests) is required; 5.1 sets it to 2 s. `Down` may arrive twice in a row when the reason changes (`not running` <-> `not answering`): the tray treats `Down` as idempotent and updates the reason. Every `Send` gets exactly one `Answered` while the job runs; after the job's context ends nothing is answered, so shutdown code must not wait for an answer. A `Sink` that blocks longer than `AnswerWait` can produce a false `not answering`: the tray loop must not block on effects for seconds (bus calls are bounded by 2 s).
+- 2.2: wiring (5.1) passes `os.Stat` (not Lstat: the daemon follows symlinks), `os.ReadFile`, and the name from `user.LookupId(uid)` (not `$USER`). The tray can say reader where the daemon grants writer (operator file 0600/0640 or `/etc/snitch` not traversable): 5.1 logs one stderr line when the guess is reader because of a stat or read error, and the README says the file must be 0644.

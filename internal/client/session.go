@@ -210,7 +210,7 @@ func (s *session) flush(now time.Time) error {
 
 // write sends one line; a daemon that does not take it within the wait is as good as gone.
 func (s *session) write(b []byte) error {
-	_ = s.conn.SetWriteDeadline(time.Now().Add(s.cfg.AnswerWait)) // the OS clock: a socket deadline is real time, not the injected one)
+	_ = s.conn.SetWriteDeadline(time.Now().Add(s.cfg.AnswerWait)) // the OS clock: a socket deadline is real time, not the injected one
 	_, err := s.conn.Write(b)
 	return err
 }
