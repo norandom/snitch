@@ -1,0 +1,268 @@
+# Research & Design Decisions: kde-tray
+
+## Summary
+- **Feature**: `kde-tray`
+- **Discovery Scope**: New Feature (first user-side binary; full discovery)
+- **Key Findings**:
+  - The KDE host offers everything the tray needs on the session bus: `org.kde.StatusNotifierWatcher`
+    (kded6) with a registered host (plasmashell 6.6.6), and `org.freedesktop.Notifications`
+    (Plasma, spec 1.2) with the `actions` capability. Measured on chandali, 2026-11-23.
+  - The API needs no change, but two of its details shape the client: `state` lines carry only
+    mode, trial, kept and reloads, so kill switch, rules error and learning need a `status`
+    poll; and `api.Request` cannot express `summary: false` (`omitempty` drops it and the
+    daemon's default is true), so the client writes its subscribe line itself.
+  - The release already publishes an asset named `snitch` (the Python client). The Go binary
+    cannot take that asset name without breaking a pinned consumer.
+
+## Research Log
+
+### StatusNotifierItem on this host
+- **Context**: requirements 1.1 to 1.3 and 2.1 to 2.7 need an item that Plasma shows, that
+  can ask for attention and that survives a restart of the tray's host.
+- **Sources Consulted**: `busctl --user introspect org.kde.StatusNotifierWatcher
+  /StatusNotifierWatcher`; the same on a live item (`org.kde.StatusNotifierItem-<pid>-1`,
+  tailscale); freedesktop StatusNotifierItem specification.
+- **Findings**:
+  - Watcher methods: `RegisterStatusNotifierItem(s)`; property
+    `IsStatusNotifierHostRegistered` (true here); signals for host and item registration.
+  - Item interface `org.kde.StatusNotifierItem`: properties `Category`, `Id`, `Title`,
+    `Status` (`Passive`, `Active`, `NeedsAttention`), `IconName`, `IconPixmap a(iiay)`,
+    `AttentionIconName`, `AttentionIconPixmap`, `OverlayIcon*`, `ToolTip (sa(iiay)ss)`,
+    `ItemIsMenu b`, `Menu o`, `IconThemePath`, `WindowId`; methods `Activate`, `ContextMenu`,
+    `SecondaryActivate`, `Scroll`; signals `NewIcon`, `NewAttentionIcon`, `NewOverlayIcon`,
+    `NewTitle`, `NewToolTip`, `NewStatus(s)`, `NewMenu`.
+  - The live item uses the conventional bus name `org.kde.StatusNotifierItem-<pid>-<n>`, an
+    empty `IconName` with `IconPixmap`, `ItemIsMenu` true and a menu object.
+  - The watcher is kded6, the host is plasmashell: a plasmashell restart leaves the item
+    registered with the watcher; a watcher restart loses it, visible as a `NameOwnerChanged`
+    of `org.kde.StatusNotifierWatcher`.
+- **Implications**: register by the conventional name; re-register on every new owner of the
+  watcher name; `ItemIsMenu` true so a left click opens the menu and `Activate` needs no
+  behaviour; pixmaps are a first-class way to ship icons.
+
+### dbusmenu
+- **Context**: requirement 3 needs a menu; SNI hosts read it from `com.canonical.dbusmenu`.
+- **Sources Consulted**: the dbusmenu interface description (libdbusmenu), Plasma's importer
+  behaviour as observed with existing items.
+- **Findings**: the host calls `GetLayout(parent, depth, props) -> (u revision, (ia{sv}av))`,
+  `GetGroupProperties`, `AboutToShow`, `Event(id, "clicked", data, timestamp)`; the item
+  announces changes with `LayoutUpdated(revision, parent)` and `ItemsPropertiesUpdated`.
+  Item properties used: `label`, `enabled`, `visible`, `type` (`separator`), `toggle-type`
+  (`checkmark`), `toggle-state` (0 or 1). Interface properties: `Version` (3), `Status`
+  (`normal`), `TextDirection`, `IconThemePath`.
+- **Implications**: a flat menu (no submenus) needs `GetLayout`, `GetGroupProperties`,
+  `GetProperty`, `Event`, `EventGroup`, `AboutToShow`, `AboutToShowGroup` and
+  `LayoutUpdated`. Every change of the rows bumps the revision and emits `LayoutUpdated`;
+  `ItemsPropertiesUpdated` is not needed for a menu this small.
+
+### Notifications
+- **Context**: requirements 5 to 7 and 8.6.
+- **Sources Consulted**: `GetCapabilities`, `GetServerInformation` and the introspection of
+  `org.freedesktop.Notifications` on chandali; Desktop Notifications Specification 1.2.
+- **Findings**:
+  - Capabilities here: `body`, `body-markup`, `actions`, `persistence`, `inline-reply`, others.
+  - `Notify(app_name, replaces_id, app_icon, summary, body, actions as, hints a{sv},
+    expire_timeout i) -> u`; `CloseNotification(u)`; signals `ActionInvoked(u id, s key)`,
+    `NotificationClosed(u id, u reason)` (1 expired, 2 dismissed, 3 closed by call).
+  - The action key `default` is what a click on the body invokes. A notification without that
+    key has no body action.
+  - `body-markup` means the body is parsed as markup: `<`, `>` and `&` in a path or a name
+    must be escaped.
+  - Hints: `urgency` (byte 0 to 2), `transient` (bool: not kept in the history),
+    `desktop-entry` (string: ties the notification to an installed desktop file).
+- **Implications**: questions carry exactly the keys `allow` and `block`, never `default`
+  (requirement 6.10); `transient` keeps an expired question out of the history, where its
+  buttons would outlive the question; the tray keeps its own 60 s timer and closes the
+  question itself instead of trusting `expire_timeout`; bodies are escaped; a server without
+  `actions` gets questions without answers (8.6).
+
+### godbus/dbus/v5
+- **Context**: the one new dependency; it must fit a static, cgo-free build.
+- **Sources Consulted**: module index (`go list -m -versions`: latest v5.2.4), the package's
+  documentation as known; BSD-2-Clause licence.
+- **Findings**: pure Go; `SessionBusPrivate` plus `Auth` and `Hello` for a connection the tray
+  owns; `RequestName` with `NameFlagDoNotQueue`; `Export` and `ExportMethodTable` for objects;
+  the `prop` subpackage serves `org.freedesktop.DBus.Properties` with change signals; the
+  `introspect` subpackage serves introspection data; `AddMatchSignal` and `Signal` for
+  `NameOwnerChanged`, `ActionInvoked`, `NotificationClosed`.
+- **Implications**: no code of ours touches the wire format. The exact v5.2.x API is read from
+  the module source when the adapter tasks start (the names above are from memory and are
+  verified at implementation, not assumed).
+
+### The API from a client's side
+- **Context**: requirement 4 and the adjacent expectation that the API stays unchanged.
+- **Sources Consulted**: `examples/api.md`, `internal/api/types.go`, `codec.go`, `auth.go`,
+  `server.go`, `cmd/snitchd/api.go` (`operatorUID`, `operatorFileProblem`).
+- **Findings**:
+  - `state` lines: mode, trial, kept, `rulesChanged`, reason. Kill switch, `rulesError` and
+    learning are only in `status`.
+  - `subscribe` defaults: events true, local false, summary true. `api.Request` has
+    `omitempty` booleans, so a marshalled request cannot say `summary: false`.
+  - The role is decided by the daemon from peer credentials; no request tells a client its
+    role. The only observable is a refused write (`<type>: write requires the operator`),
+    which is also journaled.
+  - `operatorUID` accepts the file only as a regular file owned by root and not writable by
+    group or others, first line a user name. It lives in `package main` of snitchd.
+  - `api.New(Deps)` builds a complete server from function values; `Server.Job(listener)`
+    serves it; `Emit` and `StateChanged` push lines. A stand-in daemon is this server with
+    scripted delegates.
+  - Event dedupe is 10 s per key and verdict; a steady stream re-emits once per window.
+- **Implications**: status poll every 5 s plus one after each `state` line and `dropped`;
+  the client writes its own subscribe line; the client guesses its role from uid and the
+  operator file with the daemon's acceptance rules and corrects itself on a refused write;
+  tests and the host check use the real server as the stand-in.
+
+### Icons
+- **Context**: requirements 2.1 and 2.7: six states, distinguishable by the icon alone,
+  legible on a light and on a dark panel.
+- **Sources Consulted**: `/usr/share/icons/breeze/status/22/` (has `security-high`,
+  `security-medium`, `security-low`, `firewall-applet*`); tools on the host (no
+  `rsvg-convert`, no inkscape, no ImageMagick).
+- **Findings**: the theme has no six icons whose meaning fits the six states, other themes
+  have fewer, and theme names would make the meaning depend on the installed theme. SVGs of
+  our own would need a renderer at development time (none installed) or an installed icon
+  directory announced through `IconThemePath`, whose handling differs between hosts.
+- **Implications**: pixmaps drawn by the program itself (see the decision below).
+
+### Release assets
+- **Context**: requirement 9.4.
+- **Sources Consulted**: `.github/workflows/release.yml`, `README.md`.
+- **Findings**: the assets are `snitchd`, `snitchd.sha256`, `snitch` (the Python client) and
+  `snitch-trial`. The VM repo pins `snitchd` by sha256.
+- **Implications**: the Go binary gets an asset name of its own (decision below).
+
+## Architecture Pattern Evaluation
+
+| Option | Description | Strengths | Risks / Limitations | Notes |
+|--------|-------------|-----------|---------------------|-------|
+| Pure core with one loop | all state in one immutable model; `Update(model, msg) -> (model, effects)`; adapters turn D-Bus and socket traffic into messages and run effects | every rule of requirements 2, 5, 6, 7 is a pure function under test; no locks; the same shape bubbletea uses, so the TUI reuses the habit | one more indirection than calling D-Bus where the event arrives | selected |
+| Callbacks with shared state | D-Bus handlers and the socket reader mutate a struct under a mutex | least code at first | question queue, timers and reconnect interleave; hard to test without a bus | rejected |
+| A library tray (`fyne.io/systray`) | the library owns the item and the menu | no menu protocol of ours | pixmap only is fine, but no `Status`, a process-global API, and notifications still need godbus | rejected in discovery (roadmap) |
+
+## Design Decisions
+
+### Decision: one event loop, pure update, effects as function values
+- **Context**: three sources of events (daemon socket, session bus, time) and rules with
+  timers (snooze, question timeout, the 10 s grace for a daemon restart).
+- **Alternatives Considered**:
+  1. Mutex-guarded state touched from every goroutine.
+  2. One goroutine owning the model, fed by a channel; pure `Update`.
+- **Selected Approach**: option 2. `tray.Run` is a `jobs.Job` that reads messages, calls
+  `Update` and runs the returned effects through an `Effects` struct of function values.
+- **Rationale**: `tech.md` asks for immutable values, delegates and jobs; requirement 9.3 asks
+  for the rules to be proven without a desktop.
+- **Trade-offs**: an effect that calls D-Bus blocks the loop for the call; calls are bounded
+  by a 2 s timeout.
+- **Follow-up**: measure that a `Notify` call on chandali returns in milliseconds.
+
+### Decision: generalize the client, not the tray
+- **Context**: `popups-trace` and `tui` reuse the API client; the tray needs only status,
+  state, events and `rule.add`.
+- **Selected Approach**: `internal/client` delivers typed messages and takes any
+  `api.Request` with a caller token; it knows nothing about trays. Only the requests the tray
+  needs are exercised now.
+- **Rationale**: the interface is general, the implementation stays as small as this spec
+  needs (synthesis: generalize the interface, not the implementation).
+- **Follow-up**: `tui` adds `snapshot` and `summary` handling as new message types; a change
+  of the existing ones is a revalidation trigger.
+
+### Decision: the role is guessed locally and corrected by the daemon
+- **Context**: 6.1 and 6.9 need to know before asking whether this user may answer; the API
+  does not say and must not change.
+- **Alternatives Considered**:
+  1. Probe with a write at connect (journals a refusal per connect for every reader).
+  2. Read `/etc/snitch/operator` with the daemon's acceptance rules, plus uid 0.
+  3. Always offer buttons and show the refusal.
+- **Selected Approach**: option 2, with the daemon's answer as the authority: a refusal
+  `write requires the operator` turns the tray into a reader until the next connect.
+- **Rationale**: no API change, no journal noise, and a wrong guess cannot write anything:
+  the daemon decides.
+- **Trade-offs**: the acceptance rules exist twice (20 lines); a test pins the same cases as
+  `cmd/snitchd`'s. If the daemon moves the file (`-operator`), the tray's `-operator-file`
+  must follow.
+
+### Decision: icons are pixmaps the program draws
+- **Context**: six states, two panel colours, a static binary, no renderer on the dev host.
+- **Alternatives Considered**:
+  1. Theme icon names (`security-*`, `firewall-applet-*`).
+  2. Own SVGs, rendered to PNG at development time and embedded.
+  3. Own SVGs installed and announced with `IconThemePath`.
+  4. Pixmaps drawn in Go at start (a shield outline and five variations), 22 and 44 px.
+- **Selected Approach**: option 4. Each state differs in shape, not only in colour; every
+  stroke has a contrasting halo so it reads on light and dark panels.
+- **Rationale**: no build tool, no install step, identical on every host, testable (six
+  pixmaps, pairwise different, non-empty at both sizes).
+- **Trade-offs**: the icons do not follow the theme's style, and this revises the roadmap's
+  note that icons would be theme names. Drawing code is about 100 lines.
+- **Follow-up**: screenshots on chandali with Breeze and Breeze Dark in the host check.
+
+### Decision: a waiting question is discarded on any rules reload
+- **Context**: 5.8 wants a waiting question dropped when a rule now covers it. Knowing that
+  exactly would mean evaluating rules in the client, a second copy of the daemon's lookup.
+- **Selected Approach**: a `state` line with `rulesChanged` discards every waiting question
+  (not the open one) without recording a snooze. A connection that is still uncovered asks
+  again when it next happens (the daemon re-emits after its 10 s dedupe window).
+- **Rationale**: never shows a question a rule already answered; no rule logic in the client.
+- **Trade-offs**: an Allow or Block by the tray itself reloads the rules and so empties the
+  waiting list; in enforce mode the denied programs retry and ask again, in monitor mode the
+  connection went through anyway.
+
+### Decision: one question per program and name, not per address
+- **Context**: 5.4 dedupes by "destination". Names behind CDNs resolve to many addresses.
+- **Selected Approach**: the destination of a question's key is the name when the event has
+  one, else the address.
+- **Rationale**: one question for `api.github.com`, not one per address. Allow by name then
+  covers all of them.
+- **Trade-offs**: Block writes one address (the API refuses a deny by name); other addresses
+  of the same name are quiet for 10 min and ask again after that.
+
+### Decision: the Go binary is the asset `snitch-linux-amd64`
+- **Context**: `snitch` is already an asset (the Python client).
+- **Alternatives Considered**:
+  1. Replace the Python asset with the Go binary under the same name.
+  2. Rename the Python asset.
+  3. Publish the Go binary under a new name and leave the four existing assets alone.
+- **Selected Approach**: option 3: `snitch-linux-amd64` and `snitch-linux-amd64.sha256`,
+  installed as `snitch`.
+- **Rationale**: no existing asset changes meaning; `deploy-service` needs no revalidation.
+- **Trade-offs**: asset name and installed name differ until `tui` retires the Python client
+  and settles the name.
+
+### Decision: single instance by a bus name
+- **Context**: 1.2.
+- **Selected Approach**: the tray requests `io.github.norandom.snitch.Tray` on the session
+  bus without queueing; a second tray reads the owner's pid from the bus and names it.
+- **Rationale**: the session bus is exactly "same user and session"; no lock file to go stale.
+
+## Synthesis Outcomes
+- **Generalizations**: requirements 5 and 6 are one capability, "an uncovered connection
+  becomes a question, an answer becomes a `rule.add`", independent of how the question is
+  shown. It lives in `internal/ask` with no D-Bus in it, so `popups-trace` adds a terminal
+  front end without touching it. Requirements 2, 3 and 7 are three renderings of one diff of
+  the daemon's facts.
+- **Build vs adopt**: adopted: godbus (wire protocol, properties, introspection), the daemon's
+  own `api.Server` as the stand-in daemon, `jobs`, `contract`. Built: the SNI item, the flat
+  dbusmenu, the notification calls (three thin adapters), the icons.
+- **Simplifications**: no configuration file (three flags); no `ItemsPropertiesUpdated`; no
+  submenus; no persistence (snooze and pause live in memory, as 5.10 asks); no summary
+  subscription; no theme icon lookup; no separate desktop-file installer (one file to copy).
+
+## Risks & Mitigations
+- Plasma's dbusmenu importer may want a method or property the flat menu omits: the adapter
+  task starts with the live check on chandali, before the rest builds on it.
+- Monitor-mode questions on a busy desktop: one at a time, 10 min snooze per key, 32 waiting,
+  `-ask enforce` and the pause switch. The host check counts questions over a browsing session.
+- The operator guess drifts from the daemon's rule: the daemon stays the authority (a refusal
+  demotes), and a test pins the shared cases.
+- godbus API details remembered wrongly: verified against the module source in the first
+  adapter task; nothing else in the design depends on a specific call.
+- A private session bus is missing on a CI runner: the adapter tests skip without
+  `dbus-daemon`; the pure packages carry the proof 9.3 asks for.
+
+## References
+- `examples/api.md`, `internal/api/types.go`: the wire shapes the client reads.
+- freedesktop.org StatusNotifierItem specification: item, watcher, host.
+- Desktop Notifications Specification 1.2: `Notify`, hints, signals, close reasons.
+- libdbusmenu `com.canonical.dbusmenu` interface description: layout, events, properties.
+- `github.com/godbus/dbus/v5` v5.2.4: the session bus library.
+- `.kiro/steering/roadmap.md`: order, scope decisions of 2026-11-23.
