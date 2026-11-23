@@ -105,7 +105,7 @@ at a time; `(P)` tasks touch disjoint files.
     the same cases as snitchd's operator tests (`cmd/snitchd`, read for reference only)
   - _Boundary: internal/client/role.go, role_test.go_
   - _Requirements: 6.1, 6.9_
-- [ ] 2.3 (P) Which connection asks, and what an answer writes
+- [x] 2.3 (P) Which connection asks, and what an answer writes
   - A question from an event only for the verdicts `deny-default` and `allow-monitor`, the
     latter not in the enforce-only scope; never for a destination on the local network
     (the prefixes of fail-safe 2, IPv4-mapped included); the key: program name, or the path
@@ -372,3 +372,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 1.3: the stand-in (`internal/client/clienttest`) replies to `rule.add` before it announces the reload (`Options.ReloadAfter`, default 100 ms), as the daemon does; tests that depend on the order must not assume the state line comes first. The fact setters live in `commands.go`.
 - 2.1: the client's `Config.Gap` (minimum between status requests) is required; 5.1 sets it to 2 s. `Down` may arrive twice in a row when the reason changes (`not running` <-> `not answering`): the tray treats `Down` as idempotent and updates the reason. Every `Send` gets exactly one `Answered` while the job runs; after the job's context ends nothing is answered, so shutdown code must not wait for an answer. A `Sink` that blocks longer than `AnswerWait` can produce a false `not answering`: the tray loop must not block on effects for seconds (bus calls are bounded by 2 s).
 - 2.2: wiring (5.1) passes `os.Stat` (not Lstat: the daemon follows symlinks), `os.ReadFile`, and the name from `user.LookupId(uid)` (not `$USER`). The tray can say reader where the daemon grants writer (operator file 0600/0640 or `/etc/snitch` not traversable): 5.1 logs one stderr line when the guess is reader because of a stat or read error, and the README says the file must be 0644.
+- 2.3: `ask.RuleFor` sends no `port` for port 0 and no `proto` for an empty protocol (`omitempty`), which the daemon reads as "any"; connect and sendmsg events always carry both, so this is accepted, not guarded. `TestRuleForNote` swaps `time.Local`: no test in `internal/ask` may start goroutines or call `t.Parallel`. `KeyOf`, `Local`, `Unknown`, `NoteLayout` are exported; 5.5 unexports any without a caller outside the package.
