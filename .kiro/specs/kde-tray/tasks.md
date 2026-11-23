@@ -118,7 +118,7 @@ at a time; `(P)` tasks touch disjoint files.
     seven verdicts in both scopes, each local prefix, the four rule forms and the violation
   - _Boundary: internal/ask/question.go, rule.go, question_test.go, rule_test.go_
   - _Requirements: 5.1, 5.2, 5.3, 5.9, 6.2, 6.3, 6.4, 6.5, 6.6, 8.3_
-- [ ] 2.4 The waiting list
+- [x] 2.4 The waiting list
   - An immutable queue: one open question, at most 32 waiting, oldest first; an offer for a
     key that is open, waiting or snoozed is ignored; the 33rd drops the oldest waiting one
     and counts it; settling the open one as answered or unanswered snoozes its key for
@@ -373,3 +373,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 2.1: the client's `Config.Gap` (minimum between status requests) is required; 5.1 sets it to 2 s. `Down` may arrive twice in a row when the reason changes (`not running` <-> `not answering`): the tray treats `Down` as idempotent and updates the reason. Every `Send` gets exactly one `Answered` while the job runs; after the job's context ends nothing is answered, so shutdown code must not wait for an answer. A `Sink` that blocks longer than `AnswerWait` can produce a false `not answering`: the tray loop must not block on effects for seconds (bus calls are bounded by 2 s).
 - 2.2: wiring (5.1) passes `os.Stat` (not Lstat: the daemon follows symlinks), `os.ReadFile`, and the name from `user.LookupId(uid)` (not `$USER`). The tray can say reader where the daemon grants writer (operator file 0600/0640 or `/etc/snitch` not traversable): 5.1 logs one stderr line when the guess is reader because of a stat or read error, and the README says the file must be 0644.
 - 2.3: `ask.RuleFor` sends no `port` for port 0 and no `proto` for an empty protocol (`omitempty`), which the daemon reads as "any"; connect and sendmsg events always carry both, so this is accepted, not guarded. `TestRuleForNote` swaps `time.Local`: no test in `internal/ask` may start goroutines or call `t.Parallel`. `KeyOf`, `Local`, `Unknown`, `NoteLayout` are exported; 5.5 unexports any without a caller outside the package.
+- 2.4: `Queue.Stats().Dropped` resets whenever nothing waits, including when `Next` opens the last waiting question; 3.3 reads `Stats()` before `Next` when composing the note so the drops since the queue last had none waiting are shown. Snoozes expire at exactly 10 min.
