@@ -146,7 +146,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Depends: 2.1, 2.4_
   - _Boundary: internal/tray/model.go, view.go, model_test.go, view_test.go_
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.5, 3.6_
-- [ ] 3.2 Following the facts and giving notice
+- [x] 3.2 Following the facts and giving notice
   - The update for the client's messages: up, down, facts, a state line (mode, trial and kept
     at once); the notices as the difference between the last known and the new facts: trial
     started (deadline in local time), enforcement ended (the state line's reason), kept,
@@ -375,3 +375,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 2.3: `ask.RuleFor` sends no `port` for port 0 and no `proto` for an empty protocol (`omitempty`), which the daemon reads as "any"; connect and sendmsg events always carry both, so this is accepted, not guarded. `TestRuleForNote` swaps `time.Local`: no test in `internal/ask` may start goroutines or call `t.Parallel`. `KeyOf`, `Local`, `Unknown`, `NoteLayout` are exported; 5.5 unexports any without a caller outside the package.
 - 2.4: `Queue.Stats().Dropped` resets whenever nothing waits, including when `Next` opens the last waiting question; 3.3 reads `Stats()` before `Next` when composing the note so the drops since the queue last had none waiting are shown. Snoozes expire at exactly 10 min.
 - 3.1: `Model` (internal/tray/model.go) declares every field 3.2–3.5 need; its maps (`notices`, `pending`) and `facts` are copy-on-write. `gone` starts true and stays true after `Up` until that session's first `Facts`; the last facts stay as the notice baseline. `nextToken` is incremented before use (0 is never a token). Enforce without a deadline renders as Trial "(no deadline)". Menu labels may contain `_`: the sni menu adapter (4.3) escapes it as `__` for dbusmenu. `canNotify`/`canAct` start false until `Capabilities` arrives.
+- 3.2: `Update` (update.go) is a type switch; notices come from facts.go's diff, each change told once; a trial extension is silent; "daemon back" is posted on the first `Facts` after a noticed loss. `Model.posting` (notice tokens awaiting `Posted`) was added under a controller authorization; question tokens are 3.3's. Notices are not yet gated on `canNotify`: 3.3 gates them in update.go (its boundary may also touch facts.go's `post` for that one condition).

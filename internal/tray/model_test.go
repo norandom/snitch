@@ -62,6 +62,7 @@ func startWork(m Model) []check {
 		{"no open note", m.openNote == 0 && m.openSince.IsZero() && !open},
 		{"empty queue", m.queue.Stats() == (ask.Stats{})},
 		{"nothing pending, no notices", len(m.pending) == 0 && len(m.notices) == 0},
+		{"no notice being posted", len(m.posting) == 0},
 		{"first token", m.nextToken == 0},
 	}
 }

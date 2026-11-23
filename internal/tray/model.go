@@ -85,6 +85,7 @@ type Model struct {
 	openNote    uint32             // the posted note of the open question, 0 when none (6.11)
 	openSince   time.Time          // when that note was posted: the tray's own 60 s timeout (6.10)
 	notices     map[uint32]bool    // ids of posted notices until their Closed, retracted on Quit (1.4)
+	posting     map[uint64]bool    // tokens of notices posted but not yet Posted/PostFailed (questions' tokens are 3.3's)
 	pending     map[uint64]ask.Key // token of a rule.add in flight -> its question's key (6.8)
 	nextToken   uint64             // the token of the next Post or Send; 0 is never used
 }
