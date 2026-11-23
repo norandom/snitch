@@ -57,7 +57,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Boundary: go.mod, go.sum, internal/sni/bus.go, bus_test.go, internal/sni/snitest/bus.go,
     .kiro/specs/kde-tray/research.md_
   - _Requirements: 1.2, 1.5_
-- [ ] 1.3 (P) The stand-in daemon
+- [x] 1.3 (P) The stand-in daemon
   - The daemon's own API server with facts held in memory and scripted by commands: mode,
     trial, end, keep, unkeep, kill, rules error, learning, an event, refuse rule edits, quit;
     the operator uid is a parameter (the command-line tool passes the invoking user, a test
@@ -369,3 +369,4 @@ at a time; `(P)` tasks touch disjoint files.
 ## Implementation Notes
 - 1.1: the import pin (`cmd/snitch/imports_test.go`) runs `go list -deps` without build tags, so files tagged `live` are not pinned; 5.5 should run it once more with `-tags live`. The `net` dialer ban is not an import pin (a unix client needs `net`); 5.5 pins it over the source.
 - 1.2: godbus v5.2.4 facts are in research.md "godbus v5.2.4, verified" (use SessionBusPrivateNoAutoStartup, never the autolaunching variants; RequestName has no context, call it through CallWithContext). Bus tests use t.Setenv(DBUS_SESSION_BUS_ADDRESS) and cannot run in parallel.
+- 1.3: the stand-in (`internal/client/clienttest`) replies to `rule.add` before it announces the reload (`Options.ReloadAfter`, default 100 ms), as the daemon does; tests that depend on the order must not assume the state line comes first. The fact setters live in `commands.go`.
