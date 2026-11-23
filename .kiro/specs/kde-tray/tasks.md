@@ -26,7 +26,7 @@ research.md. Pushes, tags and releases are not part of any task. Tasks in the sa
 at a time; `(P)` tasks touch disjoint files.
 
 - [ ] 1. Foundation: the binary, the session bus, the stand-in daemon
-- [ ] 1.1 The `snitch` binary's skeleton and its import pin
+- [x] 1.1 The `snitch` binary's skeleton and its import pin
   - A second `main` package beside snitchd's, in the same shape: a bare word is a verb, `tray`
     is the only one and for now answers `snitch tray: not built yet` with exit 1; `-version`
     prints the linked-in version (`dev` for a plain build) and exits 0; anything else is a
