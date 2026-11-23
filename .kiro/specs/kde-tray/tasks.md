@@ -74,7 +74,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Requirements: 9.3, 9.5_
 
 - [ ] 2. The daemon channel and the question policy
-- [ ] 2.1 (P) The API client: one connection, kept alive, as messages
+- [x] 2.1 (P) The API client: one connection, kept alive, as messages
   - The message types of the design's Event Contract; one session per connection: the literal
     subscribe line (events on, local off, summary off), a first `status`, then lines in order
     as messages; `status` again every poll period, once after a `state` line and once after
@@ -370,3 +370,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 1.1: the import pin (`cmd/snitch/imports_test.go`) runs `go list -deps` without build tags, so files tagged `live` are not pinned; 5.5 should run it once more with `-tags live`. The `net` dialer ban is not an import pin (a unix client needs `net`); 5.5 pins it over the source.
 - 1.2: godbus v5.2.4 facts are in research.md "godbus v5.2.4, verified" (use SessionBusPrivateNoAutoStartup, never the autolaunching variants; RequestName has no context, call it through CallWithContext). Bus tests use t.Setenv(DBUS_SESSION_BUS_ADDRESS) and cannot run in parallel.
 - 1.3: the stand-in (`internal/client/clienttest`) replies to `rule.add` before it announces the reload (`Options.ReloadAfter`, default 100 ms), as the daemon does; tests that depend on the order must not assume the state line comes first. The fact setters live in `commands.go`.
+- 2.1: the client's `Config.Gap` (minimum between status requests) is required; 5.1 sets it to 2 s. `Down` may arrive twice in a row when the reason changes (`not running` <-> `not answering`): the tray treats `Down` as idempotent and updates the reason. Every `Send` gets exactly one `Answered` while the job runs; after the job's context ends nothing is answered, so shutdown code must not wait for an answer. A `Sink` that blocks longer than `AnswerWait` can produce a false `not answering`: the tray loop must not block on effects for seconds (bus calls are bounded by 2 s).
