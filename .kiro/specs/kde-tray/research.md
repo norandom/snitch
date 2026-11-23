@@ -266,3 +266,77 @@
 - libdbusmenu `com.canonical.dbusmenu` interface description: layout, events, properties.
 - `github.com/godbus/dbus/v5` v5.2.4: the session bus library.
 - `.kiro/steering/roadmap.md`: order, scope decisions of 2026-11-23.
+
+## godbus v5.2.4, verified
+Read from the module source (`$(go env GOMODCACHE)/github.com/godbus/dbus/v5@v5.2.4`) in task
+1.2. Signatures as they are; deviations from the memory names above are marked.
+
+- **Connecting (used in 1.2)**: `dbus.SessionBusPrivateNoAutoStartup(opts ...ConnOption)
+  (*Conn, error)` dials only; the caller runs `(*Conn).Auth(methods []Auth) error` (nil means
+  EXTERNAL then DBUS_COOKIE_SHA1 for the euid) and `(*Conn).Hello() error`. Deviation: the
+  design's `SessionBusPrivate` and `ConnectSessionBus` look up the address with autolaunch, and
+  when neither `DBUS_SESSION_BUS_ADDRESS` (nor `autolaunch:`) nor `/run/user/<uid>/bus` gives one
+  they run `dbus-launch` and start a fresh bus: a tray without a desktop would then "succeed" on
+  a bus nobody watches. The NoAutoStartup variant returns `dbus: couldn't determine address of
+  session bus` instead. Note that the lookup `os.Setenv`s the variable when it discovers
+  `/run/user/<uid>/bus`. `dbus.Connect(address, opts...)` is Dial + Auth + Hello in one (the
+  test helper uses it). Neither `Auth` nor `Hello` takes a context; `sni.Open` arms a
+  `time.AfterFunc(2s, conn.Close)`, and closing the transport unblocks both (pending calls are
+  finalized with an error).
+- **Calls with a timeout**: `(*Conn).BusObject() BusObject`, `(BusObject).CallWithContext(ctx,
+  method string, flags Flags, args ...any) *Call` (synchronous: it waits for the reply or the
+  context), then `(*Call).Store(retvalues ...any) error`. Deviation: the convenience
+  `(*Conn).RequestName(name string, flags RequestNameFlags) (RequestNameReply, error)` and
+  `ReleaseName` use `Call` without a context, so `sni.Claim` calls
+  `org.freedesktop.DBus.RequestName` itself through `CallWithContext` with a 2 s deadline.
+- **Name flags and replies**: `RequestNameFlags` uint32: `NameFlagAllowReplacement` 1,
+  `NameFlagReplaceExisting` 2, `NameFlagDoNotQueue` 4. `RequestNameReply` uint32:
+  `RequestNameReplyPrimaryOwner` 1, `RequestNameReplyInQueue` 2, `RequestNameReplyExists` 3,
+  `RequestNameReplyAlreadyOwner` 4. `ReleaseNameReply`: `ReleaseNameReplyReleased` 1,
+  `ReleaseNameReplyNonExistent` 2, `ReleaseNameReplyNotOwner` 3. The pid of a name's owner is
+  `org.freedesktop.DBus.GetConnectionUnixProcessID(s) -> u`; it accepts a well-known name
+  directly (no `GetNameOwner` first). `(*Conn).Names() []string` lists the unique name first.
+- **Closing**: `(*Conn).Close() error`, idempotent (closeOnce); it closes the `Signal` channels
+  and cancels `(*Conn).Context()`. Closing releases every name the connection owns (bus
+  daemon side), which is how `Remove` and a crash both drop the item (1.4).
+- **Exporting (for 4.2-4.4)**: `(*Conn).Export(v any, path ObjectPath, iface string) error`
+  exports the methods of `v` whose last return value is `*dbus.Error`; parameters of type
+  `dbus.Sender` / `dbus.Message` are filled in and not part of the signature; each call runs in
+  its own goroutine (handlers must be safe for concurrent calls); `v == nil` unexports.
+  `ExportAll` (any trailing `error`), `ExportWithMap(v, mapping map[string]string, path,
+  iface)` (Go name -> D-Bus name), `ExportSubtree`, `ExportMethodTable(methods map[string]any,
+  path ObjectPath, iface string) error` (name -> func; non-functions ignored),
+  `ExportSubtreeMethodTable`. `org.freedesktop.DBus.Peer` is answered for every object.
+- **Signals out**: `(*Conn).Emit(path ObjectPath, name string, values ...any) error`, with
+  `name` as `"interface.Member"` (e.g. `org.kde.StatusNotifierItem.NewIcon`).
+- **Properties (`prop`)**: `prop.Export(conn *dbus.Conn, path dbus.ObjectPath, props prop.Map)
+  (*prop.Properties, error)` (`prop.New` is the same but returns nil on error); `prop.Map =
+  map[string]map[string]*prop.Prop` (iface -> name -> prop); `prop.Prop{Value any; Writable
+  bool; Emit EmitType; Callback func(*prop.Change) *dbus.Error}`; `EmitFalse`, `EmitTrue`,
+  `EmitInvalidates`, `EmitConst`. Updates: `(*Properties).SetMust(iface, property string, v
+  any)` (panics on an unknown name; emits `PropertiesChanged` per the prop's `Emit`),
+  `(*Properties).Set(iface, property string, newv dbus.Variant) *dbus.Error` is the D-Bus
+  method (writable props only); `GetMust`. `(*Properties).Introspection(iface)
+  []introspect.Property` feeds introspection. SNI hosts listen for `NewIcon` and friends, not
+  `PropertiesChanged`, so props use `EmitFalse` and the adapter emits those signals itself.
+- **Introspection (`introspect`)**: types `Node{Name; Interfaces []Interface; Children
+  []Node}`, `Interface{Name; Methods; Signals; Properties; Annotations}`, `Method`, `Signal`,
+  `Property{Name, Type, Access}`, `Arg{Name, Type, Direction}`; vars `introspect.IntrospectData`
+  and `prop.IntrospectData` (the standard interfaces); `introspect.NewIntrospectable(n *Node)
+  Introspectable` exported with `conn.Export(x, path, "org.freedesktop.DBus.Introspectable")`;
+  `introspect.Methods(v any) []Method` derives methods from an exported value.
+- **Signals in (for 4.2, 4.4)**: `(*Conn).AddMatchSignal(options ...MatchOption) error` and
+  `AddMatchSignalContext(ctx, ...)` (deviation: there is a context form, use it for the 2 s
+  bound), `RemoveMatchSignal`; options `dbus.WithMatchSender(s)`, `WithMatchInterface(s)`,
+  `WithMatchMember(s)`, `WithMatchObjectPath(p)`, `WithMatchArg(idx int, value string)` (e.g.
+  arg0 = the watcher name for `NameOwnerChanged`), `WithMatchPathNamespace`,
+  `WithMatchDestination`, `WithMatchOption(key, value)`. Delivery: `(*Conn).Signal(ch chan<-
+  *dbus.Signal)` registers a channel (several allowed; closed when the conn closes; a full
+  channel is not dropped but handed to a goroutine per signal, which can reorder signals, so
+  buffer it), `RemoveSignal(ch)`. `dbus.Signal{Sender string;
+  Path ObjectPath; Name string ("iface.Member"); Body []any; Sequence}`.
+- **Test bus**: `dbus-daemon --config-file=F --nofork --print-address` with a config of type
+  `session`, `<listen>unix:dir=…</listen>`, EXTERNAL auth, an allow-all policy and no service
+  directories, so nothing (a real notification server, a watcher) is ever activated on it.
+  The socket directory is a short `os.MkdirTemp` path, not `t.TempDir` (108-byte socket path
+  limit). Checked on dbus-daemon 1.16.2.

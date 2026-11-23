@@ -10,4 +10,6 @@ require github.com/pelletier/go-toml/v2 v2.4.3
 
 require golang.org/x/net v0.61.0
 
+require github.com/godbus/dbus/v5 v5.2.4
+
 tool github.com/cilium/ebpf/cmd/bpf2go

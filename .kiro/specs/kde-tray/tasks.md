@@ -39,7 +39,7 @@ at a time; `(P)` tasks touch disjoint files.
     is green
   - _Boundary: cmd/snitch/main.go, version.go, main_test.go, imports_test.go_
   - _Requirements: 1.6, 4.7, 8.4, 8.5_
-- [ ] 1.2 The session bus: connect, single instance, and a private bus for tests
+- [x] 1.2 The session bus: connect, single instance, and a private bus for tests
   - The godbus dependency enters the module here; the implementer reads the v5.2.4 source for
     the connection, name request, export, property and signal calls the design names and
     records the real names and any deviation in research.md
@@ -365,3 +365,7 @@ at a time; `(P)` tasks touch disjoint files.
     packages, .github/workflows/lint.yml, .kiro/specs/kde-tray/design.md (file plan),
     .kiro/specs/kde-tray/research.md_
   - _Requirements: 3.5, 6.12, 8.1, 8.5, 9.3, 9.6_
+
+## Implementation Notes
+- 1.1: the import pin (`cmd/snitch/imports_test.go`) runs `go list -deps` without build tags, so files tagged `live` are not pinned; 5.5 should run it once more with `-tags live`. The `net` dialer ban is not an import pin (a unix client needs `net`); 5.5 pins it over the source.
+- 1.2: godbus v5.2.4 facts are in research.md "godbus v5.2.4, verified" (use SessionBusPrivateNoAutoStartup, never the autolaunching variants; RequestName has no context, call it through CallWithContext). Bus tests use t.Setenv(DBUS_SESSION_BUS_ADDRESS) and cannot run in parallel.
