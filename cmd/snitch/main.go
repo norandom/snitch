@@ -66,9 +66,3 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stderr, "snitch: unknown command %q\n%s\n", args[0], usage)
 	return exitUsage
 }
-
-// runTray is the tray verb's placeholder until the tray is wired (kde-tray task 5.1).
-func runTray(_ []string, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "snitch tray: not built yet")
-	return exitFail
-}

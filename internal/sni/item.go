@@ -90,11 +90,14 @@ func (b *Bus) Item(log func(string)) (*Item, error) {
 	return it, nil
 }
 
-// registerAtStart is the one registration of a fresh item; failure is spoken,
-// not fatal — the next watcher change retries it.
+// registerAtStart is the one registration of a fresh item; the outcome is spoken
+// either way — the success is the Monitoring line "registration with the watcher" —
+// and a failure is not fatal: the next watcher change retries it.
 func (it *Item) registerAtStart() {
 	if err := it.register(); err != nil {
 		it.log("tray registration failed, retried when the system tray changes: " + err.Error())
+	} else {
+		it.log("tray item registered with the system tray as " + it.name)
 	}
 }
 
@@ -256,6 +259,8 @@ func (it *Item) Watch(ctx context.Context) error {
 			}
 			if err := it.register(); err != nil {
 				it.log("tray registration failed, retried when the system tray changes: " + err.Error())
+			} else { // the re-registration after a watcher restart is the same news (Monitoring)
+				it.log("tray item registered with the system tray as " + it.name)
 			}
 		}
 	}

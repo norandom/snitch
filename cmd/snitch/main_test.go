@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -73,11 +74,17 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 	}
 }
 
-// The tray verb is known (not a usage error) but not built yet: it says so and exits 1.
-func TestUsageTrayIsAKnownVerbNotBuiltYet(t *testing.T) {
+// Requirement 1.5 through the real verb: with no desktop session reachable, one line says
+// so and the exit is 1. The dead address is the tray's to find; the test never touches the
+// developer's real session bus (every test that runs the tray names its own).
+func TestExitTrayWithoutASession(t *testing.T) {
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+filepath.Join(t.TempDir(), "no-bus"))
 	code, out, errOut := run("tray")
-	if code != exitFail || out != "" || errOut != "snitch tray: not built yet\n" {
-		t.Fatalf("want 1, no stdout, the placeholder line; got %d, %q, %q", code, out, errOut)
+	if code != exitFail || out != "" || !strings.Contains(errOut, "no desktop session") {
+		t.Fatalf("want 1, no stdout, the no-session line; got %d, %q, %q", code, out, errOut)
+	}
+	if strings.Count(errOut, "\n") != 1 {
+		t.Fatalf("want one stderr line, got %q", errOut)
 	}
 }
 
