@@ -118,3 +118,66 @@ func (b *Bus) Close() {
 	}
 	_ = b.conn.Close()
 }
+
+// Owner answers who owns the well-known name right now. An absent name is a
+// normal state of a session (no system tray yet, no notification service), not
+// an error; only a transport failure is. This and WatchOwner are the whole name
+// owner facility: the item watches the tray watcher with it (4.2) and the
+// notifications side watches its service the same way (4.4).
+func (b *Bus) Owner(name string) (owner string, owned bool, err error) {
+	var who string
+	err = b.call("org.freedesktop.DBus.GetNameOwner", name).Store(&who)
+	if err == nil {
+		return who, true, nil
+	}
+	var derr dbus.Error
+	if errors.As(err, &derr) && derr.Name == "org.freedesktop.DBus.Error.NameHasNoOwner" {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("owner of %s: %w", name, err)
+}
+
+// WatchOwner reports every ownership change of the well-known name on the
+// returned channel: the new owner's unique name, or the empty string when the
+// name was released. The channel closes when this connection loses the bus, so
+// a watcher loop reads it until the bus is gone. The NameOwnerChanged delivery
+// is the bus daemon's own signal, so nothing here polls.
+func (b *Bus) WatchOwner(name string) (<-chan string, error) {
+	contract.Require(b != nil && b.conn != nil, "sni: WatchOwner on a nil bus")
+	contract.Require(!b.closed.Load(), "sni: WatchOwner on a closed bus")
+	in := make(chan *dbus.Signal, 16)
+	b.conn.Signal(in)
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	err := b.conn.AddMatchSignalContext(ctx,
+		dbus.WithMatchInterface("org.freedesktop.DBus"),
+		dbus.WithMatchMember("NameOwnerChanged"),
+		dbus.WithMatchArg(0, name))
+	if err != nil {
+		b.conn.RemoveSignal(in)
+		return nil, fmt.Errorf("watch the owner of %s: %w", name, err)
+	}
+	out := make(chan string, 8)
+	go forwardOwners(in, out, name)
+	return out, nil
+}
+
+// forwardOwners narrows the signal stream to the ownership changes of one name
+// (every channel of the connection sees every matched signal) and ends with its
+// input: the bus closing closes in, then out, which is the loss a watcher loop
+// reports. Buffered, because a full channel hands each signal to a goroutine
+// of its own, which can reorder them.
+func forwardOwners(in <-chan *dbus.Signal, out chan<- string, name string) {
+	defer close(out)
+	for sig := range in {
+		if sig.Name != "org.freedesktop.DBus.NameOwnerChanged" || len(sig.Body) < 3 {
+			continue
+		}
+		if n, _ := sig.Body[0].(string); n != name {
+			continue
+		}
+		if owner, ok := sig.Body[2].(string); ok {
+			out <- owner
+		}
+	}
+}

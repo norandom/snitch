@@ -340,3 +340,82 @@ Read from the module source (`$(go env GOMODCACHE)/github.com/godbus/dbus/v5@v5.
   directories, so nothing (a real notification server, a watcher) is ever activated on it.
   The socket directory is a short `os.MkdirTemp` path, not `t.TempDir` (108-byte socket path
   limit). Checked on dbus-daemon 1.16.2.
+
+### 4.2 additions, verified (the tray item and its registration)
+
+Read from the module source for task 4.2, in the same manner as the sections above; the
+numbers are lines of godbus v5.2.4 as found in the module cache.
+
+- **RegisterStatusNotifierItem**: the item calls it on the watcher's own object:
+  `conn.Object("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher").CallWithContext(ctx,
+  "org.kde.StatusNotifierWatcher.RegisterStatusNotifierItem", 0, name).Err` — `Object`
+  (object.go:493) takes destination and path, the method string may carry its interface. The
+  handler runs in a goroutine of its own (export.go:267) and the synchronous call returns
+  only after the handler has answered, so a fake watcher's recording is visible the moment
+  the call returns. Bounded by the 2 s context as everything else.
+- **PropertiesChanged, emitted by the adapter**: `conn.Emit(path,
+  "org.freedesktop.DBus.Properties.PropertiesChanged", iface, map[string]dbus.Variant{…},
+  []string{})` — Emit returns `ErrClosed` when the connection is already closed
+  (export.go:221-247), it does not panic. The props of the item are `EmitFalse` (the line
+  above holds: hosts listen for the item's signals), and Show emits the standard
+  PropertiesChanged itself, once, with the changed values in the map — because
+  `prop.SetMust` PANICS on any error of its `set()` (prop.go:339-348), and with `EmitTrue`
+  a failing Emit (a bus that just died mid-Show) would be such an error. The private-bus
+  tests assert the contents of that signal, not just that something was emitted.
+- **Signatures** (sig.go getSignature): Go `int` and `int32` both map to `i`, so
+  `Pixmap{W, H int; ARGB []byte}` is `(iiay)`, `[]Pixmap` is `a(iiay)`, the item's ToolTip
+  struct `{string, []Pixmap, string, string}` is `sa(iiay)ss` — exactly the host's
+  introspection above — and `dbus.ObjectPath` is `o`, `bool` `b`. Exported struct fields in
+  order make the tuple; unexported fields and `dbus:"-"`-tagged ones are skipped.
+- **Exporting methods**: `conn.Export(v, path, iface)` exports every exported method whose
+  last return type is `*dbus.Error`, and the D-Bus method name is the Go method name as it
+  is (getMethods builds `methods[name]` — no case mangling), so `Activate`,
+  `SecondaryActivate`, `ContextMenu` and `Scroll` keep their names. Each call runs in its
+  own goroutine; `org.freedesktop.DBus.Peer` is answered on every object. The fake watcher
+  uses `ExportMethodTable(map[string]any{…}, path, iface)` whose values are functions with
+  the same `*dbus.Error` rule.
+- **NameOwnerChanged watch**: `conn.AddMatchSignalContext(ctx,
+  WithMatchInterface("org.freedesktop.DBus"), WithMatchMember("NameOwnerChanged"),
+  WithMatchArg(0, name))` — one arg0 match rule per watched name (arg0 matching works on
+  this daemon; the re-registration test drives it). The body is (name, old owner, new
+  owner), empty string meaning "no owner". Every channel registered with `conn.Signal(ch)`
+  sees every signal matched by the CONNECTION (defaultSignalHandler.DeliverSignal posts to
+  all), so a consumer filters by name itself; and the private-bus tests empirically caught
+  `org.freedesktop.DBus.NameAcquired` (carrying a unique name) on a subscriber channel —
+  the bus's own ownership signals arrive alongside the matched ones, unfiltered. A full
+  channel hands each signal to a goroutine of its own (reorder hazard), so the watch
+  buffers and the tests collect by name.
+- **NameLost**: unicast to the connection that lost the name (see handleSignal) — useless
+  for watching a foreign name. NameOwnerChanged is the one general owner watch; the
+  notifications service (4.4) reuses the same watch.
+- **Bus loss**: `conn.Close()` — also invoked by inWorker on a transport error (EOF, the
+  dead daemon) — terminates the signal handler, which CLOSES every channel registered with
+  `Signal()` (default_handler.go Terminate). A `for range ch` loop over such a channel ends:
+  that is the item's bus-loss error path, no poll anywhere. `RemoveSignal` only unregisters.
+- **ReleaseName**: the convenience `(*Conn).ReleaseName` uses the context-less `Call`
+  (export.go:413), like `RequestName`; the item calls `org.freedesktop.DBus.ReleaseName`
+  itself through the 2 s `CallWithContext`. Replies: released 1, non-existent 2, not-owner 3.
+- **GetNameOwner errors**: `GetNameOwner` of a name without owner fails with
+  `org.freedesktop.DBus.Error.NameHasNoOwner`, and the error arrives as a `dbus.Error`
+  VALUE, not a pointer — `callTracker.handleDBusError` stores `Error{name, body}`
+  (conn.go:959). `errors.As` therefore needs a `dbus.Error` target, not a `*dbus.Error`;
+  an `*dbus.Error` target silently fails (a trap the 4.2 test hit).
+- **The SNI words of 4.2**, as introspected on this host (block above) and now implemented:
+  properties `Category` `SystemServices`, `Id` `snitch`, `Title`, `Status` `Active` or
+  `NeedsAttention` (with the view's `Attention`), empty `IconName`, `IconPixmap` and
+  `AttentionIconPixmap` from `icons.go`, `ToolTip`, `ItemIsMenu` `true`, `Menu`
+  `/StatusNotifierItem/menu`; the four inert methods above; signals `NewIcon`,
+  `NewAttentionIcon`, `NewStatus(s)`, `NewTitle`, `NewToolTip` for what changed; the
+  conventional item bus name `org.kde.StatusNotifierItem-<pid>-1`; the watcher's
+  `RegisteredStatusNotifierItems` property (`as`) is what the live run asserts.
+
+### 4.2 live run (pending)
+The live test exists (`internal/sni/live_test.go`, build tag `live`, run by hand with
+`go test -tags live ./internal/sni -run LiveItem`) and compiles in CI shape
+(`go vet -tags live ./...`; `go test -tags live -run TestNothingMatchesThis ./internal/sni`
+runs nothing). THE RUN ITSELF STILL NEEDS THE OPERATOR at chandali's desktop: the test
+registers the item with the real `org.kde.StatusNotifierWatcher`, asserts it in the
+watcher's `RegisteredStatusNotifierItems`, and holds each of the six states for 20 s
+(about two minutes in total) with `t.Log` saying what to look at and when. Only eyes can
+confirm the six icons in the panel; the controller records the result here after the
+operator run, together with whatever Plasma asked for that the design omits.
