@@ -1,0 +1,9 @@
+# Local secrets only. The SDK's default template ignores the generated
+# bindings (dagger.gen.go, internal/dagger), assuming the engine regenerates
+# them on demand; ci-debs commits them instead (design: "generated bindings
+# (committed, like internal/bpf)") so a fresh checkout vets and builds the
+# module without an engine, exactly like the committed bpf2go bindings let
+# `go build` work without clang. `dagger develop` rewrites both files; those
+# diffs are reviewable like any generated artifact.
+/.env
+/internal/telemetry
