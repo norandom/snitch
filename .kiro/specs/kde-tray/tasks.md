@@ -249,7 +249,7 @@ at a time; `(P)` tasks touch disjoint files.
     internal/sni/snitest/watcher.go,
     .kiro/specs/kde-tray/research.md_
   - _Requirements: 1.1, 1.3, 2.3_
-- [ ] 4.3 The menu
+- [x] 4.3 The menu
   - The flat menu object: layout, group properties, single property, about-to-show (both
     forms), event (both forms), the interface properties; rows as label, enabled, separator
     and checkmark with its state; a changed row set bumps the revision and announces the

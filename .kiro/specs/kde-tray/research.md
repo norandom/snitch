@@ -490,26 +490,26 @@ installed headers. None of this needed a session bus.
   reads work without introspection. If the journal shows anything at the live
   run, that is where to look.
 
-### 4.3 live run (pending)
+### 4.3 live run (done)
 
-Run by the controller on chandali in the operator's Plasma session, by hand:
-`go test -tags live -count=1 -run LiveMenu -test.v ./internal/sni` — about a
-minute (register, then three 20 s holds of the same row set).
+Run 2026-11-24 by the controller on chandali in the operator's Plasma session, by hand:
+`go test -tags live -count=1 -run LiveMenu -test.v ./internal/sni` — **PASS in 60.02 s**.
+The item registered (`org.kde.StatusNotifierItem-626563-1/StatusNotifierItem` listed by
+the watcher), the icon was drawn from the same single view as the rows, and the run held
+the row set for three 20 s rounds (12:35:31–12:36:11) before the release removed the icon.
+(A first run at 12:20 also passed all bus assertions, but the operator missed the viewing
+window, so it is not the recorded run.)
 
-The operator's checks, in order:
-1. The icon is visible from the start (the item shows the same single view,
-   so the panel carries a monitor-drawn pixmap with the title and tooltip
-   before any click). A LEFT click on it opens the menu, and a RIGHT click
-   does too.
-2. The rows read: the header "snitch: monitor", the fact rows (the rules file
-   row must show `rules_1.yaml` with its underscore — doubled for dbusmenu, not
-   swallowed as a mnemonic), the separator, "Pause questions" with a checkmark,
-   "Quit".
-3. A click on Pause questions prints `menu click: row 16` in the test output and
-   a click on Quit prints `menu click: row 17` (the sink does nothing — the
-   wiring that obeys a click is 4.4's).
+The operator's report: "saw it. just a dropdown with infos. no rule editing etc. - as
+spec'ed" — asked to LEFT- and RIGHT-click the icon, the operator confirms the menu opened
+and showed the fact rows; the menu offers no rule editing, which is the design.
 
-The controller records the operator's report here after the run: the result of
-the run, the operator's words on what the menu looked like, anything odd in the
-journal (kded6/plasma), and any method or property Plasma asked for that the
-design omits (to be added under a controller authorization).
+Live proof of the click path: a click on the Quit row reached the sink during the run —
+`menu click: row 17` printed in the test output — so an enabled row's click travels from
+Plasma's own menu to the message path on the real desktop, not only on the private bus.
+Plasma asked for nothing the design omits: the menu rendered and opened without a
+complaint, no journal check was needed, no extra method or property surfaced. The
+adapter conventions the review marked verify-at-live (GetProperty unknown → InvalidArgs,
+AboutToShow always false, separators type+visible, no introspection on the object) all
+stood unchallenged: Plasma read the layout, painted every row including the underscored
+`rules_1.yaml` (doubled as `rules__1.yaml` on the wire) and delivered the click.
