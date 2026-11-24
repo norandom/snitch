@@ -155,7 +155,9 @@
     findings-review expectation; the sample/conffile/upgrade semantics; the smoke expected states; the
     lintian threshold + below-threshold tags; the adjacency records (pyinfra ownership of /etc/snitch and
     the deployed rules, the operator file, VM-repo tag+sha256 pinning, unit copies); local reproduction
-    including the rootful runtime prerequisite, the CLI install, and the pinned reproducibility properties.
+    including the runtime prerequisite note (rootless podman verified working with the engine locally;
+    upstream documents rootful podman/docker as the supported path), the CLI install, and the pinned
+    reproducibility properties.
   - Observable: each documented statement cites the requirement it discharges (the R3.2 limitation, the
     R5.4 tag list, the R6.4 adjacency, the R7 reproduction).
   - _Requirements: 3.2, 3.4, 4.3, 4.6, 5.3, 5.4, 6.4, 7.2, 7.3_

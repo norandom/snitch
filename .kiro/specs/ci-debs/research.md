@@ -211,9 +211,10 @@
   `dagger/dagger-for-github@v8.4.1` (`version: "0.21.12"` pinned). Per-check functions + composite functions.
 - **Rationale / Trade-offs**: matching upstream stable; `dagger check`/`call` exit semantics directly implement
   R1.3; engine-ephemeral-per-job accepted.
-- **Follow-up**: local door requires a **rootful container runtime endpoint** (dagger engine docs: rootless
-  podman unsupported) — the workstation runs rootless podman 5.7 → document `podman system service` rootful
-  socket / docker CE as the operator prerequisite (R7.3's "container runtime"), verified during implementation.
+- **Follow-up (resolved empirically in task 1)**: the workstation's rootless podman 5.7.0 **does** boot the
+  v0.21.12 engine (the docs' rootless warning is stale); the local door is verified working. Upstream's
+  rootful-podman/docker note stays documented as the supported path, and rootless `--privileged` smoke
+  semantics get real verification in task 6.
 
 ### Decision: `d0d88f59` — check function granularity mirrors today's checks; composites for ergonomics
 - **Context**: R1.4 freezes the existing check set; R6.2 keeps new linters out of the release gate only.
@@ -292,8 +293,9 @@
   in the runner, asset loop unchanged); composites used instead of workflow gymnastics
 
 ## Risks & Mitigations
-- **Dagger engine vs rootless podman (local door)** — document rootful requirement; implementation includes a
-  local-door verification task (rootful podman socket or docker CE); CI unaffected (real docker).
+- **Dagger engine vs rootless podman (local door)** — RESOLVED empirically in task 1: engine v0.21.12 boots
+  over rootless podman 5.7.0; residual risk moved to task 6 (privileged/systemd smoke containers under
+  rootless podman get real verification there).
 - **golangci/staticcheck findings on existing code** — triage task with explicit fix-or-configure acceptance (R2.1).
 - **cppcheck triage set (probe-observed)** — same pattern; suppressions file only with written reasons.
 - **VCS stamp parity edge cases** — clean-tree + tag assertions in the build function make mismatches loud.
