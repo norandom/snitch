@@ -1,0 +1,22 @@
+{
+  "feature_name": "ci-debs",
+  "created_at": "2026-11-24T20:35:00Z",
+  "updated_at": "2026-11-24T20:58:00Z",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
