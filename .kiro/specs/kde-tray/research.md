@@ -513,3 +513,42 @@ adapter conventions the review marked verify-at-live (GetProperty unknown → In
 AboutToShow always false, separators type+visible, no introspection on the object) all
 stood unchallenged: Plasma read the layout, painted every row including the underscored
 `rules_1.yaml` (doubled as `rules__1.yaml` on the wire) and delivered the click.
+
+### 5.4 host check on chandali, phase A (done)
+
+Run 2026-11-24 by the controller with the operator at the desktop: `scripts/tray-check.sh`
+(fifth take, the recorded one) — **17 passed, 1 skipped, 0 failed, tray exit 0** at
+2026-11-24T20:23:56+01:00, as mc, snitch dev (go1.26.10) built from this tree by the script,
+plasmashell 6.6.7. Covered end to end on the real session bus: the watcher lists the item;
+the six states each assert Status and ToolTip words (kill, rules error, the attention trio,
+kept, trial with its deadline words, monitor); the Allow question is watched as a Notify call,
+answered by the operator and recorded as the rule.add allow line for
+`tray-check-allow.example.org`; the Block question's event carries no name, and the deny went
+by address to `192.0.2.20`; the stand-in's restart shows gone → back; the operator's own
+`systemctl --user restart plasma-plasmashell` re-registered the item inside the 45 s window;
+10 min idle cost the tray **0.22 s CPU (22 ticks / 100 Hz)** — three takes measured 0.20,
+0.21, 0.22 s (20/21/22 ticks), consistent. The stop removed the item and released the name,
+exit 0.
+
+The operator declined the two theme screenshots when prompted; A17 is recorded as skipped
+("operator task, not a bus assertion"): legibility on both panels rests on the 4.2 live run
+(all six states held and seen) and the icon test's PNGs (`docs/tray-*-44.png`). Nothing
+beyond what the earlier live runs showed — the operator's word for the runs: "Nothing odd";
+the item, the notifications and the re-registration behaved as in 4.2/4.3.
+
+The road to the pass, kept honest. Takes 1 and 2 (~18:30) were aborted by the operator while
+a silent 90 s window sat open: the answer steps' poll conditions held a `$( )` inside the
+call arguments, which expands once, so `wait_for` re-tested a frozen string and could never
+pass — the operator's Allow presses were received and accepted both times (the stand-in's
+log shows the allow rule each time), but the assert could not see them arrive, and the window
+printed nothing while it idled. The controller fixed it in the script (documented like 5.1's
+authorization): re-runnable poll helpers (`rules_added_since`, `b_rule_present`), the press
+baseline taken before the prompt, and a visible "watching for the recorded rule" note.
+Take 3 (19:14: 16/1/1) and take 4 (19:32: 16/1/1) then failed the honest way, each by a
+wrong button the assert caught on the recorded line: take 3 pressed Allow on the Block
+question (an allow to `192.0.2.20` where a deny was asserted), take 4 pressed Block on the
+first question (a deny to its address `203.0.113.10`, named in the question — live proof
+that Block writes deny-by-address even when a name is known, and that the mismatch note
+quotes the exact recorded line). Take 5 paired the buttons with the questions and closed
+phase A. Phase B stays **pending until snitchd runs on this host** (`scripts/tray-check.sh
+--daemon`); its monitor-only refusal and dry paths are the review's private-bus evidence.
