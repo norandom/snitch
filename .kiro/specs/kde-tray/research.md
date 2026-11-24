@@ -349,7 +349,7 @@ numbers are lines of godbus v5.2.4 as found in the module cache.
 - **RegisterStatusNotifierItem**: the item calls it on the watcher's own object:
   `conn.Object("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher").CallWithContext(ctx,
   "org.kde.StatusNotifierWatcher.RegisterStatusNotifierItem", 0, name).Err` — `Object`
-  (object.go:493) takes destination and path, the method string may carry its interface. The
+  (conn.go:493) takes destination and path, the method string may carry its interface. The
   handler runs in a goroutine of its own (export.go:267) and the synchronous call returns
   only after the handler has answered, so a fake watcher's recording is visible the moment
   the call returns. Bounded by the 2 s context as everything else.
@@ -430,3 +430,86 @@ happen" — visibility confirmed; a click doing nothing is the design at this st
 item's methods are inert, the menu is 4.3's and the notifications 4.4's). Nothing
 beyond the six icons was reported — no dialog, complaint or oddity from Plasma, and
 the item's log printed no error during the run.
+
+### 4.3 additions, verified (the flat dbusmenu)
+
+Read for task 4.3 without touching the real bus (the controller's rule): the two
+shipped dbusmenu implementations on chandali carry their own interface
+descriptions, and the tool for reading them is `strings` on the binaries and the
+installed headers. None of this needed a session bus.
+
+- **Where the words were found**: libdbusmenu-glib 18.10
+  (`/usr/lib/x86_64-linux-gnu/libdbusmenu-glib.so.4.0.12`) embeds its server's
+  introspection XML; libdbusmenu-qt5 0.9.3 (`libdbusmenu-qt5.so.2.6.0`) embeds its
+  exporter's; the glib headers under `/usr/include/libdbusmenu-glib-0.4/` define
+  the event and property words; and plasma-workspace 6.6.7's tray applet
+  (`qt6/plugins/plasma/applets/org.kde.plasma.systemtray.so`, the vendored
+  `PlasmaDBusMenuImporter` that will import this menu) contains the call and
+  property words it uses.
+- **Wire shapes, of the interface description itself**: `GetLayout(i parentId, i
+  recursionDepth, as propertyNames) -> (u revision, (ia{sv}av) layout)`;
+  `GetGroupProperties(ai ids, as propertyNames) -> a(ia{sv})`; `GetProperty(i id,
+  s name) -> v value`; `Event(i id, s eventId, v data, u timestamp)` — the
+  timestamp is uint32, not the remembered int64; `EventGroup(a(isvu) events) ->
+  ai idErrors`; `AboutToShow(i id) -> b needUpdate`; `AboutToShowGroup(ai ids) ->
+  (ai updatesNeeded, ai idErrors)`; the signal `LayoutUpdated(u revision,
+  i parent)`. Both implementations agree on all of these; the remembered
+  `idsOfInterest` argument of GetLayout (a design-era shape, no verifiable
+  origin in this spec) is on neither of them: this host's GetLayout is the
+  three arguments above.
+- **Interface properties**: `Version` is type u in both XMLs, so the design's
+  `Version 3` is exported as uint32; `Status` s ("normal"); `TextDirection` s
+  ("ltr"). glib 18.10 also lists `IconThemePath` (as `as` in its XML, a newer
+  shape) — the design omits it and the menu exports none, which is fine for a
+  menu without themed icons.
+- **Plasma's importer words** (from its binary, so the live host itself): it
+  calls `AboutToShow`, `Event`, `GetGroupProperties`, `GetLayout`, `GetProperty`;
+  it listens for `LayoutUpdated` and `ItemsPropertiesUpdated`; row words it
+  reads: `label`, `enabled`, `visible`, the value `separator` (of `type`),
+  `toggle-state`, `icon-name`, `icon-data`; interface reads `Version`, `Status`,
+  `IconThemePath`. `EventGroup` and `AboutToShowGroup` do not appear in it:
+  Plasma does not call the group forms (the design keeps them exported for other
+  hosts). The glib headers confirm `toggle-type` "checkmark"/"radio" and
+  `toggle-state` 0/1 (−1 unknown), so a check row emits toggle-type checkmark
+  and its state.
+- **Adapter choices no fact settles** (all marked verify at the live run):
+  unknown ids are skipped by `GetGroupProperties` and answered with
+  `org.freedesktop.DBus.Error.InvalidArgs` by `GetProperty`; `AboutToShow` is
+  always false — the layout is always current because Show announces every
+  change; `AboutToShowGroup` returns no updates and the unknown ids as its
+  idErrors; a click on a disabled row, an unknown id or a quiet event is silence
+  in both event forms, and only `EventGroup` reports unknown ids (Event's single
+  form has no error channel); the first Show bumps the revision 0 → 1 and
+  announces it (nothing listens yet), and a repeated row set announces nothing
+  (the item's repeated-view rule); separators carry `type` and `visible` only;
+  the root node's property dict is empty.
+- **No introspection on the menu object** (as on the item's): godbus answers
+  `org.freedesktop.DBus.Peer` on every object but exports no Introspectable
+  unless told to. Plasma's QDBusInterface-based importer may log one
+  introspection complaint the first time it builds the menu; calls and property
+  reads work without introspection. If the journal shows anything at the live
+  run, that is where to look.
+
+### 4.3 live run (pending)
+
+Run by the controller on chandali in the operator's Plasma session, by hand:
+`go test -tags live -count=1 -run LiveMenu -test.v ./internal/sni` — about a
+minute (register, then three 20 s holds of the same row set).
+
+The operator's checks, in order:
+1. The icon is visible from the start (the item shows the same single view,
+   so the panel carries a monitor-drawn pixmap with the title and tooltip
+   before any click). A LEFT click on it opens the menu, and a RIGHT click
+   does too.
+2. The rows read: the header "snitch: monitor", the fact rows (the rules file
+   row must show `rules_1.yaml` with its underscore — doubled for dbusmenu, not
+   swallowed as a mnemonic), the separator, "Pause questions" with a checkmark,
+   "Quit".
+3. A click on Pause questions prints `menu click: row 16` in the test output and
+   a click on Quit prints `menu click: row 17` (the sink does nothing — the
+   wiring that obeys a click is 4.4's).
+
+The controller records the operator's report here after the run: the result of
+the run, the operator's words on what the menu looked like, anything odd in the
+journal (kded6/plasma), and any method or property Plasma asked for that the
+design omits (to be added under a controller authorization).
