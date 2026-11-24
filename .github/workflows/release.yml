@@ -4,6 +4,10 @@ name: release
 # one static amd64 build with the tag linked in as the version (Req 1.1, 1.2). Nothing is
 # published when any earlier job fails: `needs:` stops the chain (Req 1.3). Only the publish
 # job may write to the repository; the VM repo pins the tag and the sha256 of the asset.
+# Since the kde-tray spec (its Req 9.4): a second static build, the tray client `snitch`,
+# published as `snitch-linux-amd64` with its checksum. The asset name is pinned (consuming
+# repos match it), and `snitch` is already the Python client's asset; the four original
+# assets keep their names.
 
 on:
   push:
@@ -31,18 +35,25 @@ jobs:
           set -euo pipefail
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/snitchd ./cmd/snitchd
           [ "$(dist/snitchd -version)" = "$GITHUB_REF_NAME" ]
+      - name: static build of the tray client, version = tag (asset `snitch-linux-amd64`, not `snitch`, because the Python client already owns that asset name)
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/snitch-linux-amd64 ./cmd/snitch
+          [ "$(dist/snitch-linux-amd64 -version)" = "$GITHUB_REF_NAME" ]
       - name: sha256 (the form `sha256sum -c` reads)
         run: |
           set -euo pipefail
           (cd dist && sha256sum snitchd > snitchd.sha256)
           cat dist/snitchd.sha256
+          (cd dist && sha256sum snitch-linux-amd64 > snitch-linux-amd64.sha256)
+          cat dist/snitch-linux-amd64.sha256
       - name: publish the assets (replace when the release exists, create it otherwise)
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          assets=(dist/snitchd dist/snitchd.sha256 snitch snitch-trial)
+          assets=(dist/snitchd dist/snitchd.sha256 snitch snitch-trial dist/snitch-linux-amd64 dist/snitch-linux-amd64.sha256)
           for f in "${assets[@]}"; do [ -f "$f" ] || { echo "missing asset: $f" >&2; exit 1; }; done
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${assets[@]}" --clobber

@@ -1,0 +1,17 @@
+# snitch-tray.desktop: starts `snitch tray` with the Plasma session. Copy this one file to
+# ~/.config/autostart/ and the tray is up whenever the session is; started this way it
+# behaves exactly as when started by hand, and a second start still exits 1. The tray is a
+# display: it asks questions and writes a rule only on an explicit click, so it enforces
+# nothing and cannot weaken a fail-safe. It needs the released `snitch` binary on PATH.
+[Desktop Entry]
+Type=Application
+Name=snitch tray
+Exec=snitch tray
+# The tray item draws its own pixmaps, so the project ships no theme icon. This stock
+# name is the one the notifications carry as their icon (internal/sni/notify.go), so the
+# entry matches what the tray shows. Icon lookup is cosmetic: a miss never stops the launch.
+Icon=security-medium
+# Plasma's earliest autostart phase: the tray starts before plasmashell exists, which is
+# safe because the item appears within 10 s of the tray host becoming available. Other
+# desktops ignore the KDE key and run the entry at their own XDG phase.
+X-KDE-autostart-phase=0
