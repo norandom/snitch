@@ -8,6 +8,8 @@ package tray
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/norandom/snitch/internal/client"
@@ -33,12 +35,38 @@ func Update(m Model, msg any, now time.Time) (Model, []any) {
 	case Closed:
 		m, fx = closedNote(m, v.NoteID, now)
 	case MenuClick:
-		m, fx = click(m, v, now)
-	case Stop: // quit: 3.5
+		m, fx = menuClick(m, v, now)
+	case Stop: // a signal ends the tray like Quit in the menu does (1.4)
+		m, fx = quitAll(m)
 	default:
 		contract.Require(false, fmt.Sprintf("tray.Update: unknown message %T", msg))
 	}
 	return m, append(fx, Show{View: Render(m, now)})
+}
+
+// menuClick routes the menu (3.4): Quit ends the tray, the pause switch is discard.go's, and
+// the fact rows and the header show facts without acting on them (3.5).
+func menuClick(m Model, c MenuClick, now time.Time) (Model, []any) {
+	if c.Row == RowQuit {
+		return quitAll(m)
+	}
+	return click(m, c, now)
+}
+
+// quitAll composes the end of the tray (1.4): every note still open — the question first, then
+// the notices, ordered so an adapter and a test see the same list — is retracted before the
+// Quit effect removes the item, so no notification outlives its tray. A note whose post has
+// no id yet cannot be retracted; it goes with the item instead, and no Send of the model's
+// past is left (6.12, 8.1). The model itself does not change: it ends with the tray.
+func quitAll(m Model) (Model, []any) {
+	var fx []any
+	if m.openNote != 0 {
+		fx = append(fx, Retract{NoteID: m.openNote})
+	}
+	for _, id := range slices.Sorted(maps.Keys(m.notices)) {
+		fx = append(fx, Retract{NoteID: id})
+	}
+	return m, append(fx, Quit{})
 }
 
 // fromDaemon dispatches the client's messages.

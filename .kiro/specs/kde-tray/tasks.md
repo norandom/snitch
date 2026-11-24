@@ -198,7 +198,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Boundary: internal/tray/discard.go, update.go (the dispatch lines for closed, tick's
     timeout, the pause click), discard_test.go_
   - _Requirements: 3.4, 5.7, 5.8, 5.10, 6.10_
-- [ ] 3.5 The loop
+- [x] 3.5 The loop
   - A job that owns the model: it reads messages, updates, runs the effects through
     delegates, feeds the result of a post back as a message before the next one, shows a view
     only when it differs from the last one shown, and ends cleanly after the quit effect;
@@ -378,3 +378,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 3.2: `Update` (update.go) is a type switch; notices come from facts.go's diff, each change told once; a trial extension is silent; "daemon back" is posted on the first `Facts` after a noticed loss. `Model.posting` (notice tokens awaiting `Posted`) was added under a controller authorization; question tokens are 3.3's. Notices are not yet gated on `canNotify`: 3.3 gates them in update.go (its boundary may also touch facts.go's `post` for that one condition).
 - 3.3: question posts use `Model.askToken`; a press counts only when the open note was posted with actions (`Model.openActs`), for the open note id, allow or block. A failed `rule.add` calls `ask.Queue.Forget(key)` (added under authorization). Notices and questions are gated on `canNotify`; `facts_test.go`'s `started` helper sends full `Capabilities` first. `questions_test.go` is at the 300-line cap: 3.4 puts its tests in `discard_test.go`. Not handled yet (3.4): the notification service disappearing while a question is open or waiting.
 - 3.4: closing, the 60 s timeout, discards and the pause live in `discard.go`. Closed and the timeout settle Unanswered (snoozed); tray-initiated retractions (mode change, Down, pause, notification service gone) settle Failed (no snooze). Fit is judged on the mode before and after each message. Quit and Stop still pass through `Update` for 3.5.
+- 3.5: `Run` (run.go) requires all five delegates (violation test) and runs one goroutine over the model and the last shown view; a `Post` runs inside `handle` and its `Posted`/`PostFailed` is applied before the next message is taken, so adapters keep `Post` bounded (2 s, the 2.1 note). The job returns nil after `Quit` (the trailing `Show` of that list is skipped), nil on a closed `in` (the shutdown path 5.1 should take) and ctx's error on cancel. `quitAll` (update.go: `MenuClick` RowQuit via `menuClick`, and `Stop`) retracts the open question then the notices by sorted id, then `Quit{}`; `TestFactsPassThrough` no longer lists `Stop`.

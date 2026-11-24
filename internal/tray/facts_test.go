@@ -262,12 +262,13 @@ func TestGoneAtStartNoNotice(t *testing.T) {
 }
 
 // Messages that concern nothing the model holds (an event that asks nothing, an answer and a
-// press without a question, capabilities as they are) and the types later tasks handle pass
-// through unchanged, with a view.
+// press without a question, capabilities as they are, a menu row that shows a fact) pass
+// through unchanged, with a view. Stop is no longer one of them: it ends the tray with the
+// Quit effect (1.4, run_test.go).
 func TestFactsPassThrough(t *testing.T) {
 	m := started(t, running())
 	for _, msg := range []any{client.EventLine{}, client.Answered{Token: 3}, Pressed{NoteID: 1},
-		MenuClick{Row: RowHeader}, Capabilities{Available: true, Actions: true}, Stop{}} {
+		MenuClick{Row: RowHeader}, Capabilities{Available: true, Actions: true}} {
 		m2, posts := step(t, m, msg, now)
 		none(t, "pass through", posts)
 		if !reflect.DeepEqual(m, m2) {
