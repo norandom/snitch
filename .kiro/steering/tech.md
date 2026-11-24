@@ -20,6 +20,15 @@ client of the daemon and never touches BPF. Decision order in the kernel is fixe
 → heartbeat → local network → rules (program-specific before any-program; exact proto+port,
 proto, any) → mode default (monitor allows and reports, enforce denies and reports).
 
+The tray adds the user-side half of that client role, as a second binary with four packages
+that point one way: `cmd/snitch` (the `snitch` binary: verb `tray`, `-version`) wires
+`internal/sni` (the session bus: StatusNotifierItem, its menu, notifications, the drawn
+icons), which depends on `internal/tray` (the pure model: state, menu rows, notices), which
+depends on `internal/ask` (which event deserves a question, and the rule an answer stands
+for) and `internal/client` (the daemon's API as typed messages, with reconnect); those two
+depend only on `internal/api`'s wire types. `internal/tray` has no D-Bus and `internal/sni`
+has no daemon, and the tray's only write is the `rule.add` behind an operator's click.
+
 ## Core Technologies
 
 - **Language**: Go (version pinned in `go.mod`, currently 1.26) for both binaries; C for the
@@ -27,7 +36,9 @@ proto, any) → mode default (monitor allows and reports, enforce denies and rep
 - **Kernel interface**: BPF LSM hooks via `github.com/cilium/ebpf` (programs attached with
   `link.AttachLSM`, maps pinned under `/sys/fs/bpf/snitch`). Requires a kernel with
   `CONFIG_BPF_LSM` and `bpf` in the active LSM list; developed on Debian forky, kernel 7.2.
-- **TUI**: bubbletea (planned). Reference implementation: the Python/Textual client `snitch`.
+- **TUI**: bubbletea (planned). The user-side binary exists meanwhile: `cmd/snitch`, verb
+  `tray` (the KDE tray) and `-version`; reference implementation: the Python/Textual client
+  `snitch`.
 - **Packaging**: static Go binaries; GitHub releases pinned by sha256 by the consuming repo;
   Nix flake (`buildGoModule`) later. systemd units in `systemd/`.
 
@@ -36,6 +47,10 @@ proto, any) → mode default (monitor allows and reports, enforce denies and rep
 - `cilium/ebpf` (+ `bpf2go` as a Go tool dependency): the only BPF library. The generated
   bindings and the compiled `.o` are committed so `go build` works without clang.
 - `golang.org/x/sys/unix`: clock, stat, socket constants. Avoid cgo.
+- `github.com/godbus/dbus/v5` (v5.2.4): the tray's session bus, in `internal/sni` only
+  (StatusNotifierItem, dbusmenu, notifications). BSD-2-Clause, pure Go, no cgo, so the static
+  release builds are unaffected — `release.yml` builds `snitch-linux-amd64` from `cmd/snitch`
+  with the same flags as `snitchd`.
 
 ## Development Standards
 
@@ -91,6 +106,9 @@ scripts/caps.sh
 
 # build + bounded monitor run
 go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -duration 10s
+# the user binary: build to /tmp (never `go build -o snitch` in the repo root: `snitch`
+# there is the Python client, which owns that name until the TUI replaces it)
+go build -o /tmp/snitch ./cmd/snitch && /tmp/snitch -version
 # regenerate bindings after editing bpf/snitch.bpf.c
 go generate ./internal/bpf/
 # new kernel: refresh CO-RE types

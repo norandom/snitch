@@ -70,7 +70,10 @@ Little-Snitch-style egress control for Linux, open source, eBPF. Two binaries, o
 
 - `snitchd` (root, Go + BPF C): decides at `connect()` / unconnected `sendmsg()` inside the kernel
   (BPF LSM hooks), keyed by the program's executable (inode + device) and the destination.
-- `snitch` (TUI, bubbletea, planned): the same views and keys as the Python client it replaces
+- `snitch` (user, Go): verb `tray` today — the KDE tray: one StatusNotifierItem with six
+  drawn state icons, a facts menu, questions with Allow and Block through the daemon's
+  `rule.add` — and `-version`; the bubbletea TUI is planned: the same views and keys as the
+  Python client it replaces
   (`snitch`, the file in the repo root, talks to Little Snitch's web UI; it stays until parity).
 
 Started as part of github.com/norandom/hyperland-forky-worker-vm (a Hyprland thin client over
@@ -110,7 +113,19 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   share its name with a map (bpf2go: "found multiple types").
 - `cmd/snitchd/` the daemon. Build + try: `go build -o /tmp/snitchd ./cmd/snitchd &&
   sudo /tmp/snitchd -mode monitor -duration 10s`.
-- Go module `github.com/norandom/snitch`; deps: cilium/ebpf v0.22, x/sys. Lint: `gofmt -l .`,
+- `cmd/snitch/` the user binary: `snitch tray [-api PATH] [-ask all|enforce]
+  [-operator-file PATH]`, `snitch -version`; exits 0 (Quit/signal), 1 (no session bus, bus
+  lost, an instance already running), 2 (usage), 70 (wiring bug). Four packages, one
+  direction: `internal/sni` (session bus: the item, its menu, notifications, the drawn
+  icons) imports `internal/tray` (the pure model/view), which imports `internal/ask` (the
+  rule an answer stands for) and `internal/client` (the API as messages); those two import
+  `internal/api` types only — the tray has no D-Bus, the bus layer no daemon. Build to
+  `/tmp/snitch`, never `go build -o snitch` in the repo root: the Python client owns `snitch`
+  there (`go build -o /tmp/snitch ./cmd/snitch`).
+- Go module `github.com/norandom/snitch`; deps: cilium/ebpf v0.22, x/sys,
+  github.com/godbus/dbus/v5 v5.2.4 (the tray's session bus, `internal/sni` only; BSD-2-Clause,
+  pure Go, no cgo, so the static builds stand — `release.yml` also ships `snitch-linux-amd64`
+  built from `./cmd/snitch`). Lint: `gofmt -l .`,
   `go vet ./...`; CI (`.github/workflows/lint.yml`): go, ruff (Python client), shellcheck,
   actionlint. Commit as `git -c user.name=marius -c user.email=wishinet@gmail.com commit`.
   Before every push: no secrets in the diff.
@@ -153,6 +168,13 @@ per-socket byte counting by socket cookie; `scripts/api-check.sh` is its check.
 Spec `dns-tap` (2026-10-12, see `.kiro/specs/dns-tap/`; implemented, release pending as
 v0.4.0): the plain UDP DNS tap, host-wide address-to-name cache and allow rules by name,
 compiled live; names on events, table entries and learned observations, tap counters in status.
+Spec `kde-tray` (2026-11-23, see `.kiro/specs/kde-tray/`): the user-side `snitch` binary —
+`snitch tray`, the KDE tray for Plasma 6 (one StatusNotifierItem with six drawn state icons,
+the facts menu, notifications with Allow and Block; only the operator answers, and every
+answer is one `rule.add` into the overlay — nothing changes a mode from the tray), autostart
+through `desktop/snitch-tray.desktop`, the godbus dependency above, released as
+`snitch-linux-amd64` with its sha256. Open there: the host check on chandali and the final
+caps/CI task.
 Not done yet, in order:
 
 1. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.

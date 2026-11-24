@@ -22,14 +22,24 @@ kernel's BTF). One program, one `decide()`, both LSM hooks call it.
 directive. Committed so CI and users build without clang. Never edited by hand.
 
 ### Binaries
-**Location**: `cmd/snitchd/` (root daemon), `cmd/snitch/` (TUI, planned)
+**Location**: `cmd/snitchd/` (root daemon), `cmd/snitch/` (user binary: `snitch tray` today,
+`snitch -version`; the TUI verb is planned)
 **Purpose**: `main` packages: flag parsing, wiring, signal handling. Logic that needs a unit
-test moves into an `internal/` package.
+test moves into an `internal/` package. Build `cmd/snitch` to `/tmp`, never
+`go build -o snitch` in the repo root: there `snitch` is the legacy Python client, which
+owns the name until parity.
 
 ### Domain packages (as they appear)
-**Location**: `internal/rules/`, `internal/api/`, `internal/dns/`, `internal/enrich/`, ...
+**Location**: `internal/rules/`, `internal/api/`, `internal/dns/`, `internal/client/`,
+`internal/ask/`, `internal/tray/`, `internal/sni/`, `internal/enrich/`, ...
 **Purpose**: one concern per package: rules file → map entries; the unix socket API; the DNS
-tap and IP → name cache; Velociraptor / OpenObserve clients.
+tap and IP → name cache; Velociraptor / OpenObserve clients. The tray's four point one way:
+`internal/sni` (the session bus: item, menu, notifications, icons, over
+`github.com/godbus/dbus/v5` v5.2.4 — pure Go, BSD-2-Clause, no cgo) imports `internal/tray`
+(the pure tray model), which imports `internal/ask` (which events ask, the rule an answer
+stands for) and `internal/client` (the API as typed messages, with reconnect), and those two
+import only `internal/api`'s types — `sni` has no client, `tray` has no D-Bus, and nothing
+points the other way.
 **Example**: `internal/rules` owns parsing, path/glob → inode+dev resolution and the map
 encoding, and is tested without root.
 

@@ -22,9 +22,12 @@ Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not 
   `org.freedesktop.Notifications` for the notifications. The API client and the
   "answer becomes a rule" logic live in `internal/` packages so the popups and the TUI reuse them.
 - **Why**: pure Go, one new dependency (BSD-2-Clause, no cgo), so the static build and the
-  release workflow stay as they are. Speaking StatusNotifierItem directly gives theme icons by
-  name (they follow Breeze light and dark), the `Status` property (`NeedsAttention` for kill
-  switch and daemon gone) and a tooltip, and it is testable against a private session bus.
+  release workflow stay as they are. Speaking StatusNotifierItem directly gives the `Status`
+  property (`NeedsAttention` for kill switch and daemon gone) and a tooltip, and it is
+  testable against a private session bus. The icons turned out differently from what this
+  line first promised: the tray draws its own pixmaps for all six states, not theme names —
+  every state differs in shape and every stroke carries a light halo, so they read on Breeze
+  light and dark alike (`kde-tray` research.md, Decision: icons).
 - **Rejected alternatives**:
   - `fyne.io/systray`: less code of ours, but icons only as pixmap bytes, no `Status`, a
     process-global API that fights the jobs and delegates rules of `tech.md`, and godbus would
