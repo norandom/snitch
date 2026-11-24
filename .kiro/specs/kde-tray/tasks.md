@@ -213,7 +213,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Requirements: 1.4, 3.4, 8.7_
 
 - [ ] 4. The session-bus adapters
-- [ ] 4.1 (P) The icons
+- [x] 4.1 (P) The icons
   - Six pixmaps at 22 and 44 px, ARGB32 in network byte order, drawn by the program: a shared
     shield outline; monitor (outline), trial (lower half filled), kept (filled), kill switch
     (outline with a slash), rules error (outline with an exclamation mark), gone (dashed
@@ -379,3 +379,4 @@ at a time; `(P)` tasks touch disjoint files.
 - 3.3: question posts use `Model.askToken`; a press counts only when the open note was posted with actions (`Model.openActs`), for the open note id, allow or block. A failed `rule.add` calls `ask.Queue.Forget(key)` (added under authorization). Notices and questions are gated on `canNotify`; `facts_test.go`'s `started` helper sends full `Capabilities` first. `questions_test.go` is at the 300-line cap: 3.4 puts its tests in `discard_test.go`. Not handled yet (3.4): the notification service disappearing while a question is open or waiting.
 - 3.4: closing, the 60 s timeout, discards and the pause live in `discard.go`. Closed and the timeout settle Unanswered (snoozed); tray-initiated retractions (mode change, Down, pause, notification service gone) settle Failed (no snooze). Fit is judged on the mode before and after each message. Quit and Stop still pass through `Update` for 3.5.
 - 3.5: `Run` (run.go) requires all five delegates (violation test) and runs one goroutine over the model and the last shown view; a `Post` runs inside `handle` and its `Posted`/`PostFailed` is applied before the next message is taken, so adapters keep `Post` bounded (2 s, the 2.1 note). The job returns nil after `Quit` (the trailing `Show` of that list is skipped), nil on a closed `in` (the shutdown path 5.1 should take) and ctx's error on cancel. `quitAll` (update.go: `MenuClick` RowQuit via `menuClick`, and `Stop`) retracts the open question then the notices by sorted id, then `Quit{}`; `TestFactsPassThrough` no longer lists `Stop`.
+- 4.1: `Pixmaps(tray.State)` and `Pixmap{W, H, ARGB}` (icons.go, 294/300 lines) are the design's exported names; 4.2's item consumes them (5.5: they are not unused exports). The PNG helper test skips unless `SNITCH_TRAY_ICONS` names a directory, then writes `tray-<state>-{22,44}.png` — 5.3 generates the README images with it. 22 px has sub-pixel halo snippets on diagonal corners (non-antialiased fringe, no cardinal gaps); if 5.4's visual check dislikes them, widen `haloHalf` (0.10 → ~0.12) inside the 6-line file headroom, or split the file under a controller authorization (the File Structure Plan commits all six icons to one file).
