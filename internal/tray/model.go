@@ -82,14 +82,14 @@ type Model struct {
 	canAct      bool               // and it shows action buttons (8.6)
 	writer      bool               // this user may answer: operator (3.1, 6.9)
 	queue       ask.Queue          // the waiting list and the open question; the zero value is empty
-	askToken    uint64             // the token of the open question's Post until Posted/PostFailed, 0 when none
+	askToken    uint64             // the token of the open question's post until posted/postFailed, 0 when none
 	openActs    bool               // the open question's note was posted with Allow and Block (6.5, 6.9)
 	openNote    uint32             // the posted note of the open question, 0 when none (6.11)
 	openSince   time.Time          // when that note was posted: the tray's own 60 s timeout (6.10)
-	notices     map[uint32]bool    // ids of posted notices until their Closed, retracted on Quit (1.4)
-	posting     map[uint64]bool    // tokens of notices posted but not yet Posted/PostFailed (questions' tokens are 3.3's)
+	notices     map[uint32]bool    // ids of posted notices until their Closed, retracted on quit (1.4)
+	posting     map[uint64]bool    // tokens of notices posted but not yet posted/postFailed (questions' tokens are 3.3's)
 	pending     map[uint64]ask.Key // token of a rule.add in flight -> its question's key (6.8)
-	nextToken   uint64             // the token of the next Post or Send; 0 is never used
+	nextToken   uint64             // the token of the next post or send; 0 is never used
 }
 
 // NewModel is the model at start: no facts yet and gone, so the view is the gone state until
@@ -109,11 +109,11 @@ type (
 	Tick         struct{}                          // the one second tick
 	Stop         struct{}                          // a termination signal
 	Capabilities struct{ Available, Actions bool } // the notification service at start and on change
-	Posted       struct {                          // a Post effect succeeded
+	posted       struct {                          // a post effect succeeded
 		Token  uint64
 		NoteID uint32
 	}
-	PostFailed struct{ Token uint64 }
+	postFailed struct{ Token uint64 }
 	Pressed    struct { // an action button of a note: "allow" or "block"
 		NoteID uint32
 		Action string
@@ -124,17 +124,17 @@ type (
 
 // Effects Update asks the loop to run.
 type (
-	Show struct{ View View }
-	Post struct {
+	show struct{ View View }
+	post struct {
 		Token uint64
 		Note  Note
 	}
-	Retract struct{ NoteID uint32 }
-	Send    struct {
+	retract struct{ NoteID uint32 }
+	send    struct {
 		Token uint64
 		Req   api.Request
 	}
-	Quit struct{}
+	quit struct{}
 )
 
 // View is everything the desktop shows, rendered from one model at one time, so the icon and

@@ -65,10 +65,10 @@ func From(ev api.Event, scope Scope) (Question, bool) {
 		return Question{}, false
 	}
 	addr, err := netip.ParseAddr(ev.Addr)
-	if err != nil || Local(addr) {
+	if err != nil || local(addr) {
 		return Question{}, false
 	}
-	return Question{Key: KeyOf(ev), Event: ev, Blocked: blocked}, true
+	return Question{Key: keyOf(ev), Event: ev, Blocked: blocked}, true
 }
 
 // asks reports whether a verdict asks in a scope and whether it means blocked.
@@ -82,9 +82,9 @@ func asks(verdict string, scope Scope) (blocked, ok bool) {
 	return false, false
 }
 
-// Local reports whether an address is on the local network of fail-safe 2. An IPv4-mapped
+// local reports whether an address is on the local network of fail-safe 2. An IPv4-mapped
 // IPv6 address is judged by its IPv4 form; the zone of a link-local address is ignored.
-func Local(addr netip.Addr) bool {
+func local(addr netip.Addr) bool {
 	addr = addr.Unmap().WithZone("")
 	for _, p := range localPrefixes {
 		if p.Contains(addr) {
@@ -94,8 +94,8 @@ func Local(addr netip.Addr) bool {
 	return false
 }
 
-// KeyOf is the dedupe key of an event.
-func KeyOf(ev api.Event) Key {
+// keyOf is the dedupe key of an event.
+func keyOf(ev api.Event) Key {
 	who := ev.Program
 	if who == Unknown {
 		who = ev.Path

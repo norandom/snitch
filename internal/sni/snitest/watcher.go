@@ -21,10 +21,10 @@ import (
 	"github.com/godbus/dbus/v5/prop"
 )
 
-// WatcherName and the object below are what the real kded6 watcher owns on the
+// watcherName and the object below are what the real kded6 watcher owns on the
 // session bus; the mirror here answers on the same names.
 const (
-	WatcherName  = "org.kde.StatusNotifierWatcher"
+	watcherName  = "org.kde.StatusNotifierWatcher"
 	watcherPath  = dbus.ObjectPath("/StatusNotifierWatcher")
 	watcherIface = "org.kde.StatusNotifierWatcher"
 )
@@ -89,9 +89,9 @@ func (w *Watcher) start() {
 		w.t.Fatalf("snitest watcher: watch name owners: %v", err)
 	}
 	go w.watchReleased(ch)
-	reply, err := conn.RequestName(WatcherName, dbus.NameFlagDoNotQueue)
+	reply, err := conn.RequestName(watcherName, dbus.NameFlagDoNotQueue)
 	if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
-		w.t.Fatalf("snitest watcher: claim %s: %v %v", WatcherName, reply, err)
+		w.t.Fatalf("snitest watcher: claim %s: %v %v", watcherName, reply, err)
 	}
 }
 

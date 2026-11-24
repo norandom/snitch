@@ -131,7 +131,7 @@ func (r *retry) pause(ctx context.Context) {
 	r.wait = min(2*r.wait, r.c.cfg.BackoffMax)
 	for {
 		for _, k := range r.c.take() {
-			r.c.cfg.Sink(failed(k.token, NoSession))
+			r.c.cfg.Sink(failed(k.token, noSession))
 		}
 		select {
 		case <-ctx.Done():

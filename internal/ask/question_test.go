@@ -44,7 +44,7 @@ func TestFromVerdictsAndScopes(t *testing.T) {
 				}
 				continue
 			}
-			if q.Blocked != c.blocked || q.Event != ev || q.Key != KeyOf(ev) {
+			if q.Blocked != c.blocked || q.Event != ev || q.Key != keyOf(ev) {
 				t.Fatalf("%s scope %d: %+v", c.verdict, s.scope, q)
 			}
 		}
@@ -52,7 +52,7 @@ func TestFromVerdictsAndScopes(t *testing.T) {
 }
 
 func TestLocalPrefixes(t *testing.T) {
-	local := []string{
+	locals := []string{
 		"10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.255", "192.168.1.1",
 		"169.254.1.1", "127.0.0.1", "127.1.2.3", "fc00::1", "fdff::1", "fe80::1", "fe80::1%eth0",
 		"febf::1", "::1", "::ffff:10.0.0.1", "::ffff:172.16.5.5", "::ffff:192.168.0.1",
@@ -63,8 +63,8 @@ func TestLocalPrefixes(t *testing.T) {
 		"192.169.0.1", "169.253.0.1", "128.0.0.1", "0.0.0.1", "8.8.8.8", "fbff::1", "fec0::1",
 		"::2", "2001:db8::1", "::ffff:8.8.8.8", "::ffff:172.32.0.1",
 	}
-	for _, s := range local {
-		if !Local(netip.MustParseAddr(s)) {
+	for _, s := range locals {
+		if !local(netip.MustParseAddr(s)) {
 			t.Fatalf("%s: not local", s)
 		}
 		for _, v := range []string{"deny-default", "allow-monitor"} {
@@ -74,7 +74,7 @@ func TestLocalPrefixes(t *testing.T) {
 		}
 	}
 	for _, s := range remote {
-		if Local(netip.MustParseAddr(s)) {
+		if local(netip.MustParseAddr(s)) {
 			t.Fatalf("%s: local", s)
 		}
 		if _, ok := From(event("deny-default", s), All); !ok {
@@ -105,7 +105,7 @@ func TestKeyForms(t *testing.T) {
 		{unknown, Key{"/opt/x/bin/x", "2001:db8::1", "udp", 53}},
 	}
 	for _, c := range cases {
-		if got := KeyOf(c.ev); got != c.want {
+		if got := keyOf(c.ev); got != c.want {
 			t.Fatalf("key %+v, want %+v", got, c.want)
 		}
 		q, ok := From(c.ev, All)
@@ -116,7 +116,7 @@ func TestKeyForms(t *testing.T) {
 	// Two addresses behind one name share a key: one question per program and name.
 	other := named
 	other.Addr = "140.82.112.6"
-	if KeyOf(other) != KeyOf(named) {
+	if keyOf(other) != keyOf(named) {
 		t.Fatal("same name, different key")
 	}
 }

@@ -164,7 +164,7 @@ func TestAnswerWithoutASession(t *testing.T) {
 		t.Fatalf("down: %#v", d)
 	}
 	h.c.Send(11, ruleAdd())
-	if a := want[Answered](h); a.Token != 11 || a.Err != NoSession || a.Role {
+	if a := want[Answered](h); a.Token != 11 || a.Err != noSession || a.Role {
 		t.Fatalf("answer: %#v", a)
 	}
 	h.quiet(300 * time.Millisecond) // failed redials send no second Down

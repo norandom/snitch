@@ -1,7 +1,7 @@
 // run_test.go: Run's loop under recording delegates: the job owns the model. One hundred idle
-// ticks show the view once (8.7); a Post's outcome reaches Update as a message before the next
+// ticks show the view once (8.7); a post's outcome reaches Update as a message before the next
 // one, which these tests read off the retracted note ids and the posts between two events;
-// Quit from the menu and Stop retract the open question and the notices, send nothing and end
+// quit from the menu and Stop retract the open question and the notices, send nothing and end
 // the job with nil (1.4); a pause click through the loop shows the checked row (3.4).
 package tray
 
@@ -18,8 +18,8 @@ import (
 	"github.com/norandom/snitch/internal/contract/contracttest"
 )
 
-// result is what one Post returns: the note's id, or the error whose failure the loop feeds
-// back into Update as PostFailed.
+// result is what one post returns: the note's id, or the error whose failure the loop feeds
+// back into Update as postFailed.
 type result struct {
 	id  uint32
 	err error
@@ -39,7 +39,7 @@ type rec struct {
 }
 
 // fx builds the delegates. The clock stands still on the package's fixed time, so only a
-// message that changes the model can change the view; a Post without a scripted result is a
+// message that changes the model can change the view; a post without a scripted result is a
 // harness mistake and panics the loop loudly.
 func (r *rec) fx() Effects {
 	return Effects{
@@ -67,7 +67,7 @@ type rt struct {
 	done chan error
 }
 
-// startRun runs the tray as a writer in the tests' zone with one scripted result per Post the
+// startRun runs the tray as a writer in the tests' zone with one scripted result per post the
 // test expects; the context's cancel, cleaned up after the test, ends a wedged loop instead
 // of leaking it.
 func startRun(t *testing.T, results ...result) *rt {
@@ -150,7 +150,7 @@ func TestIdleLoopShowsTheViewOnce(t *testing.T) {
 }
 
 // openQuestionAndNotice runs a writer's tray with one question open (note 5) and one notice
-// standing (note 71). The loop only knows these ids because it fed each Post's outcome back
+// standing (note 71). The loop only knows these ids because it fed each post's outcome back
 // into Update as a message before the next one.
 func openQuestionAndNotice(t *testing.T) *rt {
 	t.Helper()
@@ -165,7 +165,7 @@ func openQuestionAndNotice(t *testing.T) *rt {
 	return r
 }
 
-// 1.4: Quit from the menu retracts the open question and the notices, sends nothing and ends
+// 1.4: quit from the menu retracts the open question and the notices, sends nothing and ends
 // the job with nil.
 func TestQuitRetractsQuestionAndNotices(t *testing.T) {
 	r := openQuestionAndNotice(t)
@@ -175,7 +175,7 @@ func TestQuitRetractsQuestionAndNotices(t *testing.T) {
 	r.want([]uint32{5, 71})
 }
 
-// 1.4: Stop, a termination signal, ends the tray exactly like Quit from the menu.
+// 1.4: Stop, a termination signal, ends the tray exactly like quit from the menu.
 func TestStopRetractsQuestionAndNotices(t *testing.T) {
 	r := openQuestionAndNotice(t)
 	if err := r.end(Stop{}); err != nil {
@@ -206,7 +206,7 @@ func TestRunLoopPauseClickChecksTheRow(t *testing.T) {
 	r.want(nil)
 }
 
-// The loop feeds each Post's outcome back into Update before the next message: the question
+// The loop feeds each post's outcome back into Update before the next message: the question
 // whose post failed settles, so the next waiting one is posted, and Stop later retracts its
 // note. A loop that dropped the outcome would leave the failed one standing as open: the
 // second event would wait unposted and Stop would retract nothing.
@@ -238,13 +238,25 @@ func TestRunRequiresEveryDelegate(t *testing.T) {
 		what string
 		fx   Effects
 	}{
-		{"no Show", Effects{Post: post, Retract: retract, Send: send, Now: clock}},
-		{"no Post", Effects{Show: show, Retract: retract, Send: send, Now: clock}},
-		{"no Retract", Effects{Show: show, Post: post, Send: send, Now: clock}},
-		{"no Send", Effects{Show: show, Post: post, Retract: retract, Now: clock}},
+		{"no show", Effects{Post: post, Retract: retract, Send: send, Now: clock}},
+		{"no post", Effects{Show: show, Retract: retract, Send: send, Now: clock}},
+		{"no retract", Effects{Show: show, Post: post, Send: send, Now: clock}},
+		{"no send", Effects{Show: show, Post: post, Retract: retract, Now: clock}},
 		{"no Now", Effects{Show: show, Post: post, Retract: retract, Send: send}},
 	} {
 		contracttest.Panics(t, contract.Precondition,
 			func() { Run(make(chan any), c.fx, NewModel(Options{Loc: zone})) })
 	}
+}
+
+// Precondition: an effect Update never emits is a wiring error between the model
+// and the loop; the guard sits in the loop's effect switch, so it is tripped on
+// the loop directly. The effects are produced by Update and consumed by the loop
+// in one package, so no real message can produce an unknown one.
+func TestLoopUnknownEffectViolation(t *testing.T) {
+	l := &loop{in: make(chan any), fx: Effects{Show: func(View) {},
+		Post:    func(Note) (uint32, error) { return 0, nil },
+		Retract: func(uint32) {}, Send: func(uint64, api.Request) {},
+		Now: func() time.Time { return now }}}
+	contracttest.Panics(t, contract.Precondition, func() { l.effect(struct{}{}) })
 }

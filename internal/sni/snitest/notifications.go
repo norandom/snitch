@@ -22,9 +22,9 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-// NotificationsName is the well-known name of the notification service the fake
+// notificationsName is the well-known name of the notification service the fake
 // claims on the test bus.
-const NotificationsName = "org.freedesktop.Notifications"
+const notificationsName = "org.freedesktop.Notifications"
 
 const (
 	notificationsPath  = dbus.ObjectPath("/org/freedesktop/Notifications")
@@ -88,9 +88,9 @@ func (n *Notifications) start() {
 	if err := conn.ExportMethodTable(table, notificationsPath, notificationsIface); err != nil {
 		n.t.Fatalf("snitest notifications: export the methods: %v", err)
 	}
-	reply, err := conn.RequestName(NotificationsName, dbus.NameFlagDoNotQueue)
+	reply, err := conn.RequestName(notificationsName, dbus.NameFlagDoNotQueue)
 	if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
-		n.t.Fatalf("snitest notifications: claim %s: %v %v", NotificationsName, reply, err)
+		n.t.Fatalf("snitest notifications: claim %s: %v %v", notificationsName, reply, err)
 	}
 }
 
@@ -147,8 +147,8 @@ func (n *Notifications) Closed(id uint32, reason uint32) {
 	_ = n.conn.Emit(notificationsPath, notificationsIface+".NotificationClosed", id, reason)
 }
 
-// SetCapabilities changes what GetCapabilities answers from now on.
-func (n *Notifications) SetCapabilities(caps ...string) {
+// setCapabilities changes what GetCapabilities answers from now on.
+func (n *Notifications) setCapabilities(caps ...string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.caps = append([]string(nil), caps...)

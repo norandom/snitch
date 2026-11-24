@@ -42,12 +42,12 @@ func goneMenu() tray.View {
 
 // servingMenu is the menu on the private bus plus a raw client of the item's
 // bus name, subscribed to the menu's own signals.
-func servingMenu(t *testing.T, sink func(any)) (*Menu, *dbus.Conn, string, <-chan *dbus.Signal) {
+func servingMenu(t *testing.T, sink func(any)) (*menu, *dbus.Conn, string, <-chan *dbus.Signal) {
 	t.Helper()
 	addr := privateBus(t)
 	b := openBus(t)
 	dest := newItem(t, b).name
-	m, err := b.Menu(sink, func(string) {})
+	m, err := b.menu(sink, func(string) {})
 	if err != nil {
 		t.Fatalf("Menu: %v", err)
 	}
@@ -173,7 +173,7 @@ func noClick(t *testing.T, clicks <-chan any) {
 func TestMenuLayoutReturnsTheRowsOfTheViewInOrder(t *testing.T) {
 	m, c, dest, _ := servingMenu(t, func(any) {})
 	v := fullMenu()
-	m.Show(v)
+	m.show(v)
 	wantLayout(t, c, dest, v, 1) // the first shown view bumps the revision from zero
 }
 
@@ -181,18 +181,18 @@ func TestMenuLayoutReturnsTheRowsOfTheViewInOrder(t *testing.T) {
 // root as parent; the same rows bump nothing (the pause state travels too).
 func TestMenuChangedRowsBumpTheRevisionAndAnnounceTheLayout(t *testing.T) {
 	m, c, dest, ch := servingMenu(t, func(any) {})
-	m.Show(fullMenu())
+	m.show(fullMenu())
 	rev, parent := layoutUpdate(t, ch)
 	if parent != 0 {
 		t.Fatalf("LayoutUpdated's parent = %d, want the root 0", parent)
 	}
-	m.Show(goneMenu())
+	m.show(goneMenu())
 	bumped, _ := layoutUpdate(t, ch)
 	if bumped != rev+1 {
 		t.Fatalf("the changed row set bumped the revision to %d, want %d", bumped, rev+1)
 	}
 	wantLayout(t, c, dest, goneMenu(), bumped)
-	m.Show(goneMenu()) // the same rows again: the revision stands still
+	m.show(goneMenu()) // the same rows again: the revision stands still
 	wantLayout(t, c, dest, goneMenu(), bumped)
 }
 
@@ -201,7 +201,7 @@ func TestMenuChangedRowsBumpTheRevisionAndAnnounceTheLayout(t *testing.T) {
 func TestMenuClicksBecomeMenuClicksAndOthersNothing(t *testing.T) {
 	clicks := make(chan any, 16)
 	m, c, dest, _ := servingMenu(t, func(msg any) { clicks <- msg })
-	m.Show(fullMenu())
+	m.show(fullMenu())
 	click := func(id int32, name string) {
 		if err := menuCall(c, dest, menuIface+".Event", id, name,
 			dbus.MakeVariant(uint32(0)), uint32(0)).Err; err != nil {
@@ -234,7 +234,7 @@ func TestMenuClicksBecomeMenuClicksAndOthersNothing(t *testing.T) {
 // AboutToShow says no relayout is needed in both forms.
 func TestMenuAnswersItsInterfaceReads(t *testing.T) {
 	m, c, dest, _ := servingMenu(t, func(any) {})
-	m.Show(fullMenu())
+	m.show(fullMenu())
 	var all map[string]dbus.Variant
 	if err := menuCall(c, dest, propsIface+".GetAll", menuIface).Store(&all); err != nil {
 		t.Fatalf("GetAll the menu's properties: %v", err)
@@ -267,7 +267,7 @@ func TestMenuAnswersItsInterfaceReads(t *testing.T) {
 // The row reads, single and grouped: a name filter narrows the dict, unknown ids are skipped.
 func TestMenuAnswersPropertyReadsSingleAndGroup(t *testing.T) {
 	m, c, dest, _ := servingMenu(t, func(any) {})
-	m.Show(fullMenu())
+	m.show(fullMenu())
 	var rows []idProps
 	if err := menuCall(c, dest, menuIface+".GetGroupProperties", []int32{int32(tray.RowMode), 42, int32(tray.RowPause)},
 		[]string{"label", "toggle-state"}).Store(&rows); err != nil {
@@ -292,9 +292,9 @@ func TestMenuAnswersPropertyReadsSingleAndGroup(t *testing.T) {
 func TestMenuConstructorContracts(t *testing.T) {
 	privateBus(t)
 	b := openBus(t)
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = (*Bus)(nil).Menu(func(any) {}, func(string) {}) })
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.Menu(nil, func(string) {}) })
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.Menu(func(any) {}, nil) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = (*Bus)(nil).menu(func(any) {}, func(string) {}) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.menu(nil, func(string) {}) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.menu(func(any) {}, nil) })
 	b.Close()
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.Menu(func(any) {}, func(string) {}) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.menu(func(any) {}, func(string) {}) })
 }

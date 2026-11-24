@@ -1,7 +1,7 @@
 // run.go: Run, the tray's loop as one jobs.Job. It owns the model and the last shown view: it
-// reads messages, updates, runs each effect through its delegate, feeds the result of a Post
+// reads messages, updates, runs each effect through its delegate, feeds the result of a post
 // back into Update as a message before it takes the next one, shows a view only when it
-// differs from the last one shown (8.7) and ends with nil after the Quit effect (1.4).
+// differs from the last one shown (8.7) and ends with nil after the quit effect (1.4).
 //
 // Fail-safe implications: the loop never touches the kernel, so a delegate that blocks
 // blocks the tray alone and every kernel decision stays as it was. One goroutine runs every
@@ -19,7 +19,7 @@ import (
 )
 
 // Run is the tray's loop: messages from in are applied to m through Update, and each effect
-// runs through the delegate it names. The job ends with nil after the Quit effect, and with
+// runs through the delegate it names. The job ends with nil after the quit effect, and with
 // ctx's error when the run around the tray was cancelled.
 func Run(in <-chan any, fx Effects, m Model) jobs.Job {
 	contract.Require(fx.Show != nil && fx.Post != nil && fx.Retract != nil && fx.Send != nil && fx.Now != nil,
@@ -37,7 +37,7 @@ type loop struct {
 	last View
 }
 
-// job is the loop proper: one message at a time until the Quit effect or the run's end. A
+// job is the loop proper: one message at a time until the quit effect or the run's end. A
 // closed input has no messages left in it and would spin, so it ends the loop cleanly.
 func (l *loop) job(ctx context.Context) error {
 	for {
@@ -55,7 +55,7 @@ func (l *loop) job(ctx context.Context) error {
 	}
 }
 
-// handle applies one message and runs its effects; true says the Quit effect ran and the
+// handle applies one message and runs its effects; true says the quit effect ran and the
 // tray is over.
 func (l *loop) handle(msg any) bool {
 	m, fx := Update(l.m, msg, l.fx.Now())
@@ -68,20 +68,20 @@ func (l *loop) handle(msg any) bool {
 	return false
 }
 
-// effect runs one effect through its delegate; true says it was the Quit effect. The Quit
-// ends the message without the trailing Show, which would paint an item that Quit just
+// effect runs one effect through its delegate; true says it was the quit effect. The quit
+// ends the message without the trailing show, which would paint an item that quit just
 // removed.
 func (l *loop) effect(e any) bool {
 	switch v := e.(type) {
-	case Quit:
+	case quit:
 		return true
-	case Post:
+	case post:
 		return l.post(v)
-	case Retract:
+	case retract:
 		l.fx.Retract(v.NoteID)
-	case Send:
+	case send:
 		l.fx.Send(v.Token, v.Req)
-	case Show:
+	case show:
 		l.show(v.View)
 	default:
 		contract.Require(false, fmt.Sprintf("tray.loop: unknown effect %T", e))
@@ -89,15 +89,15 @@ func (l *loop) effect(e any) bool {
 	return false
 }
 
-// post runs one Post effect and hands its outcome to Update as a message before the loop
+// post runs one post effect and hands its outcome to Update as a message before the loop
 // takes the next one from in, so the model knows every note's id and never misses a note of
 // its own that was closed or pressed.
-func (l *loop) post(p Post) bool {
+func (l *loop) post(p post) bool {
 	id, err := l.fx.Post(p.Note)
 	if err != nil {
-		return l.handle(PostFailed{Token: p.Token})
+		return l.handle(postFailed{Token: p.Token})
 	}
-	return l.handle(Posted{Token: p.Token, NoteID: id})
+	return l.handle(posted{Token: p.Token, NoteID: id})
 }
 
 // show shows a view only when it differs from the last one shown: an idle hour of ticks

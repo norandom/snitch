@@ -24,8 +24,8 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-// Daemon is the program a private bus runs.
-const Daemon = "dbus-daemon"
+// daemon is the program a private bus runs.
+const daemon = "dbus-daemon"
 
 // startLimit bounds how long the daemon may take to print its address.
 const startLimit = 5 * time.Second
@@ -46,18 +46,18 @@ const config = `<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Config
 </busconfig>
 `
 
-// Installed reports whether dbus-daemon is on PATH, and says why not when it is not.
-func Installed() (bool, string) {
-	if _, err := exec.LookPath(Daemon); err != nil {
-		return false, Daemon + " is not installed: " + err.Error()
+// installed reports whether dbus-daemon is on PATH, and says why not when it is not.
+func installed() (bool, string) {
+	if _, err := exec.LookPath(daemon); err != nil {
+		return false, daemon + " is not installed: " + err.Error()
 	}
 	return true, ""
 }
 
-// SkipUnlessInstalled skips the test when there is no dbus-daemon to start.
-func SkipUnlessInstalled(t testing.TB) {
+// skipUnlessInstalled skips the test when there is no dbus-daemon to start.
+func skipUnlessInstalled(t testing.TB) {
 	t.Helper()
-	if ok, why := Installed(); !ok {
+	if ok, why := installed(); !ok {
 		t.Skip(why)
 	}
 }
@@ -66,13 +66,13 @@ func SkipUnlessInstalled(t testing.TB) {
 // stopped by t.Cleanup. The test is skipped when dbus-daemon is not installed.
 func Start(t testing.TB) string {
 	t.Helper()
-	SkipUnlessInstalled(t)
+	skipUnlessInstalled(t)
 	dir := socketDir(t)
 	conf := filepath.Join(dir, "bus.conf")
 	if err := os.WriteFile(conf, []byte(fmt.Sprintf(config, dir)), 0o600); err != nil {
 		t.Fatalf("snitest: write config: %v", err)
 	}
-	cmd := exec.Command(Daemon, "--config-file="+conf, "--nofork", "--print-address")
+	cmd := exec.Command(daemon, "--config-file="+conf, "--nofork", "--print-address")
 	// The daemon dies with the test binary even when t.Cleanup never runs (a -timeout panic).
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	out, err := cmd.StdoutPipe()
@@ -80,7 +80,7 @@ func Start(t testing.TB) string {
 		t.Fatalf("snitest: %v", err)
 	}
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("snitest: start %s: %v", Daemon, err)
+		t.Fatalf("snitest: start %s: %v", daemon, err)
 	}
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
@@ -112,11 +112,11 @@ func readAddress(t testing.TB, out io.Reader) string {
 	select {
 	case addr := <-line:
 		if addr == "" {
-			t.Fatalf("snitest: %s printed no address", Daemon)
+			t.Fatalf("snitest: %s printed no address", daemon)
 		}
 		return addr
 	case <-time.After(startLimit):
-		t.Fatalf("snitest: %s printed no address within %v", Daemon, startLimit)
+		t.Fatalf("snitest: %s printed no address within %v", daemon, startLimit)
 		return ""
 	}
 }

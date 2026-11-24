@@ -51,7 +51,7 @@ func TestOpenWithAnUnreachableBusSaysThereIsNoDesktopSession(t *testing.T) {
 		b.Close()
 		t.Fatal("Open succeeded without a bus")
 	}
-	if !errors.Is(err, ErrNoSession) || !strings.Contains(err.Error(), "no desktop session") {
+	if !errors.Is(err, errNoSession) || !strings.Contains(err.Error(), "no desktop session") {
 		t.Fatalf("err = %v, want the no-session error", err)
 	}
 	if strings.Contains(err.Error(), "\n") {
@@ -67,7 +67,7 @@ func TestClaimTakesTheInstanceName(t *testing.T) {
 	}
 	var owner string
 	raw := snitest.Conn(t, addr)
-	if err := raw.BusObject().Call("org.freedesktop.DBus.GetNameOwner", 0, InstanceName).Store(&owner); err != nil {
+	if err := raw.BusObject().Call("org.freedesktop.DBus.GetNameOwner", 0, instanceName).Store(&owner); err != nil {
 		t.Fatalf("GetNameOwner: %v", err)
 	}
 	if owner != b.conn.Names()[0] {
@@ -113,7 +113,7 @@ func TestSecondClaimNamesTheRunningOnesPid(t *testing.T) {
 func TestClaimFailsWhenAnotherConnectionOwnsTheName(t *testing.T) {
 	addr := privateBus(t)
 	raw := snitest.Conn(t, addr)
-	reply, err := raw.RequestName(InstanceName, dbus.NameFlagDoNotQueue)
+	reply, err := raw.RequestName(instanceName, dbus.NameFlagDoNotQueue)
 	if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
 		t.Fatalf("raw RequestName = %v, %v", reply, err)
 	}

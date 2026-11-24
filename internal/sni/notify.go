@@ -72,7 +72,7 @@ func (b *Bus) notify(sink func(any), log func(string)) (*notifier, error) {
 		b.conn.RemoveSignal(in)
 		return nil, fmt.Errorf("watch notification signals: %w", err)
 	}
-	owners, err := b.WatchOwner(notifyName)
+	owners, err := b.watchOwner(notifyName)
 	if err != nil {
 		b.conn.RemoveSignal(in)
 		return nil, err
@@ -207,7 +207,7 @@ func (n *notifier) watch(ctx context.Context) error {
 // available, and one whose state cannot be read is spoken and treated the same —
 // the fail-safe side of 8.6 is to ask nothing.
 func (n *notifier) capabilities() {
-	owner, owned, err := n.bus.Owner(notifyName)
+	owner, owned, err := n.bus.owner(notifyName)
 	if err != nil {
 		n.log("the notification service's state is unknown: " + err.Error())
 		n.sink(tray.Capabilities{})

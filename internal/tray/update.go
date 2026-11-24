@@ -16,7 +16,7 @@ import (
 	"github.com/norandom/snitch/internal/contract"
 )
 
-// Update is the model after msg at now and the effects to run, a Show last.
+// Update is the model after msg at now and the effects to run, a show last.
 func Update(m Model, msg any, now time.Time) (Model, []any) {
 	var fx []any
 	switch v := msg.(type) {
@@ -24,10 +24,10 @@ func Update(m Model, msg any, now time.Time) (Model, []any) {
 		m, fx = fromDaemon(m, v, now)
 	case Tick:
 		m, fx = tick(m, now)
-	case Posted:
+	case posted:
 		m, fx = afterPosted(m, v, now)
-	case PostFailed:
-		m, fx = postFailed(m, v, now)
+	case postFailed:
+		m, fx = postFailedNote(m, v, now)
 	case Pressed:
 		m, fx = pressed(m, v, now)
 	case Capabilities:
@@ -36,15 +36,15 @@ func Update(m Model, msg any, now time.Time) (Model, []any) {
 		m, fx = closedNote(m, v.NoteID, now)
 	case MenuClick:
 		m, fx = menuClick(m, v, now)
-	case Stop: // a signal ends the tray like Quit in the menu does (1.4)
+	case Stop: // a signal ends the tray like quit in the menu does (1.4)
 		m, fx = quitAll(m)
 	default:
 		contract.Require(false, fmt.Sprintf("tray.Update: unknown message %T", msg))
 	}
-	return m, append(fx, Show{View: Render(m, now)})
+	return m, append(fx, show{View: Render(m, now)})
 }
 
-// menuClick routes the menu (3.4): Quit ends the tray, the pause switch is discard.go's, and
+// menuClick routes the menu (3.4): quit ends the tray, the pause switch is discard.go's, and
 // the fact rows and the header show facts without acting on them (3.5).
 func menuClick(m Model, c MenuClick, now time.Time) (Model, []any) {
 	if c.Row == RowQuit {
@@ -55,18 +55,18 @@ func menuClick(m Model, c MenuClick, now time.Time) (Model, []any) {
 
 // quitAll composes the end of the tray (1.4): every note still open — the question first, then
 // the notices, ordered so an adapter and a test see the same list — is retracted before the
-// Quit effect removes the item, so no notification outlives its tray. A note whose post has
-// no id yet cannot be retracted; it goes with the item instead, and no Send of the model's
+// quit effect removes the item, so no notification outlives its tray. A note whose post has
+// no id yet cannot be retracted; it goes with the item instead, and no send of the model's
 // past is left (6.12, 8.1). The model itself does not change: it ends with the tray.
 func quitAll(m Model) (Model, []any) {
 	var fx []any
 	if m.openNote != 0 {
-		fx = append(fx, Retract{NoteID: m.openNote})
+		fx = append(fx, retract{NoteID: m.openNote})
 	}
 	for _, id := range slices.Sorted(maps.Keys(m.notices)) {
-		fx = append(fx, Retract{NoteID: id})
+		fx = append(fx, retract{NoteID: id})
 	}
-	return m, append(fx, Quit{})
+	return m, append(fx, quit{})
 }
 
 // fromDaemon dispatches the client's messages.

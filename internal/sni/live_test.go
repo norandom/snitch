@@ -37,23 +37,23 @@ func TestLiveItemOnTheRealSessionBus(t *testing.T) {
 	if err != nil {
 		t.Skipf("no desktop session bus here, so nothing live to test: %v", err)
 	}
-	it, err := b.Item(func(line string) { t.Log("item: " + line) })
+	it, err := b.item(func(line string) { t.Log("item: " + line) })
 	if err != nil {
 		b.Close()
 		t.Fatalf("the item: %v", err)
 	}
 	t.Cleanup(func() {
-		it.Remove() // the icon should leave the panel with this
+		it.remove() // the icon should leave the panel with this
 		b.Close()
 	})
-	if _, owned, err := b.Owner(watcherName); err != nil {
+	if _, owned, err := b.owner(watcherName); err != nil {
 		t.Skipf("the system tray's state is unknown, so nothing live to test: %v", err)
 	} else if !owned {
 		t.Skipf("no %s on this session: a Plasma session with a tray must be up", watcherName)
 	}
 	assertRegisteredWithTheWatcher(t, b, it)
 	for _, s := range allStates {
-		it.Show(view(s))
+		it.show(view(s))
 		t.Logf("look at the system tray now: %s, held for %s as of %s",
 			s, holdState, time.Now().Format("15:04:05"))
 		time.Sleep(holdState)
@@ -63,7 +63,7 @@ func TestLiveItemOnTheRealSessionBus(t *testing.T) {
 
 // assertRegisteredWithTheWatcher reads the watcher's RegisteredStatusNotifierItems
 // property and fails unless this item is in it; bounded like every call.
-func assertRegisteredWithTheWatcher(t *testing.T, b *Bus, it *Item) {
+func assertRegisteredWithTheWatcher(t *testing.T, b *Bus, it *item) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
@@ -119,34 +119,34 @@ func TestLiveMenuOnTheRealSessionBus(t *testing.T) {
 	if err != nil {
 		t.Skipf("no desktop session bus here, so nothing live to test: %v", err)
 	}
-	it, err := b.Item(func(line string) { t.Log("item: " + line) })
+	it, err := b.item(func(line string) { t.Log("item: " + line) })
 	if err != nil {
 		b.Close()
 		t.Fatalf("the item: %v", err)
 	}
-	m, err := b.Menu(func(msg any) {
+	m, err := b.menu(func(msg any) {
 		if c, ok := msg.(tray.MenuClick); ok {
 			t.Logf("menu click: row %d", c.Row)
 		}
 	}, func(line string) { t.Log("menu: " + line) })
 	if err != nil {
-		it.Remove()
+		it.remove()
 		b.Close()
 		t.Fatalf("the menu: %v", err)
 	}
 	t.Cleanup(func() {
-		it.Remove()
+		it.remove()
 		b.Close()
 	})
-	if _, owned, err := b.Owner(watcherName); err != nil {
+	if _, owned, err := b.owner(watcherName); err != nil {
 		t.Skipf("the system tray's state is unknown, so nothing live to test: %v", err)
 	} else if !owned {
 		t.Skipf("no %s on this session: a Plasma session with a tray must be up", watcherName)
 	}
 	assertRegisteredWithTheWatcher(t, b, it) // the watcher lists name/path (4.2's live fact)
 	v := liveMenuView()
-	it.Show(v) // the icon, from the same single view: it is what gets clicked
-	m.Show(v)  // the rows, from the same single view
+	it.show(v) // the icon, from the same single view: it is what gets clicked
+	m.show(v)  // the rows, from the same single view
 	for range 3 {
 		t.Logf("open the menu now: LEFT-click the icon, then RIGHT-click it; the rows must "+
 			"read (the rules file row shows rules_1.yaml with its underscore); clicks on "+

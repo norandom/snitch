@@ -80,10 +80,10 @@ func TestQueueSnoozeTenMinutes(t *testing.T) {
 	for _, o := range []Outcome{Answered, Unanswered} {
 		q, _ := next(t, offered(1))
 		q = q.Settle(o, t0)
-		if got := q.Offer(qn(0), t0.Add(Snooze-time.Second)); got.Stats().Waiting != 0 {
+		if got := q.Offer(qn(0), t0.Add(snooze-time.Second)); got.Stats().Waiting != 0 {
 			t.Fatalf("outcome %d: asked again at 9:59", o)
 		}
-		if got := q.Offer(qn(0), t0.Add(Snooze)); got.Stats().Waiting != 1 {
+		if got := q.Offer(qn(0), t0.Add(snooze)); got.Stats().Waiting != 1 {
 			t.Fatalf("outcome %d: did not ask again after 10 min", o)
 		}
 		if got := q.Offer(qn(1), t0); got.Stats().Waiting != 1 {
@@ -105,7 +105,7 @@ func TestQueueExpiredSnoozeRemovedOnOffer(t *testing.T) {
 	q = q.Settle(Answered, t0)
 	q, _ = next(t, q)
 	q = q.Settle(Answered, t0.Add(5*time.Minute))
-	q = q.Offer(qn(9), t0.Add(Snooze))
+	q = q.Offer(qn(9), t0.Add(snooze))
 	if _, ok := q.snoozed[qn(0).Key]; ok || len(q.snoozed) != 1 {
 		t.Fatalf("snoozed after the first expired: %v", q.snoozed)
 	}
@@ -199,11 +199,11 @@ func TestQueueOldValuesUnchanged(t *testing.T) {
 		t.Fatal("a sibling value sees another's offer")
 	}
 	a, _ = next(t, a)
-	_ = a.Settle(Answered, t0).Flush(func(Question) bool { return false }).Offer(qn(0), t0.Add(Snooze))
-	_ = b.Offer(qn(0), t0.Add(Snooze))
+	_ = a.Settle(Answered, t0).Flush(func(Question) bool { return false }).Offer(qn(0), t0.Add(snooze))
+	_ = b.Offer(qn(0), t0.Add(snooze))
 	_ = q.Flush(func(x Question) bool { return x.Key != qn(1).Key })
 	_, _, _ = q.Next()
-	_ = q.Offer(qn(0), t0.Add(Snooze))
+	_ = q.Offer(qn(0), t0.Add(snooze))
 	if !reflect.DeepEqual(q, old) {
 		t.Fatalf("old value changed:\n%+v\nwant\n%+v", q, old)
 	}
@@ -286,4 +286,9 @@ func TestQueueViolations(t *testing.T) {
 	contracttest.Panics(t, contract.InvariantKind, func() { twice.checked() })
 	both := Queue{waiting: []Question{qn(1)}, snoozed: map[Key]time.Time{qn(1).Key: t0}}
 	contracttest.Panics(t, contract.InvariantKind, func() { both.checked() })
+	over := Queue{waiting: make([]Question, MaxWaiting+1)}
+	for i := range over.waiting {
+		over.waiting[i] = qn(i)
+	}
+	contracttest.Panics(t, contract.InvariantKind, func() { over.checked() })
 }

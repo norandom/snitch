@@ -20,7 +20,7 @@ func TestQuestionLastWaitingShowsDropped(t *testing.T) {
 	for id := uint32(1); id <= ask.MaxWaiting; id++ { // answer until the last waiting one opens
 		s.do(Pressed{NoteID: id, Action: "allow"})
 		n := s.question()
-		s.do(Posted{Token: s.m.askToken, NoteID: id + 1})
+		s.do(posted{Token: s.m.askToken, NoteID: id + 1})
 		if id == ask.MaxWaiting && !strings.Contains(n.Body, "0 more waiting, 1 dropped") {
 			t.Fatalf("last waiting question: %q", n.Body)
 		}

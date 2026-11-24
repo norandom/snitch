@@ -27,11 +27,11 @@ import (
 
 // The reasons the real daemon puts on its state lines (examples/api.md "state").
 const (
-	ReasonEnded    = "trial ended by the operator: file removed"
-	ReasonKept     = "enforce kept"
-	ReasonUnkept   = "enforce unkept: file removed"
-	ReasonReloaded = "rules reloaded"
-	ReasonMode     = "mode set by the stand-in"
+	reasonEnded    = "trial ended by the operator: file removed"
+	reasonKept     = "enforce kept"
+	reasonUnkept   = "enforce unkept: file removed"
+	reasonReloaded = "rules reloaded"
+	reasonMode     = "mode set by the stand-in"
 )
 
 // Options are the stand-in's parameters. Operator is the uid that may write (root always
@@ -42,12 +42,12 @@ type Options struct {
 	Log      func(string)      // nil: the server's journal lines are dropped
 	Record   func(api.Request) // nil: none; called once per accepted rule edit
 	// ReloadAfter stands for the daemon's reload poll (up to 2 s): the delay between the reply
-	// to a rule edit and its rulesChanged state line. 0: DefaultReloadAfter.
+	// to a rule edit and its rulesChanged state line. 0: defaultReloadAfter.
 	ReloadAfter time.Duration
 }
 
-// DefaultReloadAfter is short so tests stay fast, yet long enough that the reply leaves first.
-const DefaultReloadAfter = 100 * time.Millisecond
+// defaultReloadAfter is short so tests stay fast, yet long enough that the reply leaves first.
+const defaultReloadAfter = 100 * time.Millisecond
 
 // StandIn is one stand-in daemon on one socket path. The facts are an immutable Status
 // swapped whole; fmu serialises the changes and guards the recorded edits.
@@ -80,7 +80,7 @@ func New(path string, o Options) (*StandIn, error) {
 		o.Log = func(string) {}
 	}
 	if o.ReloadAfter <= 0 {
-		o.ReloadAfter = DefaultReloadAfter
+		o.ReloadAfter = defaultReloadAfter
 	}
 	s := &StandIn{path: path, o: o, table: api.NewTable(o.Now)}
 	s.facts.Store(initial(o.Now()))
@@ -261,7 +261,7 @@ func (s *StandIn) ruleEdit(req api.Request, _ uint32) (string, error) {
 	if s.o.Record != nil {
 		s.o.Record(req)
 	}
-	s.later(s.o.ReloadAfter, func() { s.announce(s.Facts(), ReasonReloaded, true) })
+	s.later(s.o.ReloadAfter, func() { s.announce(s.Facts(), reasonReloaded, true) })
 	return Sentence(req), nil
 }
 

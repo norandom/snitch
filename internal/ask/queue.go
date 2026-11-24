@@ -1,6 +1,6 @@
 // queue.go: the waiting list of questions, an immutable value. At most one question is open,
 // at most MaxWaiting wait, the oldest first (5.5); an offer for a key that is open, waiting or
-// snoozed is ignored, and a settled question snoozes its key for Snooze unless the answer
+// snoozed is ignored, and a settled question snoozes its key for snooze unless the answer
 // failed to reach the daemon (5.4). The counts of waiting and dropped questions are what the
 // open notification shows (5.6).
 //
@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	// Snooze is how long a settled question's key does not ask again (5.4).
-	Snooze = 10 * time.Minute
+	// snooze is how long a settled question's key does not ask again (5.4).
+	snooze = 10 * time.Minute
 	// MaxWaiting is how many questions may wait behind the open one (5.5).
 	MaxWaiting = 32
 )
@@ -51,7 +51,7 @@ type Queue struct {
 }
 
 // Offer adds a question at the end of the waiting list unless its key is open, waiting or
-// snoozed at now. Snooze entries that have expired at now are removed. When the list is full,
+// snoozed at now. snooze entries that have expired at now are removed. When the list is full,
 // the oldest waiting question is dropped and counted.
 func (q Queue) Offer(x Question, now time.Time) Queue {
 	q.snoozed = unexpired(q.snoozed, now)
@@ -83,7 +83,7 @@ func (q Queue) Open() (Question, bool) {
 	return q.open, q.hasOpen
 }
 
-// Settle closes the open question. Answered and Unanswered snooze its key until now+Snooze;
+// Settle closes the open question. Answered and Unanswered snooze its key until now+snooze;
 // Failed does not. Settling without an open question is a programming error of the tray.
 func (q Queue) Settle(o Outcome, now time.Time) Queue {
 	contract.Require(q.hasOpen, "ask.Queue.Settle: no open question")
@@ -93,7 +93,7 @@ func (q Queue) Settle(o Outcome, now time.Time) Queue {
 		for k, t := range q.snoozed {
 			snoozed[k] = t
 		}
-		snoozed[q.open.Key] = now.Add(Snooze)
+		snoozed[q.open.Key] = now.Add(snooze)
 		q.snoozed = snoozed
 	}
 	q.open, q.hasOpen = Question{}, false

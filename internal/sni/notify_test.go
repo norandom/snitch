@@ -233,8 +233,8 @@ func TestCapabilitiesOnEveryChangeOfOwner(t *testing.T) {
 }
 
 // The composed tray through the delegates of tray.Effects — the literal compiles
-// only because they fit the fields: one Show paints the title and the menu from
-// one value (3.6), and Remove releases the item's name (its postcondition).
+// only because they fit the fields: one show paints the title and the menu from
+// one value (3.6), and remove releases the item's name (its postcondition).
 func TestTrayThroughItsEffectsShowsAndRemoves(t *testing.T) {
 	addr := privateBus(t)
 	b, tr, _, _ := trayOn(t, addr)
@@ -254,8 +254,8 @@ func TestTrayThroughItsEffectsShowsAndRemoves(t *testing.T) {
 		t.Fatalf("item title = %q, want %q", s, v.Title)
 	}
 	tr.Remove()
-	if _, ok, err := b.Owner(tr.item.name); ok || err != nil {
-		t.Fatalf("after Remove the item name still has an owner")
+	if _, ok, err := b.owner(tr.item.name); ok || err != nil {
+		t.Fatalf("after remove the item name still has an owner")
 	}
 }
 
@@ -275,7 +275,7 @@ func TestTrayJobEndsWithTheLostBus(t *testing.T) {
 	}
 }
 
-// Tray's input bugs are contract violations like Item's and Menu's (the service interface).
+// Tray's input bugs are contract violations like item's and menu's (the service interface).
 func TestTrayConstructorContracts(t *testing.T) {
 	privateBus(t)
 	b := openBus(t)

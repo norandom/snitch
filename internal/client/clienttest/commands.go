@@ -34,7 +34,7 @@ func (s *StandIn) SetMode(mode string) {
 		if mode == "monitor" {
 			st.Trial, st.Kept = "", false
 		}
-	}), ReasonMode, false)
+	}), reasonMode, false)
 }
 
 // StartTrial enforces until now+d; the reason carries the deadline in local time, as the
@@ -47,35 +47,35 @@ func (s *StandIn) StartTrial(d time.Duration) {
 	}), "trial until "+end.Local().Format(time.RFC3339), false)
 }
 
-// EndTrial is the operator's end: monitor, no trial, nothing kept.
-func (s *StandIn) EndTrial() {
+// endTrial is the operator's end: monitor, no trial, nothing kept.
+func (s *StandIn) endTrial() {
 	s.announce(s.change(func(st *api.Status) {
 		st.Mode, st.Trial, st.Kept = "monitor", "", false
-	}), ReasonEnded, false)
+	}), reasonEnded, false)
 }
 
-// Keep keeps enforce.
-func (s *StandIn) Keep() {
-	s.announce(s.change(func(st *api.Status) { st.Mode, st.Kept = "enforce", true }), ReasonKept, false)
+// keep keeps enforce.
+func (s *StandIn) keep() {
+	s.announce(s.change(func(st *api.Status) { st.Mode, st.Kept = "enforce", true }), reasonKept, false)
 }
 
-// Unkeep drops kept enforce: monitor unless a trial still runs.
-func (s *StandIn) Unkeep() {
+// unkeep drops kept enforce: monitor unless a trial still runs.
+func (s *StandIn) unkeep() {
 	s.announce(s.change(func(st *api.Status) {
 		st.Kept, st.Mode = false, "monitor"
 		if st.Trial != "" {
 			st.Mode = "enforce"
 		}
-	}), ReasonUnkept, false)
+	}), reasonUnkept, false)
 }
 
-// SetKill, SetRulesError and SetLearning change the status only: the real daemon sends no
+// SetKill, setRulesError and SetLearning change the status only: the real daemon sends no
 // state line for them. An empty text clears the rules error.
 func (s *StandIn) SetKill(on bool) { s.change(func(st *api.Status) { st.Kill = on }) }
 
 func (s *StandIn) SetLearning(on bool) { s.change(func(st *api.Status) { st.Learning = on }) }
 
-func (s *StandIn) SetRulesError(text string) {
+func (s *StandIn) setRulesError(text string) {
 	if text != "" {
 		text = s.o.Now().UTC().Format(time.RFC3339) + ": " + text
 	}
@@ -92,9 +92,9 @@ type command func(s *StandIn, args []string) error
 var commands = map[string]command{
 	"mode":     cmdMode,
 	"trial":    cmdTrial,
-	"end":      noArgs((*StandIn).EndTrial),
-	"keep":     noArgs((*StandIn).Keep),
-	"unkeep":   noArgs((*StandIn).Unkeep),
+	"end":      noArgs((*StandIn).endTrial),
+	"keep":     noArgs((*StandIn).keep),
+	"unkeep":   noArgs((*StandIn).unkeep),
 	"kill":     onOff((*StandIn).SetKill),
 	"learning": onOff((*StandIn).SetLearning),
 	"refuse":   onOff((*StandIn).Refuse),
@@ -168,7 +168,7 @@ func cmdError(s *StandIn, args []string) error {
 	if text == "none" {
 		text = ""
 	}
-	s.SetRulesError(text)
+	s.setRulesError(text)
 	return nil
 }
 

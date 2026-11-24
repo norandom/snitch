@@ -40,9 +40,9 @@ const (
 	rowCheckmark   = "checkmark" // the value of toggle-type on a check row
 )
 
-// Menu is the dbusmenu object of the tray: the last shown view's rows with the
+// menu is the dbusmenu object of the tray: the last shown view's rows with the
 // revision they were set at. The loop writes; the hosts read.
-type Menu struct {
+type menu struct {
 	bus   *Bus
 	sink  func(any) // where a click arrives as tray.MenuClick
 	log   func(string)
@@ -50,21 +50,21 @@ type Menu struct {
 	state atomic.Pointer[menuState]
 }
 
-// menuState is one immutable picture of Show's last write; an atomic pointer
+// menuState is one immutable picture of show's last write; an atomic pointer
 // to it is the whole sharing between the loop's writes and the hosts' reads.
 type menuState struct {
 	rows     []tray.Row
 	revision uint32
 }
 
-// Menu puts the flat menu object on the bus at menuPath. The sink is where a
+// menu puts the flat menu object on the bus at menuPath. The sink is where a
 // click on an enabled row arrives as tray.MenuClick — the sink the loop reads,
 // which 4.4 wires through — and the log speaks emission trouble on a dead bus.
-func (b *Bus) Menu(sink func(any), log func(string)) (*Menu, error) {
-	contract.Require(b != nil && b.conn != nil, "sni: Menu on a nil bus")
-	contract.Require(!b.closed.Load(), "sni: Menu on a closed bus")
-	contract.Require(sink != nil, "sni: Menu needs a sink for the clicks")
-	contract.Require(log != nil, "sni: Menu needs a log delegate")
+func (b *Bus) menu(sink func(any), log func(string)) (*menu, error) {
+	contract.Require(b != nil && b.conn != nil, "sni: menu on a nil bus")
+	contract.Require(!b.closed.Load(), "sni: menu on a closed bus")
+	contract.Require(sink != nil, "sni: menu needs a sink for the clicks")
+	contract.Require(log != nil, "sni: menu needs a log delegate")
 	p, err := prop.Export(b.conn, menuPath, prop.Map{menuIface: {
 		"Version":       {Value: menuVersion, Emit: prop.EmitFalse},
 		"Status":        {Value: menuStatus, Emit: prop.EmitFalse},
@@ -73,7 +73,7 @@ func (b *Bus) Menu(sink func(any), log func(string)) (*Menu, error) {
 	if err != nil {
 		return nil, fmt.Errorf("export the menu properties: %w", err)
 	}
-	m := &Menu{bus: b, sink: sink, log: log, props: p}
+	m := &menu{bus: b, sink: sink, log: log, props: p}
 	m.state.Store(&menuState{})
 	if err := b.conn.Export(menuMethods{m}, menuPath, menuIface); err != nil {
 		return nil, fmt.Errorf("export the menu methods: %w", err)
@@ -81,11 +81,11 @@ func (b *Bus) Menu(sink func(any), log func(string)) (*Menu, error) {
 	return m, nil
 }
 
-// Show is the menu's write path: a view whose rows differ from the last shown
+// show is the menu's write path: a view whose rows differ from the last shown
 // ones replace them, bump the revision and announce the layout with the root as
 // parent; a repeated row set announces nothing, like the item's repeated view.
-// The icon and the rows of one view never disagree (3.6): one Show feeds both.
-func (m *Menu) Show(v tray.View) {
+// The icon and the rows of one view never disagree (3.6): one show feeds both.
+func (m *menu) show(v tray.View) {
 	before := m.state.Load()
 	if slices.Equal(before.rows, v.Menu) {
 		return
@@ -97,7 +97,7 @@ func (m *Menu) Show(v tray.View) {
 
 // signal emits one signal of the menu, fire and forget like the item's; a dead
 // bus is spoken, not hidden.
-func (m *Menu) signal(name string, body ...any) {
+func (m *menu) signal(name string, body ...any) {
 	if err := m.bus.conn.Emit(menuPath, name, body...); err != nil {
 		m.log("tray menu: emit " + name + ": " + err.Error())
 	}
@@ -105,7 +105,7 @@ func (m *Menu) signal(name string, body ...any) {
 
 // menuMethods is the callable side of the menu: the seven methods as the
 // shipped dbusmenu implementations describe them — the types are the letters.
-type menuMethods struct{ m *Menu }
+type menuMethods struct{ m *menu }
 
 // menuLayout is the wire tuple (ia{sv}av): an id, its properties and its
 // children. The menu is flat, so only the root ever has children.
@@ -212,7 +212,7 @@ func (x menuMethods) EventGroup(events []menuEvent) ([]int32, *dbus.Error) {
 }
 
 // click routes one event and reports whether the menu knows the row at all.
-func (m *Menu) click(st *menuState, id int32, name string) (known bool) {
+func (m *menu) click(st *menuState, id int32, name string) (known bool) {
 	i := rowIndex(st.rows, id)
 	if i < 0 {
 		return false
@@ -224,7 +224,7 @@ func (m *Menu) click(st *menuState, id int32, name string) (known bool) {
 	return true
 }
 
-// AboutToShow: the layout of this menu is always current, because Show
+// AboutToShow: the layout of this menu is always current, because show
 // announces every change, so no relayout is ever needed, whatever the id.
 func (x menuMethods) AboutToShow(id int32) (bool, *dbus.Error) {
 	return false, nil

@@ -1,7 +1,7 @@
 // item_test.go: the tray item and its registration (requirements 1.1, 1.3, 2.3)
 // on a private dbus-daemon with the fake watcher recording the calls: no
 // t.Parallel (t.Setenv owns the bus address). Registration at start and after
-// restarts, attention signals, values, the property set, Remove, the lost bus.
+// restarts, attention signals, values, the property set, remove, the lost bus.
 package sni
 
 import (
@@ -33,7 +33,7 @@ func view(s tray.State) tray.View {
 // showItem is the item on the private bus with a subscriber at its signals. The
 // ownership signals of the bus reach that channel too (godbus posts every
 // matched message to every channel), so the collectors pick by name.
-func showItem(t *testing.T) (*Item, <-chan *dbus.Signal) {
+func showItem(t *testing.T) (*item, <-chan *dbus.Signal) {
 	addr := privateBus(t)
 	b := openBus(t)
 	it := newItem(t, b)
@@ -50,9 +50,9 @@ func showItem(t *testing.T) (*Item, <-chan *dbus.Signal) {
 }
 
 // newItem builds the item with a quiet log delegate.
-func newItem(t *testing.T, b *Bus) *Item {
+func newItem(t *testing.T, b *Bus) *item {
 	t.Helper()
-	it, err := b.Item(func(string) {})
+	it, err := b.item(func(string) {})
 	if err != nil {
 		t.Fatalf("Item: %v", err)
 	}
@@ -60,12 +60,12 @@ func newItem(t *testing.T, b *Bus) *Item {
 }
 
 // watchItem runs the item's signal handling, cancelled at cleanup.
-func watchItem(t *testing.T, it *Item) <-chan error {
+func watchItem(t *testing.T, it *item) <-chan error {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	errc := make(chan error, 1)
-	go func() { errc <- it.Watch(ctx) }()
+	go func() { errc <- it.watch(ctx) }()
 	return errc
 }
 
@@ -170,13 +170,13 @@ func TestItemRegistersAndRegistersAgainAfterRestarts(t *testing.T) {
 	}
 }
 
-// Show announces each changed property with the item signals; a repeated view
+// show announces each changed property with the item signals; a repeated view
 // announces nothing; an attention view puts NeedsAttention on NewStatus (2.3).
 func TestItemShowSignalsWhatChanged(t *testing.T) {
 	it, ch := showItem(t)
-	it.Show(view(tray.Monitor))
+	it.show(view(tray.Monitor))
 	wantTheSix(t, ch)
-	it.Show(view(tray.Monitor)) // nothing changes: no signal at all
+	it.show(view(tray.Monitor)) // nothing changes: no signal at all
 	select {
 	case s := <-ch:
 		if itemSignal(s) {
@@ -184,7 +184,7 @@ func TestItemShowSignalsWhatChanged(t *testing.T) {
 		}
 	case <-time.After(150 * time.Millisecond):
 	}
-	it.Show(view(tray.Gone))
+	it.show(view(tray.Gone))
 	sigs := wantTheSix(t, ch)
 	if s, _ := bodyOf(t, sigs, itemIface+".NewStatus")[0].(string); s != statusNeedsAttention {
 		t.Fatalf("NewStatus = %q, want %q", s, statusNeedsAttention)
@@ -196,9 +196,9 @@ func TestItemShowSignalsWhatChanged(t *testing.T) {
 func TestItemShowCarriesTheChangedPropertyValues(t *testing.T) {
 	it, ch := showItem(t)
 	gone := view(tray.Gone)
-	it.Show(view(tray.Monitor))
+	it.show(view(tray.Monitor))
 	collectSignals(t, ch, 6)
-	it.Show(gone)
+	it.show(gone)
 	pc := bodyOf(t, collectSignals(t, ch, 6), pcChanged)
 	m, ok := pc[1].(map[string]dbus.Variant)
 	if !ok || len(m) != 5 {
@@ -223,7 +223,7 @@ func TestItemAnswersThePropertiesOfTheView(t *testing.T) {
 	b := openBus(t)
 	it := newItem(t, b)
 	gone := view(tray.Gone)
-	it.Show(gone)
+	it.show(gone)
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 	var all map[string]dbus.Variant
@@ -249,7 +249,7 @@ func TestItemAnswersThePropertiesOfTheView(t *testing.T) {
 	}
 }
 
-// Remove releases the item's bus name: the bus owns none of it and the
+// remove releases the item's bus name: the bus owns none of it and the
 // watcher, which tracks lost names as kded6 does, keeps no registration of it
 // (the postcondition for 1.4).
 func TestItemRemoveReleasesTheNameAndTheWatcherDropsIt(t *testing.T) {
@@ -258,13 +258,13 @@ func TestItemRemoveReleasesTheNameAndTheWatcherDropsIt(t *testing.T) {
 	b := openBus(t)
 	it := newItem(t, b)
 	waitUntil(t, func() bool { return len(w.Registrations()) == 1 }, "no registration at start")
-	if _, ok, err := b.Owner(it.name); !ok || err != nil {
+	if _, ok, err := b.owner(it.name); !ok || err != nil {
 		t.Fatalf("the item name is not owned: %v %v", ok, err)
 	}
-	it.Remove()
-	it.Remove() // twice is harmless: remove sits in defers and on several exit paths
-	if _, ok, err := b.Owner(it.name); ok || err != nil {
-		t.Fatalf("after Remove the name still has an owner: %v %v", ok, err)
+	it.remove()
+	it.remove() // twice is harmless: remove sits in defers and on several exit paths
+	if _, ok, err := b.owner(it.name); ok || err != nil {
+		t.Fatalf("after remove the name still has an owner: %v %v", ok, err)
 	}
 	waitUntil(t, func() bool { return len(w.Items()) == 0 }, "the watcher kept the item")
 }
@@ -279,10 +279,10 @@ func TestItemWatchReportsTheLostBusAsAnError(t *testing.T) {
 	select {
 	case err := <-errc:
 		if !errors.Is(err, ErrBusLost) {
-			t.Fatalf("Watch = %v, want the lost-bus error", err)
+			t.Fatalf("watch = %v, want the lost-bus error", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("Watch did not end when the bus was lost")
+		t.Fatal("watch did not end when the bus was lost")
 	}
 }
 
@@ -292,9 +292,9 @@ func TestItemConstructorContracts(t *testing.T) {
 	privateBus(t)
 	b := openBus(t)
 	var nilBus *Bus
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = nilBus.Item(func(string) {}) })
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.Item(nil) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = nilBus.item(func(string) {}) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.item(nil) })
 	b.Close()
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.Item(func(string) {}) })
-	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.WatchOwner(InstanceName) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.item(func(string) {}) })
+	contracttest.Panics(t, contract.Precondition, func() { _, _ = b.watchOwner(instanceName) })
 }

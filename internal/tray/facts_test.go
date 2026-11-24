@@ -13,18 +13,18 @@ import (
 )
 
 // step runs one message and checks the effect list ends with the view of the new model.
-func step(t *testing.T, m Model, msg any, at time.Time) (Model, []Post) {
+func step(t *testing.T, m Model, msg any, at time.Time) (Model, []post) {
 	t.Helper()
 	m2, fx := Update(m, msg, at)
 	if len(fx) == 0 {
 		t.Fatalf("%T: no effects, want a show last", msg)
 	}
-	if show, ok := fx[len(fx)-1].(Show); !ok || !reflect.DeepEqual(show.View, Render(m2, at)) {
+	if show, ok := fx[len(fx)-1].(show); !ok || !reflect.DeepEqual(show.View, Render(m2, at)) {
 		t.Fatalf("%T: last effect %#v is not the new view", msg, fx[len(fx)-1])
 	}
-	var posts []Post
+	var posts []post
 	for _, e := range fx[:len(fx)-1] {
-		p, ok := e.(Post)
+		p, ok := e.(post)
 		if !ok {
 			t.Fatalf("%T: unexpected effect %#v", msg, e)
 		}
@@ -47,7 +47,7 @@ func started(t *testing.T, st api.Status) Model {
 }
 
 // one asserts exactly one notice and returns it.
-func one(t *testing.T, what string, posts []Post) Note {
+func one(t *testing.T, what string, posts []post) Note {
 	t.Helper()
 	if len(posts) != 1 {
 		t.Fatalf("%s: %d notices, want 1: %+v", what, len(posts), posts)
@@ -56,7 +56,7 @@ func one(t *testing.T, what string, posts []Post) Note {
 }
 
 // none asserts no notice.
-func none(t *testing.T, what string, posts []Post) {
+func none(t *testing.T, what string, posts []post) {
 	t.Helper()
 	if len(posts) != 0 {
 		t.Fatalf("%s: unexpected notices %+v", what, posts)
@@ -264,7 +264,7 @@ func TestGoneAtStartNoNotice(t *testing.T) {
 // Messages that concern nothing the model holds (an event that asks nothing, an answer and a
 // press without a question, capabilities as they are, a menu row that shows a fact) pass
 // through unchanged, with a view. Stop is no longer one of them: it ends the tray with the
-// Quit effect (1.4, run_test.go).
+// quit effect (1.4, run_test.go).
 func TestFactsPassThrough(t *testing.T) {
 	m := started(t, running())
 	for _, msg := range []any{client.EventLine{}, client.Answered{Token: 3}, Pressed{NoteID: 1},
@@ -283,4 +283,16 @@ func TestFactsUnknownMessageViolation(t *testing.T) {
 	contracttest.Panics(t, contract.Precondition, func() { Update(m, struct{}{}, now) })
 	contracttest.Panics(t, contract.Precondition, func() { Update(m, nil, now) })
 	contracttest.Panics(t, contract.Precondition, func() { Update(m, "tick", now) })
+}
+
+// unknownClientMsg embeds a client message, so the promoted isMsg makes it a
+// client.Msg without being one of the six types fromDaemon knows — exactly what
+// a new client message type without tray support looks like from Update's side.
+type unknownClientMsg struct{ client.Down }
+
+// Precondition: a client message the update does not know is a wiring error,
+// the second guard of update.go (its default branch, reached here).
+func TestFactsUnknownClientMessageViolation(t *testing.T) {
+	m := NewModel(Options{Loc: zone})
+	contracttest.Panics(t, contract.Precondition, func() { Update(m, unknownClientMsg{}, now) })
 }

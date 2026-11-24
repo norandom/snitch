@@ -1,5 +1,5 @@
 // discard_test.go: the closing, timing out, discarding and pausing rules of 3.4 as message
-// scripts with a fake time, through sc.do (questions_test.go), so every Send of these scripts is
+// scripts with a fake time, through sc.do (questions_test.go), so every send of these scripts is
 // counted by TestMain as well (only rule.add, 6.12, 8.1). None of these paths may send at all.
 package tray
 
@@ -172,7 +172,7 @@ func TestPauseInFlight(t *testing.T) {
 	s.do(to("1.1.1.1"))
 	tok := s.m.askToken
 	s.do(MenuClick{Row: RowPause}).quiet("pause in flight")
-	s.do(Posted{Token: tok, NoteID: 7}).quiet("posted while paused", 7)
+	s.do(posted{Token: tok, NoteID: 7}).quiet("posted while paused", 7)
 	if s.m.openNote != 0 || s.m.askToken != 0 {
 		t.Fatalf("posted while paused: openNote %d askToken %d", s.m.openNote, s.m.askToken)
 	}

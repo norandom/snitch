@@ -50,7 +50,7 @@ func facts(m Model, st api.Status) (Model, []any) {
 	}
 	m.facts = &st
 	m.gone, m.down, m.goneSince, m.goneNoticed = false, "", time.Time{}, false
-	return post(m, notes)
+	return postNotices(m, notes)
 }
 
 // stateLine updates mode, trial and kept at once on a copy of the facts and notices the
@@ -64,7 +64,7 @@ func stateLine(m Model, s api.State) (Model, []any) {
 	st.Mode, st.Trial, st.Kept = s.Mode, s.Trial, s.Kept
 	notes := changes(*m.facts, st, s.Reason, m.loc)
 	m.facts = &st
-	return post(m, notes)
+	return postNotices(m, notes)
 }
 
 // goneTick notices a loss once when it has lasted 10 s (7.6).
@@ -73,7 +73,7 @@ func goneTick(m Model, now time.Time) (Model, []any) {
 		return m, nil
 	}
 	m.goneNoticed = true
-	return post(m, []Note{noteGone(m.down, m.goneSince, m.loc)})
+	return postNotices(m, []Note{noteGone(m.down, m.goneSince, m.loc)})
 }
 
 // changes are the notices between two facts: the mode's, then kill switch and rules error.
@@ -110,10 +110,10 @@ func modeChange(old, cur api.Status, reason string, loc *time.Location) (Note, b
 	return Note{}, false
 }
 
-// post turns notices into Post effects, each under a fresh token remembered as a notice's
-// until its Posted or PostFailed (a question's token is askToken, questions.go). Without a
+// postNotices turns notices into post effects, each under a fresh token remembered as a notice's
+// until its posted or postFailed (a question's token is askToken, questions.go). Without a
 // notification service nothing is posted (8.6): the view still shows the state.
-func post(m Model, notes []Note) (Model, []any) {
+func postNotices(m Model, notes []Note) (Model, []any) {
 	if len(notes) == 0 || !m.canNotify {
 		return m, nil
 	}
@@ -125,7 +125,7 @@ func post(m Model, notes []Note) (Model, []any) {
 	for _, n := range notes {
 		m.nextToken++
 		posting[m.nextToken] = true
-		fx = append(fx, Post{Token: m.nextToken, Note: n})
+		fx = append(fx, post{Token: m.nextToken, Note: n})
 	}
 	m.posting = posting
 	return m, fx
@@ -133,7 +133,7 @@ func post(m Model, notes []Note) (Model, []any) {
 
 // noticePosted records a notice's note id until its Closed; a token that is no notice's
 // is left for the questions (3.3).
-func noticePosted(m Model, p Posted) Model {
+func noticePosted(m Model, p posted) Model {
 	if !m.posting[p.Token] {
 		return m
 	}

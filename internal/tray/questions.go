@@ -13,7 +13,7 @@
 //     unanswerable one, or one posted without buttons), judged by openActs at post time and not
 //     by the capabilities at press time: a forged ActionInvoked never writes (6.9, 6.5).
 //
-// Fail-safe implications: Send is issued only here, only on an explicit Allow or Block for the
+// Fail-safe implications: send is issued only here, only on an explicit Allow or Block for the
 // open question's note, and its request is always ask.RuleFor's rule.add (6.12, 8.1); the tray
 // itself writes nothing. ask.From never asks about the local network (fail-safe 2).
 package tray
@@ -54,11 +54,11 @@ func askNext(m Model) (Model, []any) {
 	m.askToken = m.nextToken
 	n := noteQuestion(q, st.Waiting-1, st.Dropped, m.writer && m.canAct, m.writer)
 	m.openActs = len(n.Actions) > 0
-	return m, []any{Post{Token: m.askToken, Note: n}}
+	return m, []any{post{Token: m.askToken, Note: n}}
 }
 
 // postedID takes a note id: the open question's, or a notice's.
-func postedID(m Model, p Posted, now time.Time) Model {
+func postedID(m Model, p posted, now time.Time) Model {
 	if p.Token != m.askToken || m.askToken == 0 {
 		return noticePosted(m, p)
 	}
@@ -66,9 +66,9 @@ func postedID(m Model, p Posted, now time.Time) Model {
 	return m
 }
 
-// postFailed settles a question whose note could not be posted as failed (no snooze, so it may
+// postFailedNote settles a question whose note could not be posted as failed (no snooze, so it may
 // ask again) and posts the next; a notice's token is only forgotten.
-func postFailed(m Model, p PostFailed, now time.Time) (Model, []any) {
+func postFailedNote(m Model, p postFailed, now time.Time) (Model, []any) {
 	if p.Token != m.askToken || m.askToken == 0 {
 		return noticeSettled(m, p.Token), nil
 	}
@@ -86,7 +86,7 @@ func pressed(m Model, p Pressed, now time.Time) (Model, []any) {
 		return m, nil
 	}
 	m.nextToken++
-	fx := []any{Retract{NoteID: m.openNote}, Send{Token: m.nextToken, Req: ask.RuleFor(q, a, now)}}
+	fx := []any{retract{NoteID: m.openNote}, send{Token: m.nextToken, Req: ask.RuleFor(q, a, now)}}
 	pending := make(map[uint64]ask.Key, len(m.pending)+1)
 	for k, v := range m.pending {
 		pending[k] = v
@@ -114,13 +114,13 @@ func answered(m Model, a client.Answered) (Model, []any) {
 	}
 	m.pending = pending
 	if a.Err == "" {
-		return post(m, []Note{noteRuleAdded(a.Text)})
+		return postNotices(m, []Note{noteRuleAdded(a.Text)})
 	}
 	m.queue = m.queue.Forget(key)
 	if a.Role {
 		m.writer = false
 	}
-	return post(m, []Note{noteRuleFailed(a.Err)})
+	return postNotices(m, []Note{noteRuleFailed(a.Err)})
 }
 
 // capabilities records what the notification service can do (8.6).

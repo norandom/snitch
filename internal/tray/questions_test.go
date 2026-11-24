@@ -1,5 +1,5 @@
 // questions_test.go: the question rules of 3.3 as message scripts with a fake time. Every
-// script runs through sc.do, which records every Send's request type (TestMain: only rule.add,
+// script runs through sc.do, which records every send's request type (TestMain: only rule.add,
 // 6.12, 8.1) and asserts that at most one note with actions is in flight or shown at a time.
 package tray
 
@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	sentTypes  = map[string]int{} // the request type of every Send of any script of the package
+	sentTypes  = map[string]int{} // the request type of every send of any script of the package
 	writerCaps = Capabilities{Available: true, Actions: true}
 	allowBlock = []Action{{Key: "allow", Label: "Allow"}, {Key: "block", Label: "Block"}}
 )
@@ -38,9 +38,9 @@ type sc struct {
 	at       time.Time
 	asking   map[uint64]bool
 	live     map[uint32]bool
-	posts    []Post
-	sends    []Send
-	retracts []Retract
+	posts    []post
+	sends    []send
+	retracts []retract
 }
 
 // script is a writer's or reader's tray with a notification service and the first facts.
@@ -50,22 +50,22 @@ func script(t *testing.T, writer bool, caps Capabilities) *sc {
 	return s.do(caps).do(client.Up{}).do(client.Facts{Status: running()})
 }
 
-// do runs one message and sorts its effects; a Show must come last.
+// do runs one message and sorts its effects; a show must come last.
 func (s *sc) do(msg any) *sc {
 	s.t.Helper()
 	m, fx := Update(s.m, msg, s.at)
-	if show, ok := fx[len(fx)-1].(Show); !ok || !reflect.DeepEqual(show.View, Render(m, s.at)) {
+	if show, ok := fx[len(fx)-1].(show); !ok || !reflect.DeepEqual(show.View, Render(m, s.at)) {
 		s.t.Fatalf("%T: last effect is not the new view", msg)
 	}
 	s.posts, s.sends, s.retracts = nil, nil, nil
 	for _, e := range fx[:len(fx)-1] {
 		switch v := e.(type) {
-		case Post:
+		case post:
 			s.posts = append(s.posts, v)
-		case Send:
+		case send:
 			sentTypes[v.Req.Type]++
 			s.sends = append(s.sends, v)
-		case Retract:
+		case retract:
 			s.retracts = append(s.retracts, v)
 		default:
 			s.t.Fatalf("%T: unexpected effect %#v", msg, e)
@@ -79,12 +79,12 @@ func (s *sc) do(msg any) *sc {
 // track follows the notes with actions and asserts that at most one is in flight or shown.
 func (s *sc) track(msg any) {
 	switch v := msg.(type) {
-	case Posted:
+	case posted:
 		if s.asking[v.Token] {
 			delete(s.asking, v.Token)
 			s.live[v.NoteID] = true
 		}
-	case PostFailed:
+	case postFailed:
 		delete(s.asking, v.Token)
 	case Closed:
 		delete(s.live, v.NoteID)
@@ -127,7 +127,7 @@ func (s *sc) question() Note {
 func (s *sc) shown(e client.EventLine, id uint32) Note {
 	s.t.Helper()
 	n := s.do(e).question()
-	s.do(Posted{Token: s.m.askToken, NoteID: id})
+	s.do(posted{Token: s.m.askToken, NoteID: id})
 	if s.m.openNote != id || !s.m.openSince.Equal(s.at) || s.m.askToken != 0 {
 		s.t.Fatalf("posted: openNote %d since %v askToken %d", s.m.openNote, s.m.openSince, s.m.askToken)
 	}
@@ -196,7 +196,7 @@ func TestQuestionOneAtATimeCounts(t *testing.T) {
 func TestQuestionPostFailed(t *testing.T) {
 	s := script(t, true, writerCaps)
 	s.do(to("1.1.1.1")).do(to("2.2.2.2"))
-	s.do(PostFailed{Token: s.m.askToken})
+	s.do(postFailed{Token: s.m.askToken})
 	has(t, s.question().Body, "2.2.2.2")
 	if s.do(to("1.1.1.1")); s.m.queue.Stats().Waiting != 1 {
 		t.Fatal("the failed question was snoozed")
@@ -211,8 +211,8 @@ func TestAnswerSendsRule(t *testing.T) {
 		q, _ := s.m.queue.Open()
 		tok := s.m.nextToken + 1
 		s.do(Pressed{NoteID: 5, Action: action})
-		want := Send{Token: tok, Req: ask.RuleFor(q, a, s.at)}
-		if !reflect.DeepEqual(s.sends, []Send{want}) || !reflect.DeepEqual(s.retracts, []Retract{{NoteID: 5}}) ||
+		want := send{Token: tok, Req: ask.RuleFor(q, a, s.at)}
+		if !reflect.DeepEqual(s.sends, []send{want}) || !reflect.DeepEqual(s.retracts, []retract{{NoteID: 5}}) ||
 			s.m.pending[tok] != q.Key || s.m.openNote != 0 {
 			t.Fatalf("%s: sends %+v retracts %+v pending %v openNote %d", action, s.sends, s.retracts, s.m.pending, s.m.openNote)
 		}
@@ -228,7 +228,7 @@ func TestAnswerOtherNoteIgnored(t *testing.T) {
 	for i, p := range []Pressed{{NoteID: 0, Action: "allow"}, {NoteID: 5, Action: "allow"}, // not posted yet
 		{NoteID: 99, Action: "allow"}, {NoteID: 5, Action: "default"}, {NoteID: 5}} {
 		if i == 2 {
-			s.do(Posted{Token: s.m.askToken, NoteID: 5})
+			s.do(posted{Token: s.m.askToken, NoteID: 5})
 		}
 		if s.do(p); len(s.sends)+len(s.retracts) != 0 || (s.m.openNote == 5) != (i >= 2) {
 			t.Fatalf("%+v wrote: %+v %+v", p, s.sends, s.retracts)

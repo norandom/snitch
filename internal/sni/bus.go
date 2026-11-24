@@ -20,15 +20,15 @@ import (
 	"github.com/norandom/snitch/internal/contract"
 )
 
-// InstanceName is the well-known name one tray per session owns (research.md, "single
+// instanceName is the well-known name one tray per session owns (research.md, "single
 // instance by a bus name"). The bus daemon drops it when the process dies.
-const InstanceName = "io.github.norandom.snitch.Tray"
+const instanceName = "io.github.norandom.snitch.Tray"
 
 // callTimeout bounds every call on the bus, so a wedged session bus cannot hang the tray.
 const callTimeout = 2 * time.Second
 
-// ErrNoSession is wrapped by Open's error when no session bus is reachable.
-var ErrNoSession = errors.New("no desktop session")
+// errNoSession is wrapped by Open's error when no session bus is reachable.
+var errNoSession = errors.New("no desktop session")
 
 // Bus is a private connection to the session bus, owned by this process.
 type Bus struct {
@@ -67,7 +67,7 @@ func handshake(conn *dbus.Conn, limit time.Duration) error {
 }
 
 func noSession(err error) error {
-	return fmt.Errorf("%w (session bus: %v)", ErrNoSession, err)
+	return fmt.Errorf("%w (session bus: %v)", errNoSession, err)
 }
 
 // Claim requests the instance name without queueing. When another tray owns it, the error
@@ -76,9 +76,9 @@ func (b *Bus) Claim() error {
 	contract.Require(b != nil && b.conn != nil, "sni: Claim on a nil bus")
 	contract.Require(!b.closed.Load(), "sni: Claim on a closed bus")
 	var reply uint32
-	err := b.call("org.freedesktop.DBus.RequestName", InstanceName, uint32(dbus.NameFlagDoNotQueue)).Store(&reply)
+	err := b.call("org.freedesktop.DBus.RequestName", instanceName, uint32(dbus.NameFlagDoNotQueue)).Store(&reply)
 	if err != nil {
-		return fmt.Errorf("claim %s: %w", InstanceName, err)
+		return fmt.Errorf("claim %s: %w", instanceName, err)
 	}
 	switch dbus.RequestNameReply(reply) {
 	case dbus.RequestNameReplyPrimaryOwner, dbus.RequestNameReplyAlreadyOwner:
@@ -88,14 +88,14 @@ func (b *Bus) Claim() error {
 	default:
 		// DoNotQueue never yields InQueue; any other reply is the bus daemon's bug, and the
 		// tray must not run without the name, so it is an error, not a violation.
-		return fmt.Errorf("claim %s: unexpected reply %v", InstanceName, dbus.RequestNameReply(reply))
+		return fmt.Errorf("claim %s: unexpected reply %v", instanceName, dbus.RequestNameReply(reply))
 	}
 }
 
 // running names the owner of the instance name by its pid.
 func (b *Bus) running() error {
 	var pid uint32
-	err := b.call("org.freedesktop.DBus.GetConnectionUnixProcessID", InstanceName).Store(&pid)
+	err := b.call("org.freedesktop.DBus.GetConnectionUnixProcessID", instanceName).Store(&pid)
 	if err != nil {
 		// The owner may have exited between the two calls; the refusal still stands.
 		return fmt.Errorf("already running (pid unknown: %v)", err)
@@ -119,12 +119,12 @@ func (b *Bus) Close() {
 	_ = b.conn.Close()
 }
 
-// Owner answers who owns the well-known name right now. An absent name is a
+// owner answers who owns the well-known name right now. An absent name is a
 // normal state of a session (no system tray yet, no notification service), not
-// an error; only a transport failure is. This and WatchOwner are the whole name
+// an error; only a transport failure is. This and watchOwner are the whole name
 // owner facility: the item watches the tray watcher with it (4.2) and the
 // notifications side watches its service the same way (4.4).
-func (b *Bus) Owner(name string) (owner string, owned bool, err error) {
+func (b *Bus) owner(name string) (owner string, owned bool, err error) {
 	var who string
 	err = b.call("org.freedesktop.DBus.GetNameOwner", name).Store(&who)
 	if err == nil {
@@ -137,14 +137,14 @@ func (b *Bus) Owner(name string) (owner string, owned bool, err error) {
 	return "", false, fmt.Errorf("owner of %s: %w", name, err)
 }
 
-// WatchOwner reports every ownership change of the well-known name on the
+// watchOwner reports every ownership change of the well-known name on the
 // returned channel: the new owner's unique name, or the empty string when the
 // name was released. The channel closes when this connection loses the bus, so
 // a watcher loop reads it until the bus is gone. The NameOwnerChanged delivery
 // is the bus daemon's own signal, so nothing here polls.
-func (b *Bus) WatchOwner(name string) (<-chan string, error) {
-	contract.Require(b != nil && b.conn != nil, "sni: WatchOwner on a nil bus")
-	contract.Require(!b.closed.Load(), "sni: WatchOwner on a closed bus")
+func (b *Bus) watchOwner(name string) (<-chan string, error) {
+	contract.Require(b != nil && b.conn != nil, "sni: watchOwner on a nil bus")
+	contract.Require(!b.closed.Load(), "sni: watchOwner on a closed bus")
 	in := make(chan *dbus.Signal, 16)
 	b.conn.Signal(in)
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)

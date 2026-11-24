@@ -138,15 +138,20 @@ cmd/snitch/
 ├── main.go            # verb dispatch (tray), -version, usage, violation exit 70
 ├── version.go         # version var, printVersion (same shape as snitchd's)
 ├── tray.go            # tray flags, wiring: bus, client, loop, tick, signals under jobs.Run
+├── main_test.go       # -version, the usage exits, the version contract and its exit 70
 ├── tray_test.go       # flags, exit codes, wiring against the stand-in daemon and a fake bus
-└── imports_test.go    # the forbidden-import pin for the snitch binary
+├── trayend_test.go    # 5.5: the unnamed run end proven a contract violation (added: tray_test.go sits at the line cap)
+├── imports_test.go    # the forbidden-import pin for the snitch binary (5.5 ran it once more with -tags live)
+└── pins_test.go       # 5.5: the source pins — request literals (8.1, 6.12) and the unix-only dial (8.5)
 internal/client/
 ├── client.go          # Config, Client, New, Job: dial, session, reconnect with backoff
 ├── session.go         # one connection: subscribe line, reader, status poll, answer wait
 ├── msg.go             # Msg types: Up, Down, Facts, StateLine, EventLine, Answered
 ├── role.go            # Role: uid 0 or the operator file with the daemon's acceptance rules
 ├── clienttest/
-│   └── standin.go     # the stand-in daemon: api.Server with scripted facts, operator uid as a parameter
+│   ├── standin.go     # the stand-in daemon: api.Server with scripted facts, operator uid as a parameter
+│   ├── commands.go    # the stdin command table and the fact setters (2.1: rule.add answered before the reload)
+│   └── standin_test.go # the stand-in's own contracts and its scripted-command round trips
 └── *_test.go          # against the stand-in on a temp socket and a raw scripted listener; role cases
 internal/ask/
 ├── question.go        # Key, Question, From (which event asks), local-network guard
@@ -154,7 +159,7 @@ internal/ask/
 ├── queue.go           # Queue value: offer, next, settle, flush, limits, counters
 └── *_test.go
 internal/tray/
-├── model.go           # Model, Options, State, Facts; Msg and Effect types
+├── model.go           # Model, Options, State, Facts; the loop's message and effect types
 ├── update.go          # Update: dispatch per message type
 ├── facts.go           # daemon up, down, facts, state line: model changes and notices
 ├── questions.go       # event to question, show next, answer, outcome, capabilities
@@ -169,7 +174,7 @@ internal/sni/
 ├── menu.go            # the flat com.canonical.dbusmenu object
 ├── notify.go          # Notify, CloseNotification, ActionInvoked, NotificationClosed, capabilities
 ├── tray.go            # the constructor: exports item and menu, returns the loop's delegates and the job
-├── icons.go           # six states drawn as 22 and 44 px ARGB pixmaps
+├── icons.go           # six states drawn as 22 and 44 px ARGB pixmaps (Pixmaps and Pixmap stay exported; the item consumes them)
 ├── live_test.go       # build tag live: the real session bus of the KDE host, run by hand
 ├── snitest/           # test helper, godbus only, never imports sni: private dbus-daemon,
 │                      # fake watcher, fake notification server
@@ -177,22 +182,42 @@ internal/sni/
 tools/fakedaemon/
 └── main.go            # the stand-in of internal/client/clienttest as a tool: commands on stdin, rule.add requests on stdout
 desktop/
-└── snitch-tray.desktop  # autostart entry (Exec=snitch tray)
+└── snitch-tray.desktop  # autostart entry (Exec=snitch tray, Icon=security-medium, X-KDE-autostart-phase=0)
+docs/
+└── tray-*-22.png, tray-*-44.png  # 5.3: the README's icons, written by icons_test with SNITCH_TRAY_ICONS=docs
 scripts/
-└── tray-check.sh      # the host check of 9.5
+├── tray-check.sh      # the host check of 9.5
+└── setup.sh           # NOT this spec's: a later, user-requested operator-name utility (1537db8), named here for provenance
 ```
 
+Corrected by 5.5 against the built tree. Three export surfaces the plan above
+cannot show: the tray's message and effect wiring (`Show`, `Post`, `Retract`,
+`Send`, `Quit`, `Posted`, `PostFailed`) is package-internal now — its producer
+and consumer are both package tray, while the adapter-facing messages stay
+exported — and `internal/ask` unexported its internal helpers (`KeyOf`,
+`Local`, `NoteLayout`, `Snooze`), as `internal/sni` did with its
+pre-composition constructors (`Item`, `Menu`, `Owner`, `WatchOwner`,
+`InstanceName`, `ErrNoSession`). The next specs should read the built tree,
+not the original line map. `menu.go`, `menu_test.go`, `notify_test.go`,
+`item_test.go`, `questions_test.go`, `tray_test.go` and `standin_test.go` sit at
+the file cap (the caps include test files); a post-live fix in them needs a
+controller-authorized split.
+
 ### Modified Files
-- `go.mod`, `go.sum` — `github.com/godbus/dbus/v5`.
-- `.github/workflows/release.yml` — second build step, `snitch-linux-amd64` and its checksum
-  appended to the asset list; the `-version` check for it.
-- `.github/workflows/lint.yml` — `go vet -tags live ./...` so the live tests keep compiling;
-  shellcheck already covers `scripts/*.sh`; the sni tests skip without `dbus-daemon`.
-- `README.md` — section "The tray" (states, menu, questions, autostart, what it cannot do).
-- `.kiro/steering/tech.md`, `structure.md`, `CLAUDE.md` — the `snitch` binary, the packages,
-  the dependency, the build path warning.
-- `.kiro/steering/roadmap.md` — the icon decision (pixmaps, not theme names), spec ticked
-  when done.
+- `go.mod`, `go.sum` — `github.com/godbus/dbus/v5` (done in 1.x).
+- `.github/workflows/release.yml` — 5.2: second build step, `snitch-linux-amd64`
+  and its checksum appended to the asset list; the `-version` check for it.
+- `.github/workflows/lint.yml` — 5.5: `go vet -tags live ./...` added beside the
+  `-tags root` line so the live tests keep compiling; shellcheck already covers
+  `scripts/*.sh`; the sni tests skip without `dbus-daemon`.
+- `README.md` — 5.3: section "The tray" (states, menu, questions, autostart, what
+  it cannot do), the release sentence lists `snitch-linux-amd64` + `.sha256`.
+- `.kiro/steering/tech.md`, `structure.md`, `CLAUDE.md` — 5.3: the `snitch`
+  binary, the packages, the dependency, the build path warning; the roadmap's
+  "Why" bullet corrected from theme icons to drawn pixmaps (its box unticked
+  until 5.4/5.5 close).
+- `.kiro/steering/roadmap.md` — the icon decision (pixmaps, not theme names),
+  spec ticked when done.
 
 ## System Flows
 

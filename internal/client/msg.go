@@ -20,7 +20,7 @@ import (
 const (
 	NotRunning   = "not running"
 	NotAnswering = "not answering"
-	NoSession    = "the daemon is not running"
+	noSession    = "the daemon is not running"
 	NoAnswer     = "the daemon did not answer"
 )
 

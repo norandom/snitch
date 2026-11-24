@@ -25,8 +25,8 @@ const (
 	Block
 )
 
-// NoteLayout is the local time on a rule's note, to the minute.
-const NoteLayout = "2006-01-02 15:04"
+// noteLayout is the local time on a rule's note, to the minute.
+const noteLayout = "2006-01-02 15:04"
 
 // Answerable reports whether a rule can name the question's program: false for an unknown
 // program without a path.
@@ -42,7 +42,7 @@ func RuleFor(q Question, a Answer, now time.Time) api.Request {
 		Type:  "rule.add",
 		Proto: q.Event.Protocol,
 		Port:  int(q.Event.Port),
-		Note:  "snitch tray " + now.Local().Format(NoteLayout),
+		Note:  "snitch tray " + now.Local().Format(noteLayout),
 	}
 	if q.Event.Program == Unknown {
 		r.Path = q.Event.Path

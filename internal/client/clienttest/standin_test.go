@@ -151,7 +151,7 @@ func TestARuleAddIsRecordedAnsweredThenAnnounced(t *testing.T) {
 	if len(edits) != 1 || edits[0].Program != "curl" || edits[0].Port != 443 || len(printed) != 1 {
 		t.Fatalf("recorded: %+v printed: %+v", edits, printed)
 	}
-	if st := c.next(); [4]any{st.Type, st.RulesChanged, st.Reason, st.Mode} != [4]any{"state", true, ReasonReloaded, "monitor"} {
+	if st := c.next(); [4]any{st.Type, st.RulesChanged, st.Reason, st.Mode} != [4]any{"state", true, reasonReloaded, "monitor"} {
 		t.Fatalf("second line, want the state: %+v", st)
 	}
 }
@@ -191,13 +191,13 @@ func TestModeCommandsSendTheDaemonsStateLines(t *testing.T) {
 		kept                     bool
 	}{
 		{"trial 10m", "enforce", "trial until ", until, false},
-		{"keep", "enforce", ReasonKept, until, true},
-		{"unkeep", "enforce", ReasonUnkept, until, false},
-		{"end", "monitor", ReasonEnded, "", false},
-		{"keep", "enforce", ReasonKept, "", true},
-		{"unkeep", "monitor", ReasonUnkept, "", false},
-		{"mode enforce", "enforce", ReasonMode, "", false},
-		{"mode monitor", "monitor", ReasonMode, "", false},
+		{"keep", "enforce", reasonKept, until, true},
+		{"unkeep", "enforce", reasonUnkept, until, false},
+		{"end", "monitor", reasonEnded, "", false},
+		{"keep", "enforce", reasonKept, "", true},
+		{"unkeep", "monitor", reasonUnkept, "", false},
+		{"mode enforce", "enforce", reasonMode, "", false},
+		{"mode monitor", "monitor", reasonMode, "", false},
 	}
 	for _, tc := range cases {
 		if err := s.Do(tc.cmd); err != nil {

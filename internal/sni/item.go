@@ -47,9 +47,9 @@ const (
 // anyway, which drops the item from every host.
 var ErrBusLost = errors.New("the session bus was lost")
 
-// Item is the tray's StatusNotifierItem on the session bus. Show pictures a
-// view, Watch keeps the registration alive, Remove ends the item.
-type Item struct {
+// item is the tray's StatusNotifierItem on the session bus. show pictures a
+// view, watch keeps the registration alive, remove ends the item.
+type item struct {
 	bus     *Bus
 	log     func(string)
 	props   *prop.Properties
@@ -60,27 +60,27 @@ type Item struct {
 	removed atomic.Bool
 }
 
-// Item puts the item object on the bus and owns its conventional name, then
+// item puts the item object on the bus and owns its conventional name, then
 // registers with the watcher when there is one at start; the log delegate is
 // where registration trouble is spoken, because a failed call is retried on the
 // next change and nothing polls.
-func (b *Bus) Item(log func(string)) (*Item, error) {
-	contract.Require(b != nil && b.conn != nil, "sni: Item on a nil bus")
-	contract.Require(!b.closed.Load(), "sni: Item on a closed bus")
-	contract.Require(log != nil, "sni: Item needs a log delegate")
-	it := &Item{bus: b, log: log, name: fmt.Sprintf("org.kde.StatusNotifierItem-%d-1", os.Getpid())}
+func (b *Bus) item(log func(string)) (*item, error) {
+	contract.Require(b != nil && b.conn != nil, "sni: item on a nil bus")
+	contract.Require(!b.closed.Load(), "sni: item on a closed bus")
+	contract.Require(log != nil, "sni: item needs a log delegate")
+	it := &item{bus: b, log: log, name: fmt.Sprintf("org.kde.StatusNotifierItem-%d-1", os.Getpid())}
 	if err := it.own(); err != nil {
 		return nil, err
 	}
 	if err := it.export(); err != nil {
 		return nil, err
 	}
-	owners, err := b.WatchOwner(watcherName)
+	owners, err := b.watchOwner(watcherName)
 	if err != nil {
 		return nil, err
 	}
 	it.owners = owners
-	if _, owned, err := b.Owner(watcherName); err != nil {
+	if _, owned, err := b.owner(watcherName); err != nil {
 		it.log("no system tray yet (its state is unknown: " + err.Error() + ")")
 	} else if owned {
 		it.registerAtStart()
@@ -93,7 +93,7 @@ func (b *Bus) Item(log func(string)) (*Item, error) {
 // registerAtStart is the one registration of a fresh item; the outcome is spoken
 // either way — the success is the Monitoring line "registration with the watcher" —
 // and a failure is not fatal: the next watcher change retries it.
-func (it *Item) registerAtStart() {
+func (it *item) registerAtStart() {
 	if err := it.register(); err != nil {
 		it.log("tray registration failed, retried when the system tray changes: " + err.Error())
 	} else {
@@ -103,7 +103,7 @@ func (it *Item) registerAtStart() {
 
 // own takes the conventional item bus name without queueing: only this tray
 // process may own it, and the watcher drops items whose name is not owned.
-func (it *Item) own() error {
+func (it *item) own() error {
 	var reply uint32
 	err := it.bus.call("org.freedesktop.DBus.RequestName", it.name,
 		uint32(dbus.NameFlagDoNotQueue)).Store(&reply)
@@ -121,7 +121,7 @@ func (it *Item) own() error {
 // export puts the item on the bus: the properties through prop (EmitFalse — the
 // hosts listen for the item's own signals, and a failing auto-emit would panic
 // prop.SetMust), and the four inert methods beside them on the same object.
-func (it *Item) export() error {
+func (it *item) export() error {
 	p, err := prop.Export(it.bus.conn, itemPath, prop.Map{itemIface: {
 		"Category":            {Value: "SystemServices", Emit: prop.EmitFalse},
 		"Id":                  {Value: "snitch", Emit: prop.EmitFalse},
@@ -162,10 +162,10 @@ func (itemMethods) SecondaryActivate(x, y int32) *dbus.Error   { return nil }
 func (itemMethods) ContextMenu(x, y int32) *dbus.Error         { return nil }
 func (itemMethods) Scroll(delta int32, dir string) *dbus.Error { return nil }
 
-// Show pictures the view: every property gets the view's value, and each one
+// show pictures the view: every property gets the view's value, and each one
 // that changed is announced (3.6 diffs views before showing, so a repeated view
 // announces nothing).
-func (it *Item) Show(v tray.View) {
+func (it *item) show(v tray.View) {
 	status := itemStatus(v.Attention)
 	pix := Pixmaps(v.State)
 	tip := sniToolTip{IconPixmaps: pix, Title: v.Title, Description: v.Tooltip}
@@ -189,7 +189,7 @@ func itemStatus(attention bool) string {
 // emit announces what differs from the last shown view: one PropertiesChanged
 // with the new values, and the StatusNotifierItem signal per changed property —
 // the signals the hosts actually listen for.
-func (it *Item) emit(v tray.View, status string, pix []Pixmap, tip sniToolTip) {
+func (it *item) emit(v tray.View, status string, pix []Pixmap, tip sniToolTip) {
 	c := it.diff(v)
 	if c.none() {
 		return
@@ -223,7 +223,7 @@ func (d itemDiff) none() bool { return !d.icon && !d.attn && !d.title && !d.tip 
 
 // diff compares the view with the last shown one. The tooltip carries the icon
 // and the title, so it changes with them.
-func (it *Item) diff(v tray.View) (d itemDiff) {
+func (it *item) diff(v tray.View) (d itemDiff) {
 	first := !it.shown
 	d.icon = first || it.view.State != v.State
 	d.attn = first || it.view.Attention != v.Attention
@@ -235,17 +235,17 @@ func (it *Item) diff(v tray.View) (d itemDiff) {
 
 // signal emits one interface signal of the item. A signal asks nothing of the
 // bus (it is fire and forget), but a dead bus is spoken, not hidden.
-func (it *Item) signal(name string, body ...any) {
+func (it *item) signal(name string, body ...any) {
 	if err := it.bus.conn.Emit(itemPath, name, body...); err != nil {
 		it.log("tray item: emit " + name + ": " + err.Error())
 	}
 }
 
-// Watch is the item's signal handling: it registers with every new owner of the
+// watch is the item's signal handling: it registers with every new owner of the
 // watcher name (and only then: nothing polls), skips the watcher's releases, and
 // ends with ErrBusLost when this connection loses the bus — the adapter's job of
 // 4.4 turns that into the tray's exit.
-func (it *Item) Watch(ctx context.Context) error {
+func (it *item) watch(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -268,17 +268,17 @@ func (it *Item) Watch(ctx context.Context) error {
 
 // register tells the watcher about this item by its bus name; the call is bounded
 // like every call, and its failure is data for the log, not the end of the tray.
-func (it *Item) register() error {
+func (it *item) register() error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 	return it.bus.conn.Object(watcherName, watcherPath).CallWithContext(ctx,
 		watcherName+".RegisterStatusNotifierItem", 0, it.name).Err
 }
 
-// Remove ends the item: it releases the item bus name, which makes every watcher
+// remove ends the item: it releases the item bus name, which makes every watcher
 // drop it (a crash does the same, for the bus daemon releases the names of a
 // dead connection). Safe on a nil item and twice: it sits on several exit paths.
-func (it *Item) Remove() {
+func (it *item) remove() {
 	if it == nil || it.removed.Swap(true) {
 		return
 	}

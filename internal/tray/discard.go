@@ -11,13 +11,13 @@
 //     Unanswered: the operator never declined it, so it is not snoozed and asks again when the
 //     connection happens again. Only the user's or the server's Closed and the timeout snooze.
 //   - A question whose note is still being posted (askToken, no note id yet) cannot be
-//     retracted; it is judged again when its Posted arrives, by the conditions that last
+//     retracted; it is judged again when its posted arrives, by the conditions that last
 //     (pause, service, daemon loss). A mode change during that bus call leaves it standing: the
 //     window is one bus call and an answer still writes the right rule.
 //   - A daemon lost after facts were known counts as gone until the next session's first
-//     Facts, so a question posted in between is retracted on its Posted and not snoozed.
+//     Facts, so a question posted in between is retracted on its posted and not snoozed.
 //   - Without a notification service nothing is retracted: its notes went with it, and a
-//     Retract could hit an unrelated note of a restarted server with the same id.
+//     retract could hit an unrelated note of a restarted server with the same id.
 //
 // Fail-safe implications: nothing here sends a request; discarding only drops questions, so a
 // discard can never write a rule (6.10, 6.12).
@@ -62,7 +62,7 @@ func discard(m Model, now time.Time, all bool, keep func(ask.Question) bool) (Mo
 	var fx []any
 	if q, open := m.queue.Open(); open && m.openNote != 0 && !keep(q) {
 		if m.canNotify {
-			fx = append(fx, Retract{NoteID: m.openNote})
+			fx = append(fx, retract{NoteID: m.openNote})
 		}
 		m = settle(m, ask.Failed, now)
 	}
@@ -92,7 +92,7 @@ func tick(m Model, now time.Time) (Model, []any) {
 	if m.openNote == 0 || now.Sub(m.openSince) < questionTime {
 		return m, fx
 	}
-	fx = append(fx, Retract{NoteID: m.openNote})
+	fx = append(fx, retract{NoteID: m.openNote})
 	m, next := askAgain(settle(m, ask.Unanswered, now))
 	return m, append(fx, next...)
 }
@@ -116,7 +116,7 @@ func click(m Model, c MenuClick, now time.Time) (Model, []any) {
 }
 
 // afterPosted judges a question again once its note id is known (see the choices above).
-func afterPosted(m Model, p Posted, now time.Time) (Model, []any) {
+func afterPosted(m Model, p posted, now time.Time) (Model, []any) {
 	question := p.Token == m.askToken && m.askToken != 0
 	m = postedID(m, p, now)
 	if !question {

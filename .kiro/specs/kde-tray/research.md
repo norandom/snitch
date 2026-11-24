@@ -552,3 +552,81 @@ that Block writes deny-by-address even when a name is known, and that the mismat
 quotes the exact recorded line). Take 5 paired the buttons with the questions and closed
 phase A. Phase B stays **pending until snitchd runs on this host** (`scripts/tray-check.sh
 --daemon`); its monitor-only refusal and dry paths are the review's private-bus evidence.
+
+### 5.5 additions, verified (caps, contracts, constraints)
+
+Provenance of the pins' scopes, the judgment calls the task text allowed, and the
+unexport list. All verified against the tree at 5.5's end, not by reading the plan.
+
+**The request-literal pin (8.1, 6.12)** scans the non-test sources of exactly the
+packages that link into the binary — `cmd/snitch`, `internal/client`, `internal/ask`,
+`internal/tray`, `internal/sni` — walking each package's own directory only. The
+`clienttest` and `snitest` helpers and `tools/fakedaemon` are deliberately outside:
+they are test fixtures and a dev tool that script the full API by design (the
+stand-in must accept `trial`/`end`; fakedaemon is how an operator drives it), so
+pinning them would pin nothing. One exception pins honesty into the binary itself:
+`client.go`'s `Send` precondition names `snapshot`, `subscribe` and `unsubscribe`
+because refusing them cannot be said without naming them — the pin allows those
+literals only on the two `contract.Require` lines of `internal/client/client.go`,
+and the Send-guard's own contract test (`TestContractSendTakesOnlyRequestsWithOneAnswer`)
+keeps those refusals real. The three legal literals are asserted to EXIST in the
+packages that own them, so the pin cannot pass over an emptied world. Pinned where a test
+can: the request pin trips on the QUOTED literal only — a bare `rule.remove` in a
+comment does not fail it, because the pin covers the quoted form; claiming "in
+any form" here would be aspiration beyond what a test can read.
+
+**The dial pin (8.5)** is a text scan for the same reason the 1.1 note gives: a
+unix client needs `net`, so imports cannot be banned. Banned as text: `net.Listen`
+(all networks), the package-level `net.Dial(`/`net.DialContext(` and the
+tcp/udp-family functions, the `"tcp"`/`"udp"` family of literals, and any
+`.DialContext(` line that does not carry `"unix"` — which is `dialUnix` in
+`cmd/snitch/tray.go`, the one legal dialer. Pinned where a test can here too: the
+banned words are the package-level `net.Dial(`/`net.DialContext(`, so a `.Dial(`
+method form dialing a variable network passes the scan.
+
+**Unexports.** The audit that "no exported identifier is without a caller" found
+and renamed (nothing outside the packages used them; `go vet ./...` proves it
+compiles, the export list is in design.md's corrected plan note):
+`ask.KeyOf/local/noteLayout/snooze`, `client.NoSession`, tray's seven loop-only
+types (`show`, `post`, `retract`, `send`, `quit`, `posted`, `postFailed`),
+`sni.InstanceName/ErrNoSession/owner/watchOwner` and the pre-composition
+constructors (`Bus.item`, `Bus.menu`, types `item`, `menu` and their
+delegate methods), the `Reason*` and `DefaultReloadAfter` consts plus
+`StandIn.endTrial/keep/unkeep/setRulesError`, and snitest's
+`daemon/installed/skipUnlessInstalled/watcherName/notificationsName/setCapabilities`
+— the last one was note 4.4's known unused helper; it stays as a test capability
+switch, now unexported. Kept with callers:
+`ask.Unknown` and `ask.MaxWaiting` (used by `internal/tray`'s tests to build an
+unknown-program event and the 33-questions overflow), `sni.Pixmaps`/`Pixmap`
+(the design's exported pixel names, consumed by the item — note 4.1), the whole
+adapter-facing surface of `tray` and the wiring surface of `sni`/`client`/
+`clienttest`/`snitest` (named in the audit). The method names of `itemMethods`
+and `menuMethods` (e.g. `GetLayout`, `Event`) are the dbus
+wire names: godbus dispatches by the Go method name, so unexporting them is
+impossible, and their caller is the wire — recorded here as the one class of
+"exported without a Go caller" that is correct by design.
+
+**The `-tags live` pin run (note 1.1).** The import pin needed no adaptation:
+files tagged `live` are `_test.go` files of package `sni`, so no build tag can
+change any binary's dependency set — `go list -deps` of `cmd/snitch` is identical
+with or without the tag. The once-more run (`go test -tags live -count=1 -run
+Imports ./cmd/snitch`) still means something: it compiles the whole test surface
+with the live files included and runs the pin inside that build, before `go vet
+-tags live ./...` joins `lint.yml` to keep it compiling forever.
+
+`urgencyNormal` (note 4.4) is asserted in `internal/sni/urgency_test.go` — a new
+file because `notify_test.go` sits at exactly the 300-line cap and the caps scope
+includes test files. For the same cap reason the notification side's constructor
+contracts got their own new file, `notifyconstruct_test.go`: `notify` is
+package-internal (the composition's step behind `Tray`'s identical guards), and
+its four `Require`s are tripped there directly, as `ItemConstructorContracts`
+does for the item's. After this batch every `contract.` call of the five
+packages — including the clienttest stand-in's — has a violating test by name
+(the list is in 5.5's status evidence); the one class of exported names with no
+Go caller, the dbus method names of `itemMethods` and `menuMethods`, is correct
+by design (above). The host evidence that the caps and the 300-line limits held
+after the batch: `sh scripts/caps.sh` runs green, and no file of this spec crossed
+the cap. Seven files sit at exactly 300 — `standin_test.go`, `item_test.go`, `menu.go`,
+`menu_test.go`, `notify_test.go`, `questions_test.go`, `tray_test.go` — and the
+at-cap test files were edited, but only by rename hunks whose net line delta was
+zero: that zero-line delta is what held the caps.

@@ -28,8 +28,8 @@ import (
 // signals. It is one per Bus (the constructor's precondition) and it is never
 // closed — the bus it sits on is.
 type Tray struct {
-	item  *Item
-	menu  *Menu
+	item  *item
+	menu  *menu
 	notes *notifier
 }
 
@@ -45,11 +45,11 @@ func (b *Bus) Tray(sink func(any), log func(string)) (*Tray, error) {
 	contract.Require(sink != nil, "sni: Tray needs a sink for the loop's messages")
 	contract.Require(log != nil, "sni: Tray needs a log delegate")
 	b.trayOnce()
-	it, err := b.Item(log)
+	it, err := b.item(log)
 	if err != nil {
 		return nil, err
 	}
-	m, err := b.Menu(sink, log)
+	m, err := b.menu(sink, log)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (b *Bus) Tray(sink func(any), log func(string)) (*Tray, error) {
 // twice-test proves the probe stays honest). A probe that cannot answer stands
 // aside: the constructors ahead report a dying bus anyway.
 func (b *Bus) trayOnce() {
-	owner, owned, err := b.Owner(fmt.Sprintf("org.kde.StatusNotifierItem-%d-1", os.Getpid()))
+	owner, owned, err := b.owner(fmt.Sprintf("org.kde.StatusNotifierItem-%d-1", os.Getpid()))
 	if err == nil && owned && owner == b.conn.Names()[0] {
 		contract.Require(false, "sni: Tray is once per bus, and this bus already has one")
 	}
@@ -76,8 +76,8 @@ func (b *Bus) trayOnce() {
 // Show paints a view on the item and the menu from the same value (3.6): the
 // words the menu says can never disagree with the icon it hangs beside.
 func (t *Tray) Show(v tray.View) {
-	t.item.Show(v)
-	t.menu.Show(v)
+	t.item.show(v)
+	t.menu.show(v)
 }
 
 // Post puts one note on the desktop and answers the id the service gave it; the
@@ -97,7 +97,7 @@ func (t *Tray) Retract(id uint32) {
 // tray: a lost bus ends both with ErrBusLost, and the run's end cancels both.
 func (t *Tray) Job() jobs.Job {
 	return func(ctx context.Context) error {
-		return jobs.Run(ctx, t.item.Watch, t.notes.watch)
+		return jobs.Run(ctx, t.item.watch, t.notes.watch)
 	}
 }
 
@@ -105,5 +105,5 @@ func (t *Tray) Job() jobs.Job {
 // which makes every watcher drop it — the design's postcondition. The menu and
 // the notification subscription end with the bus.
 func (t *Tray) Remove() {
-	t.item.Remove()
+	t.item.remove()
 }

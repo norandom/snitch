@@ -234,7 +234,7 @@ func TestMenuGoneHasNoFactRow(t *testing.T) {
 	}
 }
 
-// 3.4, 3.5: only Pause and Quit can be clicked, over every combination and capability; no
+// 3.4, 3.5: only Pause and quit can be clicked, over every combination and capability; no
 // label names a trial verb, the kill switch toggle or a mode change.
 func TestMenuOnlyPauseAndQuit(t *testing.T) {
 	for i := 0; i < 64; i++ {
@@ -251,7 +251,7 @@ func TestMenuOnlyPauseAndQuit(t *testing.T) {
 	}
 }
 
-// checkRow fails a row outside the closed set, an enabled row other than Pause and Quit, and
+// checkRow fails a row outside the closed set, an enabled row other than Pause and quit, and
 // an enabled row whose label names a trial verb, the kill switch or a mode change.
 func checkRow(t *testing.T, r Row) {
 	t.Helper()

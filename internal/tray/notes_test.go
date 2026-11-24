@@ -80,15 +80,15 @@ func TestNoticeTokensFresh(t *testing.T) {
 
 // A failed post forgets the notice's token and records no id.
 func TestNoticePostFailed(t *testing.T) {
-	m, p := posted(t)
-	m2, _ := step(t, m, PostFailed{Token: p.Token}, now)
+	m, p := killPosted(t)
+	m2, _ := step(t, m, postFailed{Token: p.Token}, now)
 	if m2.posting[p.Token] || len(m2.notices) != 0 || !m.posting[p.Token] {
 		t.Fatalf("failed post kept: %v %v", m2.posting, m2.notices)
 	}
 }
 
-// posted is a tray that has just posted the kill switch notice, and that Post.
-func posted(t *testing.T) (Model, Post) {
+// killPosted is a tray that has just posted the kill switch notice, and that post.
+func killPosted(t *testing.T) (Model, post) {
 	t.Helper()
 	st := running()
 	st.Kill = true
@@ -100,14 +100,14 @@ func posted(t *testing.T) (Model, Post) {
 	return m, posts[0]
 }
 
-// 1.4: a posted notice's id is kept from Posted until Closed; tokens are fresh and never 0.
+// 1.4: a posted notice's id is kept from posted until Closed; tokens are fresh and never 0.
 func TestNoticeIdRememberedUntilClosed(t *testing.T) {
-	m, p := posted(t)
-	m2, _ := step(t, m, Posted{Token: p.Token, NoteID: 7}, now)
+	m, p := killPosted(t)
+	m2, _ := step(t, m, posted{Token: p.Token, NoteID: 7}, now)
 	if !m2.notices[7] || m2.posting[p.Token] || m.notices[7] || !m.posting[p.Token] {
 		t.Fatalf("posted: notices %v posting %v (before: %v %v)", m2.notices, m2.posting, m.notices, m.posting)
 	}
-	m3, _ := step(t, m2, Posted{Token: 999, NoteID: 8}, now)
+	m3, _ := step(t, m2, posted{Token: 999, NoteID: 8}, now)
 	if m3.notices[8] {
 		t.Fatal("a token that is no notice's was taken as one")
 	}
@@ -117,11 +117,11 @@ func TestNoticeIdRememberedUntilClosed(t *testing.T) {
 	}
 }
 
-// The maps of a model are copy-on-write: Post, Posted, PostFailed and Closed on a model whose
+// The maps of a model are copy-on-write: post, posted, postFailed and Closed on a model whose
 // posting and notices are not empty leave that model's maps as they were.
 func TestNoticeMapsCopyOnWrite(t *testing.T) {
-	m, p := posted(t)
-	m, _ = step(t, m, Posted{Token: p.Token, NoteID: 7}, now)
+	m, p := killPosted(t)
+	m, _ = step(t, m, posted{Token: p.Token, NoteID: 7}, now)
 	m, posts := step(t, m, client.Facts{Status: running()}, now) // kill cleared: a second notice
 	one(t, "kill cleared", posts)
 	tok := posts[0].Token
@@ -131,8 +131,8 @@ func TestNoticeMapsCopyOnWrite(t *testing.T) {
 	}
 	bad := running()
 	bad.RulesError = "rules: line 3"
-	for _, msg := range []any{client.Facts{Status: bad}, Posted{Token: tok, NoteID: 8},
-		PostFailed{Token: tok}, Closed{NoteID: 7}} {
+	for _, msg := range []any{client.Facts{Status: bad}, posted{Token: tok, NoteID: 8},
+		postFailed{Token: tok}, Closed{NoteID: 7}} {
 		step(t, m, msg, now)
 		if !maps.Equal(m.posting, wantPosting) || !maps.Equal(m.notices, wantNotices) {
 			t.Fatalf("%T wrote through: posting %v notices %v", msg, m.posting, m.notices)
