@@ -84,7 +84,7 @@ Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not 
 
 ## Specs (dependency order)
 
-- [ ] kde-tray -- `snitch tray`: StatusNotifierItem icon and status menu, KDE notifications with Allow and Block for undecided or denied connections; creates `cmd/snitch` and the API client package. Dependencies: none
+- [x] kde-tray -- `snitch tray`: StatusNotifierItem icon and status menu, KDE notifications with Allow and Block for undecided or denied connections; creates `cmd/snitch` and the API client package. Dependencies: none
 - [ ] popups-trace -- kernel-side process trace on events, `snitch watch` and `snitch ask` (the terminal question, with the trace), the trace in the tray's notifications. Dependencies: kde-tray
 - [ ] tui -- the bubbletea TUI, key for key like the Python client (overview, egress graph, rule edits, trial verbs), then the Python client retires. Dependencies: kde-tray, popups-trace
 
