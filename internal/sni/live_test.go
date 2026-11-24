@@ -71,11 +71,12 @@ func assertRegisteredWithTheWatcher(t *testing.T, b *Bus, it *Item) {
 		t.Fatalf("read the watcher's registered items: %v", err)
 	}
 	names, _ := v.Value().([]string)
+	entry := it.name + string(itemPath) // the real watcher lists each item as bus name plus object path, verified live
 	for _, name := range names {
-		if name == it.name {
+		if name == entry {
 			t.Logf("the watcher lists the item: %s", name)
 			return
 		}
 	}
-	t.Fatalf("the watcher's registered items %v lack this item: %s", names, it.name)
+	t.Fatalf("the watcher's registered items %v lack this item: %s", names, entry)
 }

@@ -226,7 +226,7 @@ at a time; `(P)` tasks touch disjoint files.
   - _Depends: 3.1_
   - _Boundary: internal/sni/icons.go, icons_test.go_
   - _Requirements: 2.1, 2.7_
-- [ ] 4.2 The tray item and its registration
+- [x] 4.2 The tray item and its registration
   - The item object with the properties and no-op methods of the design, its conventional bus
     name, showing a view (properties set, a signal for each one that changed, the attention
     status and icon), registration with the watcher at start when it has an owner and again

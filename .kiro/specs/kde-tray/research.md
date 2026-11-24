@@ -409,13 +409,24 @@ numbers are lines of godbus v5.2.4 as found in the module cache.
   conventional item bus name `org.kde.StatusNotifierItem-<pid>-1`; the watcher's
   `RegisteredStatusNotifierItems` property (`as`) is what the live run asserts.
 
-### 4.2 live run (pending)
-The live test exists (`internal/sni/live_test.go`, build tag `live`, run by hand with
-`go test -tags live ./internal/sni -run LiveItem`) and compiles in CI shape
-(`go vet -tags live ./...`; `go test -tags live -run TestNothingMatchesThis ./internal/sni`
-runs nothing). THE RUN ITSELF STILL NEEDS THE OPERATOR at chandali's desktop: the test
-registers the item with the real `org.kde.StatusNotifierWatcher`, asserts it in the
-watcher's `RegisteredStatusNotifierItems`, and holds each of the six states for 20 s
-(about two minutes in total) with `t.Log` saying what to look at and when. Only eyes can
-confirm the six icons in the panel; the controller records the result here after the
-operator run, together with whatever Plasma asked for that the design omits.
+### 4.2 live run (done)
+Run 2026-11-24 on chandali in the operator's Plasma session, by hand:
+`go test -tags live -count=1 -run LiveItem -test.v ./internal/sni` — **PASS in 120.17 s**.
+The item registered as `org.kde.StatusNotifierItem-569369-1` and the watcher listed it
+(`org.kde.StatusNotifierItem-569369-1/StatusNotifierItem`); each of the six states was
+held 20 s: gone ("daemon not running") 09:32:22, kill switch set 09:32:42, rules error
+09:33:02, enforce kept 09:33:22, enforce trial 09:33:42, monitor 09:34:02; the release at
+the end left the panel again.
+
+The first attempt failed in 0.00 s at the registration assertion: the item was
+registered, but the test compared the bare bus name while the real watcher lists each
+entry as bus name plus object path (`org.kde.StatusNotifierItem-568739-1/StatusNotifierItem`;
+the session's own entries, e.g. `:1.71/org/blueman/sni`, show the same shape). The
+assertion now compares `it.name + itemPath`; the entry format is a verified fact now,
+not a remembered one.
+
+The operator's confirmation: "icon is visible, not clickable or so where smth would
+happen" — visibility confirmed; a click doing nothing is the design at this stage (the
+item's methods are inert, the menu is 4.3's and the notifications 4.4's). Nothing
+beyond the six icons was reported — no dialog, complaint or oddity from Plasma, and
+the item's log printed no error during the run.
