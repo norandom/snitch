@@ -116,13 +116,13 @@ func TestDNSReaderSurvivesErrors(t *testing.T) {
 	if err := f.s.reader(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if len(f.logs) != 1 || f.s.readErrors != 3 || f.s.malformed != 1 {
+	if len(f.logs) != 2 || f.s.readErrors != 3 || f.s.malformed != 1 {
 		t.Fatalf("logs %v errors %d malformed %d", f.logs, f.s.readErrors, f.s.malformed)
 	}
 }
 
-func TestDNSReaderSliceSource(t *testing.T) {
-	f := newReaderFixture()
+func readerWire(t *testing.T) []byte {
+	t.Helper()
 	var wire bpf.DnsDnsAnswerRecord
 	copy(wire.Qname[:], ".www.example.org")
 	wire.N, wire.Ttl, wire.Family[0] = 1, 60, 2
@@ -131,7 +131,11 @@ func TestDNSReaderSliceSource(t *testing.T) {
 	if err := binary.Write(&buf, binary.LittleEndian, wire); err != nil {
 		t.Fatal(err)
 	}
-	source := [][]byte{buf.Bytes()}
+	return buf.Bytes()
+}
+
+// feed runs the reader over the records, then stops it.
+func (f *readerFixture) feed(source ...[]byte) {
 	ctx, cancel := context.WithCancel(context.Background())
 	f.s.read = func() ([]byte, error) {
 		if len(source) == 0 {
@@ -143,8 +147,25 @@ func TestDNSReaderSliceSource(t *testing.T) {
 		return raw, nil
 	}
 	_ = f.s.reader(ctx)
+}
+
+func TestDNSReaderSliceSource(t *testing.T) {
+	f := newReaderFixture()
+	f.feed(readerWire(t))
 	if f.puts != 1 {
 		t.Fatalf("decoded record puts %d", f.puts)
+	}
+}
+
+// A record one byte too long is skipped and counted, the first such record logged once, and
+// the valid record after it still lands in the trie (8.3).
+func TestDNSReaderSkipsAnUndecodableRecordAndContinues(t *testing.T) {
+	f := newReaderFixture()
+	good := readerWire(t)
+	long := append(append([]byte{}, good...), 0)
+	f.feed(long, long[:len(good)-1], good)
+	if f.s.malformed != 2 || len(f.logs) != 1 || f.puts != 1 {
+		t.Fatalf("malformed %d logs %q puts %d", f.s.malformed, f.logs, f.puts)
 	}
 }
 

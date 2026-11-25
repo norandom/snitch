@@ -28,8 +28,15 @@ type Record struct {
 	Slots []Slot
 }
 
-// Decode reads the little-endian ABI emitted by dns_x86_bpfel, without unsafe host casts.
+// recordSize is the kernel's struct dns_answer_record; a ring buffer record is exactly that long.
+var recordSize = binary.Size(bpf.DnsDnsAnswerRecord{})
+
+// Decode reads the little-endian ABI emitted by dns_x86_bpfel, without unsafe host casts. Any
+// size other than the struct's is an error: trailing bytes are not ignored.
 func Decode(raw []byte) (Record, error) {
+	if len(raw) != recordSize {
+		return Record{}, fmt.Errorf("DNS record of %d bytes, want %d", len(raw), recordSize)
+	}
 	var wire bpf.DnsDnsAnswerRecord
 	if err := binary.Read(bytes.NewReader(raw), binary.LittleEndian, &wire); err != nil {
 		return Record{}, fmt.Errorf("DNS record: %w", err)

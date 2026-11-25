@@ -57,6 +57,8 @@ type daemon struct {
 	counting bool
 	api      apiState
 	editMu   sync.Mutex // one overlay edit over the API at a time: load, change, validate, write
+
+	undecodable atomic.Uint64 // event records of the wrong size: skipped and counted, the first logged
 }
 
 // startup: rules first (a bad file is reported before anything touches the kernel), then the

@@ -137,7 +137,7 @@ change that moves their lines.
   - _Requirements: 1.6, 2.3, 4.8, 9.2, 9.3_
 
 - [ ] 5. Daemon and API
-- [ ] 5.1 (P) Make the two record decoders reject wrong-sized input instead of panicking
+- [x] 5.1 (P) Make the two record decoders reject wrong-sized input instead of panicking
   - The egress event decoder and the DNS answer decoder accept only the exact record size and
     return an error otherwise; the event reader notes and skips such a record and continues
   - Done when unit tests show size minus one and size plus one are errors for both decoders
@@ -302,4 +302,8 @@ change that moves their lines.
   counts and array lengths) - give it a unit; `dns.addrsMax` is unexported and not covered there
   (TestMirrorKernelConstants in internal/dns covers it); `dns.StatsCount` vs `dns_stats` must move
   with task 4.3's counter tail.
+- 5.1: the event reader counts undecodable records in an atomic `daemon.undecodable`; the DNS
+  reader's `malformed` is still a plain uint64 touched by its one goroutine - make it atomic or
+  read it under the lock if a later task serves it in the status. Ring buffer samples carry the
+  exact reserved length (cilium v0.22 ringbuf/ring.go), so exact-size decoding rejects no real record.
 

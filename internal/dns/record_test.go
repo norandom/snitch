@@ -57,6 +57,32 @@ func TestDecodeRefusesTruncated(t *testing.T) {
 	}
 }
 
+// A ring buffer record is exactly the kernel struct's size (976 bytes); a longer one is not
+// read up to its trailing bytes but rejected, like a shorter one (8.3).
+func TestDecodeRejectsWrongSizes(t *testing.T) {
+	raw := append(answerBytes(t, answerFixture()), 0)
+	if recordSize != 976 || len(raw) != recordSize+1 {
+		t.Fatalf("record size %d, serialized %d", recordSize, len(raw)-1)
+	}
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+		ok   bool
+	}{
+		{"exact size", raw[:recordSize], true},
+		{"size minus one", raw[:recordSize-1], false},
+		{"size plus one", raw, false},
+		{"empty", []byte{}, false},
+		{"nil", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Decode(tc.raw); (err == nil) != tc.ok {
+				t.Fatalf("len %d: err %v, want ok %v", len(tc.raw), err, tc.ok)
+			}
+		})
+	}
+}
+
 func TestDecodeRefusesInconsistent(t *testing.T) {
 	for _, mutate := range []func(*bpf.DnsDnsAnswerRecord){
 		func(r *bpf.DnsDnsAnswerRecord) { r.N = 9 }, func(r *bpf.DnsDnsAnswerRecord) { r.N = 0 },

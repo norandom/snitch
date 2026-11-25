@@ -1,16 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"net/netip"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 
 	snitchbpf "github.com/norandom/snitch/internal/bpf"
-	"github.com/norandom/snitch/internal/contract"
 )
 
-// eventSize is the kernel struct's size; ring buffer records are at least that long.
+// eventSize is the kernel struct's size; a ring buffer record is exactly that long.
 const eventSize = int(unsafe.Sizeof(snitchbpf.SnitchEvent{}))
 
 const (
@@ -22,12 +22,15 @@ var verdicts = [...]string{"allow (monitor)", "allow (rule)", "DENY (rule)", "DE
 	"allow (local net)", "allow (heartbeat stale)", "allow (kill switch)"}
 
 // decodeEvent copies a ring buffer record into the generated struct (same layout as the C
-// struct, host byte order), without reflection.
-func decodeEvent(raw []byte) snitchbpf.SnitchEvent {
-	contract.Require(len(raw) >= eventSize, "ring buffer record shorter than struct event")
+// struct, host byte order), without reflection. A record is input: any size other than the
+// struct's is an error, not a panic.
+func decodeEvent(raw []byte) (snitchbpf.SnitchEvent, error) {
 	var e snitchbpf.SnitchEvent
-	copy((*[eventSize]byte)(unsafe.Pointer(&e))[:], raw[:eventSize])
-	return e
+	if len(raw) != eventSize {
+		return e, fmt.Errorf("event record of %d bytes, want %d", len(raw), eventSize)
+	}
+	copy((*[eventSize]byte)(unsafe.Pointer(&e))[:], raw)
+	return e, nil
 }
 
 // addrOf is the destination; v4 lives in the first four bytes (the kernel already unmapped

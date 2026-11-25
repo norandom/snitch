@@ -15,9 +15,8 @@ import (
 	"github.com/norandom/snitch/internal/rules"
 )
 
-// pump reads the kernel's events, names them from the current snapshot, prints them, hands
-// them to the API (emit never blocks) and uncovered connections to the learning sink. It never
-// returns nil: that would end the run.
+// pump reads the kernel's events and hands each record to onRecord. It never returns nil:
+// that would end the run.
 func (d *daemon) pump(ctx context.Context) error {
 	go func() { <-ctx.Done(); _ = d.rd.Close() }()
 	for {
@@ -25,21 +24,34 @@ func (d *daemon) pump(ctx context.Context) error {
 		if errors.Is(err, ringbuf.ErrClosed) {
 			return ctx.Err()
 		}
-		if err != nil || len(rec.RawSample) < eventSize {
+		if err != nil {
 			continue
 		}
-		e := decodeEvent(rec.RawSample)
-		snap := d.st.current()
-		// one lookup per event: the log line, the API event and the learner carry the same name
-		name := d.dns.nameOf(addrOf(&e), e.Rule)
-		fixed := func(netip.Addr, uint32) string { return name }
-		fmt.Println(describe(&e, snap, exeOf, name))
-		if d.emit != nil {
-			d.emit(toEvent(&e, snap, exeOf, time.Now(), fixed))
+		d.onRecord(rec.RawSample)
+	}
+}
+
+// onRecord names one event from the current snapshot, prints it, hands it to the API (emit
+// never blocks) and an uncovered connection to the learning sink. A record that does not
+// decode is counted and skipped; the first one is logged, the rest only counted.
+func (d *daemon) onRecord(raw []byte) {
+	e, err := decodeEvent(raw)
+	if err != nil {
+		if d.undecodable.Add(1) == 1 {
+			d.log("events: skipping undecodable records (logged once): " + err.Error())
 		}
-		if e.Verdict == verdictAllowMonitor && d.sink != nil {
-			d.sink(observation(&e, snap, exeOf, time.Now(), name))
-		}
+		return
+	}
+	snap := d.st.current()
+	// one lookup per event: the log line, the API event and the learner carry the same name
+	name := d.dns.nameOf(addrOf(&e), e.Rule)
+	fixed := func(netip.Addr, uint32) string { return name }
+	fmt.Println(describe(&e, snap, exeOf, name))
+	if d.emit != nil {
+		d.emit(toEvent(&e, snap, exeOf, time.Now(), fixed))
+	}
+	if e.Verdict == verdictAllowMonitor && d.sink != nil {
+		d.sink(observation(&e, snap, exeOf, time.Now(), name))
 	}
 }
 

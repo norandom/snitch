@@ -24,7 +24,7 @@ func (s *dnsState) reader(ctx context.Context) error {
 		}
 		rec, err := dns.Decode(raw)
 		if err != nil {
-			s.malformed++
+			s.noteMalformed(err)
 			continue
 		}
 		s.handle(rec)
@@ -43,6 +43,15 @@ func (s *dnsState) noteRead(err error) bool {
 		s.readFailing = true
 	}
 	return false
+}
+
+// noteMalformed counts a record that does not decode; the first one is logged, the rest
+// only counted (a flood of bad records must not flood the log).
+func (s *dnsState) noteMalformed(err error) {
+	s.malformed++
+	if s.malformed == 1 {
+		s.log("dns reader: skipping undecodable records (logged once): " + err.Error())
+	}
 }
 
 func (s *dnsState) handle(rec dns.Record) {

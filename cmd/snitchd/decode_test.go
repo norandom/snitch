@@ -11,8 +11,6 @@ import (
 	"unsafe"
 
 	snitchbpf "github.com/norandom/snitch/internal/bpf"
-	"github.com/norandom/snitch/internal/contract"
-	"github.com/norandom/snitch/internal/contract/contracttest"
 	"github.com/norandom/snitch/internal/rules"
 )
 
@@ -51,14 +49,43 @@ func fakeSnap(t *testing.T) *snapshot {
 }
 
 func TestDecodeEventIsAFixedLayoutCopy(t *testing.T) {
-	e := decodeEvent(rawOf(sample(), 8)) // records are padded to 8 bytes
+	e, err := decodeEvent(rawOf(sample(), 0))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if e.Pid != 4242 || e.Dport != 443 || e.Rule != 1 || e.Cookie != 77 || addrOf(&e) != netip.MustParseAddr("1.1.1.1") {
 		t.Fatalf("decoded wrong: %+v", e)
 	}
 	if pathOf(&e) != "/usr/bin/curl" || commOf(&e) != "curl" {
 		t.Fatalf("strings must stop at the NUL: %q %q", pathOf(&e), commOf(&e))
 	}
-	contracttest.Panics(t, contract.Precondition, func() { decodeEvent(rawOf(sample(), 0)[:eventSize-1]) })
+}
+
+// A ring buffer record is exactly the struct's size (the reader's sample length excludes the
+// ring's 8-byte alignment); any other length is input the decoder rejects, never a panic (8.3).
+func TestDecodeEventRejectsWrongSizes(t *testing.T) {
+	full := rawOf(sample(), 1)
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+		ok   bool
+	}{
+		{"exact size", full[:eventSize], true},
+		{"size minus one", full[:eventSize-1], false},
+		{"size plus one", full, false},
+		{"empty", []byte{}, false},
+		{"nil", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := decodeEvent(tc.raw)
+			if (err == nil) != tc.ok {
+				t.Fatalf("len %d: err %v, want ok %v", len(tc.raw), err, tc.ok)
+			}
+			if !tc.ok && e != (snitchbpf.SnitchEvent{}) {
+				t.Fatalf("a rejected record decodes to the zero event, got %+v", e)
+			}
+		})
+	}
 }
 
 // The kernel's struct event is the contract: rule is the u32 at byte 64, the socket cookie the
@@ -73,8 +100,8 @@ func TestDecodeEventReadsTheCookieAtTheKernelOffset(t *testing.T) {
 	binary.LittleEndian.PutUint32(raw[64:], 9)
 	binary.LittleEndian.PutUint64(raw[cookieOffset:], 0x1122334455667788)
 	copy(raw[pathOffset:], "/usr/bin/curl\x00")
-	e := decodeEvent(raw)
-	if e.Rule != 9 || e.Cookie != 0x1122334455667788 || pathOf(&e) != "/usr/bin/curl" {
+	e, err := decodeEvent(raw)
+	if err != nil || e.Rule != 9 || e.Cookie != 0x1122334455667788 || pathOf(&e) != "/usr/bin/curl" {
 		t.Fatalf("rule %d cookie %#x path %q", e.Rule, e.Cookie, pathOf(&e))
 	}
 }
