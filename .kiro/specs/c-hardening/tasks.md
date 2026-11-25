@@ -252,7 +252,7 @@ change that moves their lines.
     workflow linter, and the release workflow is unchanged
   - _Requirements: 7.1, 7.2, 7.3, 7.5, 7.7, 7.8_
 
-- [ ] 7.4 The rugged pre-release suite in the pipeline
+- [x] 7.4 The rugged pre-release suite in the pipeline
   - (user direction 2026-11-25) A non-gating `fuzz` pipeline function running
     `scripts/fuzz.sh -t <duration>` in the Go checks container, and a `rugged` composite that runs
     every pipeline check (the lint-all set including the bindings check) plus the fuzz function -
