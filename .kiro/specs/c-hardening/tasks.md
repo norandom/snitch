@@ -214,7 +214,7 @@ change that moves their lines.
     failure
   - _Boundary: API request decoding and its fuzz tests_
   - _Requirements: 8.1, 8.2, 8.4, 8.5, 8.7_
-- [ ] 6.6 (P) Fuzz the rules file and overlay decoding
+- [x] 6.6 (P) Fuzz the rules file and overlay decoding
   - Fuzz tests for the rules file and the operator's overlay, including merging a parsed pair,
     seeded from the sample rules file
   - Run each for a bounded time; fix any defect found and keep its input as a seed
@@ -356,4 +356,9 @@ change that moves their lines.
   default 5s), `scripts/root-checks.sh` (the root batch; `--at <rev>` makes and removes its own
   worktree). Gates are now run as `sudo scripts/root-checks.sh --at <commit>`; the scratch
   worktrees are gone. 7.2 and 7.4 use these scripts; 8.1 documents them.
+- 6.6 review suggestions (not done, optional follow-up): checkMerged does not check which base
+  rules survive shadowing (merge_test.go covers it); boundary seeds (maxPortsPerRule, name length
+  limit, port 0) could be listed explicitly. Fuzz targets: FuzzDecodeEvent (cmd/snitchd),
+  FuzzDecode (internal/dns), FuzzParse + FuzzLineReader (internal/api), FuzzParse +
+  FuzzParseOverlay (internal/rules); `scripts/fuzz.sh FuzzParse` matches both FuzzParse targets.
 
