@@ -80,7 +80,7 @@ note    = "TEST-NET-3: an example of blocking a network for everything"
 # There is no Public Suffix List: github.io covers every site under it.
 # At most 8 rules per exact name, counted as protocol/port combinations (rules.NameSlots):
 # an any-proto rule with a port counts twice; a port range counts per port.
-# Names have at most 62 characters and 16 labels. Labels contain letters, digits and
+# Names have at most 62 characters and 15 labels. Labels contain letters, digits and
 # hyphens, with no leading or trailing hyphen; no leading dot or wildcard is accepted.
 # Check a mistyped address carefully: 1.2.3 parses as a name.
 [[rule]]

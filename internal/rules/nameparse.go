@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+// NameLabelsMax is the most labels a rule's name may have: the DNS tap's read_qname walks
+// LABELS_MAX (16) turns and spends one of them on the closing zero, so a 16-label question is
+// never learned and a 16-label rule could never match (c-hardening finding, 2026-11-25).
+// internal/dns pins this to its LABELS_MAX mirror minus one.
+const NameLabelsMax = 15
+
 // ParseName is the shared domain grammar; matching later covers up to eight subdomain levels.
 // It returns complete operator messages (including the original `to`), so convertRule returns
 // its error unchanged after ParsePrefix fails. Malformed labels take precedence over bounds.
@@ -17,8 +23,8 @@ func ParseName(s string) (string, error) {
 			return "", fmt.Errorf("to %q: not an address, prefix or domain name", s)
 		}
 	}
-	if len(name) > 62 || len(labels) > 16 {
-		return "", fmt.Errorf("to %q: a name has at most 62 characters and 16 labels", s)
+	if len(name) > 62 || len(labels) > NameLabelsMax {
+		return "", fmt.Errorf("to %q: a name has at most 62 characters and %d labels", s, NameLabelsMax)
 	}
 	return name, nil
 }

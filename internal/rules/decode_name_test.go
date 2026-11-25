@@ -19,7 +19,7 @@ func TestValidateRefusesDenyByName(t *testing.T) {
 func TestDecodeNameErrorTexts(t *testing.T) {
 	for _, c := range []struct{ to, msg string }{
 		{"a..b", "not an address, prefix or domain name"},
-		{strings.Repeat("a", 63), "a name has at most 62 characters and 16 labels"},
+		{strings.Repeat("a", 63), "a name has at most 62 characters and 15 labels"},
 	} {
 		e := parseErr(t, ruleTable("any", c.to, "", "", "allow"))
 		if want := fmt.Sprintf("to %q: %s", c.to, c.msg); e.Msg != want {

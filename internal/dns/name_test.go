@@ -72,3 +72,12 @@ func TestMirrorKernelConstants(t *testing.T) {
 		}
 	}
 }
+
+// A rule name may have one label fewer than LABELS_MAX: read_qname spends one of its turns on
+// the closing zero, so a question with LABELS_MAX labels is never learned, and a rule that
+// long could never match.
+func TestRuleNameLabelsFitTheTap(t *testing.T) {
+	if rules.NameLabelsMax != labelsMax-1 {
+		t.Fatalf("rules.NameLabelsMax %d, the tap learns names of at most %d labels", rules.NameLabelsMax, labelsMax-1)
+	}
+}
