@@ -206,7 +206,7 @@ change that moves their lines.
   - _Boundary: Record decoders and their fuzz tests_
   - _Depends: 5.1_
   - _Requirements: 8.1, 8.2, 8.4, 8.5, 8.7_
-- [ ] 6.5 (P) Fuzz the API request-line decoding
+- [x] 6.5 (P) Fuzz the API request-line decoding
   - Fuzz tests for request parsing and for the line reader's length limit, seeded from the
     documented examples
   - Run each for a bounded time; fix any defect found and keep its input as a seed

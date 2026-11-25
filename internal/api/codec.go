@@ -38,7 +38,9 @@ func (r *LineReader) ReadLine() ([]byte, error) {
 	var line []byte
 	for {
 		chunk, err := r.br.ReadSlice('\n')
-		if len(line) <= r.limit { // past the limit nothing more is kept, only consumed
+		// Past limit+1 bytes nothing more is kept, only consumed: a kept "\r" at limit+1 may
+		// still be content (a line cut there would pass as limit bytes) or half of "\r\n".
+		if len(line) <= r.limit+1 {
 			line = append(line, chunk...)
 		}
 		if err == nil {
