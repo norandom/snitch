@@ -13,6 +13,7 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 
+#include "contract.h"
 #include "rules_abi.h"
 
 #define AF_INET 2
@@ -73,6 +74,40 @@ struct byte_count {
 	__u64 pkts;
 	__u64 last_ns;
 };
+
+// The daemon's view (bpf2go mirrors these in Go): a change here means regenerating the
+// bindings and updating the Go side with it.
+CONTRACT_SIZE(struct event, 336);
+CONTRACT_OFFSET(struct event, pid, 0);
+CONTRACT_OFFSET(struct event, ppid, 4);
+CONTRACT_OFFSET(struct event, exe_ino, 8);
+CONTRACT_OFFSET(struct event, exe_dev, 16);
+CONTRACT_OFFSET(struct event, program, 20);
+CONTRACT_OFFSET(struct event, addr, 24);
+CONTRACT_OFFSET(struct event, dport, 40);
+CONTRACT_OFFSET(struct event, family, 42);
+CONTRACT_OFFSET(struct event, proto, 43);
+CONTRACT_OFFSET(struct event, verdict, 44);
+CONTRACT_OFFSET(struct event, hook, 45);
+CONTRACT_OFFSET(struct event, comm, 46);
+CONTRACT_OFFSET(struct event, rule, 64);
+CONTRACT_OFFSET(struct event, cookie, 72);
+CONTRACT_OFFSET(struct event, path, 80);
+
+CONTRACT_SIZE(struct exe_key, 16);
+CONTRACT_OFFSET(struct exe_key, ino, 0);
+CONTRACT_OFFSET(struct exe_key, dev, 8);
+CONTRACT_OFFSET(struct exe_key, pad, 12);
+
+CONTRACT_SIZE(struct control_state, 16);
+CONTRACT_OFFSET(struct control_state, heartbeat_ns, 0);
+CONTRACT_OFFSET(struct control_state, mode, 8);
+CONTRACT_OFFSET(struct control_state, flags, 12);
+
+CONTRACT_SIZE(struct byte_count, 24);
+CONTRACT_OFFSET(struct byte_count, bytes, 0);
+CONTRACT_OFFSET(struct byte_count, pkts, 8);
+CONTRACT_OFFSET(struct byte_count, last_ns, 16);
 
 const struct event *unused_event __attribute__((unused));
 const struct byte_count *unused_byte_count __attribute__((unused));

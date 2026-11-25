@@ -20,6 +20,7 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 
+#include "contract.h"
 #include "rules_abi.h"  // snitchd's trie key and value: one definition for both programs
 
 #define AF_INET 2
@@ -92,6 +93,43 @@ struct dns_answer_record {
 	// The same slots apply to every address.
 	struct domain_slot slots[LEVELS_MAX * SLOTS_MAX];
 };
+
+// The daemon's view (bpf2go mirrors these in Go): a change here means regenerating the
+// bindings and updating the Go side with it.
+CONTRACT_SIZE(struct domain_key, 64);
+CONTRACT_OFFSET(struct domain_key, name, 0);
+
+CONTRACT_SIZE(struct domain_slot, 12);
+CONTRACT_OFFSET(struct domain_slot, program, 0);
+CONTRACT_OFFSET(struct domain_slot, proto, 4);
+CONTRACT_OFFSET(struct domain_slot, pad, 5);
+CONTRACT_OFFSET(struct domain_slot, port, 6);
+CONTRACT_OFFSET(struct domain_slot, id, 8);
+
+CONTRACT_SIZE(struct domain_val, 96);
+CONTRACT_OFFSET(struct domain_val, slot, 0);
+
+CONTRACT_SIZE(struct resolver_key, 16);
+CONTRACT_OFFSET(struct resolver_key, addr, 0);
+
+CONTRACT_SIZE(struct q_key, 16);
+CONTRACT_OFFSET(struct q_key, cookie, 0);
+CONTRACT_OFFSET(struct q_key, id, 8);
+CONTRACT_OFFSET(struct q_key, pad, 10);
+CONTRACT_OFFSET(struct q_key, pad2, 12);
+
+CONTRACT_SIZE(struct q_val, 72);
+CONTRACT_OFFSET(struct q_val, qname, 0);
+CONTRACT_OFFSET(struct q_val, ns, 64);
+
+CONTRACT_SIZE(struct dns_answer_record, 976);
+CONTRACT_OFFSET(struct dns_answer_record, qname, 0);
+CONTRACT_OFFSET(struct dns_answer_record, ttl, 64);
+CONTRACT_OFFSET(struct dns_answer_record, n, 68);
+CONTRACT_OFFSET(struct dns_answer_record, pad, 69);
+CONTRACT_OFFSET(struct dns_answer_record, family, 72);
+CONTRACT_OFFSET(struct dns_answer_record, addrs, 80);
+CONTRACT_OFFSET(struct dns_answer_record, slots, 208);
 
 // These indices are the user-space stats ABI; keep exists before update_fail.
 enum dns_stat {

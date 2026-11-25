@@ -70,7 +70,7 @@ change that moves their lines.
   - Done when both programs compile from the single definition and no second definition of
     either structure remains in the tree
   - _Requirements: 3.4_
-- [ ] 3.3 State the layout contracts for every structure shared with the daemon
+- [x] 3.3 State the layout contracts for every structure shared with the daemon
   - Size, and position of every member the daemon reads or writes, for the structures of both
     programs listed in the design's contract table, with sizes taken from the compiler
   - Done when both programs compile and every structure in that table has a size contract and
