@@ -291,7 +291,13 @@ static __always_inline int parse_l34(struct pkt *p, struct l4 *l, int peer_is_sr
 		return -1;
 	l->sport = bpf_ntohs(uh.source);
 	l->dport = bpf_ntohs(uh.dest);
-	if (bpf_ntohs(uh.len) < sizeof(uh) + 12)
+	// The UDP length must cover the header plus a DNS header and must not claim more bytes than
+	// the packet holds. The kernel's UDP receive path already drops such datagrams before
+	// cgroup ingress, so this rejects nothing real; it keeps the tap from learning out of a
+	// datagram whose own length field is a lie (c-hardening, Req 6.3). The rd() above proved
+	// skb->len >= off + 8, so the subtraction cannot wrap.
+	__u32 ulen = bpf_ntohs(uh.len);
+	if (ulen < sizeof(uh) + 12 || ulen > p->skb->len - off)
 		return -1;
 	l->dns_off = (__u16)(off + sizeof(uh));  // off <= 60 (IPv4 ihl) or 40 (IPv6): fits 16 bits
 	return 0;

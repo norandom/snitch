@@ -40,6 +40,15 @@ func learned(addr netip.Addr) (Stats, *Record, map[rules.RuleKey]rules.RuleVal) 
 }
 
 // set16 returns a frame builder that writes v at off of the base frame.
+// v4UDPLenPlus sets the IPv4 answer's UDP length to the bytes present after the IPv4 header
+// plus n, so n == 1 is the first value the tap's upper bound rejects.
+func v4UDPLenPlus(n int) func(*testing.T) []byte {
+	return func(t *testing.T) []byte {
+		f := v4Answer(t)
+		return setU16At(t, f, udp4LenOff, uint16(len(f)-ethLen-ip4Len+n))
+	}
+}
+
 func set16(base func(*testing.T) []byte, off int, v uint16) func(*testing.T) []byte {
 	return func(t *testing.T) []byte { return setU16At(t, base(t), off, v) }
 }
@@ -49,11 +58,12 @@ func setByte(base func(*testing.T) []byte, off int, b byte) func(*testing.T) []b
 	return func(t *testing.T) []byte { return overwriteAt(t, base(t), off, []byte{b}) }
 }
 
-// lengthCases: parse_l34 checks only the IPv4 IHL (off < 20, line 273) and the UDP length's
-// lower bound (uh.len < 8 + 12, line 294); the IPv4 total length, the IPv6 payload length and
-// the UDP length are otherwise never compared with the frame, and every later read is a
-// bpf_skb_load_bytes of bytes actually present. Where those fields disagree the tap parses the
-// real bytes and learns the well-formed answer they carry. Fail-safe: in production the IP
+// lengthCases: parse_l34 checks the IPv4 IHL (off < 20) and the UDP length on both sides: at
+// least 8 + 12 and at most the bytes the packet holds after the network header. The IPv4 total
+// length, the IPv6 payload length and a UDP length shorter than the message are not compared
+// with the frame, and every later read is a bpf_skb_load_bytes of bytes actually present. Where
+// those fields disagree the tap parses the real bytes and learns the well-formed answer they
+// carry. Fail-safe: in production the IP
 // layer (ip_rcv_core, ip6_rcv_core) and UDP (__udp4_lib_rcv / __udp6_lib_rcv) drop a datagram
 // whose length fields run past the packet and trim the skb to the stated lengths before
 // cgroup_skb ingress runs, so these frames reach the tap only through the kernel's test run,
@@ -64,15 +74,18 @@ func lengthCases() []corpusCase {
 	l6s, l6r, l6e := learned(corpusAddr6)
 	return []corpusCase{
 		{name: "lengths-udp-below-min-ipv4", frame: set16(v4Answer, udp4LenOff, udpLen+dnsHdrLen-1), slots: corpusSlots, skipQ: true,
-			probes: "IPv4, UDP length 19, below the UDP header + the 12-byte DNS header (line 294): passes, nothing counted (not yet seen), nothing learned"},
+			probes: "IPv4, UDP length 19, below the UDP header + the 12-byte DNS header (parse_l34): passes, nothing counted (not yet seen), nothing learned"},
 		{name: "lengths-udp-below-min-ipv6", frame: set16(v6Answer, udp6LenOff, udpLen+dnsHdrLen-1), slots: corpusSlots, skipQ: true,
-			probes: "IPv6, UDP length 19, below the UDP header + the 12-byte DNS header (line 294): passes, nothing counted (not yet seen), nothing learned"},
+			probes: "IPv6, UDP length 19, below the UDP header + the 12-byte DNS header (parse_l34): passes, nothing counted (not yet seen), nothing learned"},
 		{name: "lengths-udp-min-shorter-than-message", frame: set16(v4Answer, udp4LenOff, udpLen+dnsHdrLen), slots: corpusSlots, skipQ: true,
 			stats: l4s, record: l4r, entries: l4e,
-			probes: "UDP length 20, the minimum line 294 accepts, shorter than the DNS message: passes" + real},
+			probes: "UDP length 20, the minimum parse_l34 accepts, shorter than the DNS message: passes" + real},
 		{name: "lengths-udp-beyond-frame", frame: set16(v4Answer, udp4LenOff, 0xFFFF), slots: corpusSlots, skipQ: true,
-			stats: l4s, record: l4r, entries: l4e,
-			probes: "UDP length 65535, beyond the frame: passes" + real},
+			probes: "IPv4, UDP length 65535, more than the packet holds: parse_l34 rejects it before ST_SEEN (the UDP length must not exceed skb->len - off): passes, nothing counted, nothing learned"},
+		{name: "lengths-udp-beyond-frame-ipv6", frame: set16(v6Answer, udp6LenOff, 0xFFFF), slots: corpusSlots, skipQ: true,
+			probes: "IPv6, UDP length 65535, more than the packet holds: rejected in parse_l34 before ST_SEEN: passes, nothing counted, nothing learned"},
+		{name: "lengths-udp-one-beyond-frame", frame: v4UDPLenPlus(1), slots: corpusSlots, skipQ: true,
+			probes: "IPv4, UDP length one byte more than the packet holds (the boundary of the check): rejected in parse_l34 before ST_SEEN, nothing counted, nothing learned"},
 		{name: "lengths-ipv4-total-below-payload", frame: set16(v4Answer, ip4TotalOff, ip4Len), slots: corpusSlots, skipQ: true,
 			stats: l4s, record: l4r, entries: l4e,
 			probes: "IPv4 total length 20, the header alone: passes" + real},

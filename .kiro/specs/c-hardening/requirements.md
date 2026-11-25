@@ -198,7 +198,13 @@ and not an argument.
    other than one; and an answer whose question does not match a recorded question.
 2. When the DNS tap is given a corpus packet, the DNS tap shall let the packet pass.
 3. When the DNS tap is given a malformed corpus packet, the DNS tap shall add no allow
-   entry and shall emit no answer record for it.
+   entry and shall emit no answer record for it, except where the malformed field does not
+   affect the answer record the tap reads and that record is complete and came from a
+   registered resolver: an IPv4 total length, an IPv6 payload length or a UDP length shorter
+   than the message that disagrees with the frame; an answer count larger than the records
+   present; an owner name that is a compression pointer. Each such corpus entry states the
+   exception. (Amended 2026-11-25 by the user's decision; a UDP length larger than the
+   packet holds is not an exception and is rejected.)
 4. When the DNS tap is given a corpus packet, the root test suite shall assert the counter
    the packet is expected to increment and that no runtime-contract counter increments.
 5. The corpus shall include well-formed packets at each limit (longest accepted name, most
