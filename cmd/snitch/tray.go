@@ -66,8 +66,8 @@ type trayConfig struct {
 func runTray(args []string, stderr io.Writer) int {
 	cfg, err := parseTray(args, stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		fmt.Fprintln(stderr, trayUsage)
+		_, _ = fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, trayUsage)
 		return exitUsage
 	}
 	return startTray(cfg)
@@ -142,14 +142,14 @@ func startTray(cfg trayConfig) int {
 
 // trayFail is one operator error line and exit 1 (the design's Error Categories).
 func trayFail(cfg trayConfig, err error) int {
-	fmt.Fprintf(cfg.stderr, "snitch tray: %v\n", err)
+	_, _ = fmt.Fprintf(cfg.stderr, "snitch tray: %v\n", err)
 	return exitFail
 }
 
 // trayLog is the adapters' log delegate: every line on stderr, the session's journal under
 // autostart — the design's Monitoring, which an unattended tray is read through.
 func trayLog(cfg trayConfig) func(string) {
-	return func(s string) { fmt.Fprintln(cfg.stderr, "snitch tray: "+s) }
+	return func(s string) { _, _ = fmt.Fprintln(cfg.stderr, "snitch tray: "+s) }
 }
 
 // dialUnix is the -api dialer: the daemon's unix socket only, never a network address (8.5).
@@ -164,7 +164,7 @@ func dialUnix(ctx context.Context, path string) (net.Conn, error) {
 // messages to the loop.
 func runTrayJobs(cfg trayConfig, tr *sni.Tray, inbox chan any) int {
 	role := roleAtStart(cfg)
-	fmt.Fprintf(cfg.stderr, "snitch tray: starting: version %s, daemon socket %s, role %s\n",
+	_, _ = fmt.Fprintf(cfg.stderr, "snitch tray: starting: version %s, daemon socket %s, role %s\n",
 		version, cfg.apiPath, role)
 	rules := &ruleLog{say: trayLog(cfg), to: inbox, sent: map[uint64]string{}}
 	c := client.New(client.Config{Path: cfg.apiPath, Dial: cfg.dial, Sink: rules.answered,
@@ -190,7 +190,7 @@ func trayEnd(cfg trayConfig, tr *sni.Tray, err error) int {
 		tr.Remove()
 		return 0
 	case errors.Is(err, sni.ErrBusLost):
-		fmt.Fprintln(cfg.stderr, "snitch tray: "+err.Error())
+		_, _ = fmt.Fprintln(cfg.stderr, "snitch tray: "+err.Error())
 		return exitFail
 	default:
 		contract.Invariant(false, "tray: the run ended in a way the design does not name: "+err.Error())
@@ -221,7 +221,7 @@ func (cfg trayConfig) saidStat() func(string) (os.FileInfo, error) {
 	return func(p string) (os.FileInfo, error) {
 		fi, err := cfg.stat(p)
 		if err != nil {
-			fmt.Fprintf(cfg.stderr, "snitch tray: the operator file %s: %v\n", p, err)
+			_, _ = fmt.Fprintf(cfg.stderr, "snitch tray: the operator file %s: %v\n", p, err)
 		}
 		return fi, err
 	}
@@ -231,7 +231,7 @@ func (cfg trayConfig) saidRead() func(string) ([]byte, error) {
 	return func(p string) ([]byte, error) {
 		b, err := cfg.read(p)
 		if err != nil {
-			fmt.Fprintf(cfg.stderr, "snitch tray: the operator file %s: %v\n", p, err)
+			_, _ = fmt.Fprintf(cfg.stderr, "snitch tray: the operator file %s: %v\n", p, err)
 		}
 		return b, err
 	}

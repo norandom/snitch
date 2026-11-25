@@ -19,7 +19,7 @@ import (
 // them to the API (emit never blocks) and uncovered connections to the learning sink. It never
 // returns nil: that would end the run.
 func (d *daemon) pump(ctx context.Context) error {
-	go func() { <-ctx.Done(); d.rd.Close() }()
+	go func() { <-ctx.Done(); _ = d.rd.Close() }()
 	for {
 		rec, err := d.rd.Read()
 		if errors.Is(err, ringbuf.ErrClosed) {

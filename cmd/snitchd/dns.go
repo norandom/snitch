@@ -126,7 +126,7 @@ func (s *dnsState) attach(deps dnsDeps) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	root, ok := cgroupRoot(f)
 	if !ok {
 		return errors.New("no cgroup2 mount in " + mountsPath)

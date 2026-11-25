@@ -78,10 +78,10 @@ func (l *learner) flush() error {
 // job flushes every minute and once more when the run ends. Errors never end the run (jobs.Run
 // would discard them anyway: the first job to return wins), so they are logged in flush.
 func (l *learner) job() jobs.Job {
-	periodic := jobs.Every(learnWritePeriod, func(context.Context) error { l.flush(); return nil })
+	periodic := jobs.Every(learnWritePeriod, func(context.Context) error { _ = l.flush(); return nil })
 	return func(ctx context.Context) error {
 		err := periodic(ctx)
-		l.flush()
+		_ = l.flush()
 		return err
 	}
 }

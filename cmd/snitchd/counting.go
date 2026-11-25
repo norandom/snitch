@@ -41,7 +41,7 @@ func attachCountingWith(mounts func() (io.ReadCloser, error), attach func(root s
 		if err != nil {
 			return nil, err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		root, ok := cgroupRoot(f)
 		if !ok {
 			return nil, errors.New("no cgroup2 mount in " + mountsPath)

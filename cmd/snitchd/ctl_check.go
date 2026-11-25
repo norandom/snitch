@@ -19,7 +19,7 @@ import (
 
 func checkUsage(f *flag.FlagSet) func() {
 	return func() {
-		fmt.Fprint(f.Output(), `usage: snitchd check [-rules /etc/snitch/rules.toml]
+		_, _ = fmt.Fprint(f.Output(), `usage: snitchd check [-rules /etc/snitch/rules.toml]
   loads the rules file as the daemon would, without root: exit 0 and the summary when it is
   valid (one unresolved: line per pattern that matched no executable), 1 and file:line: reason
   on stderr when it is not (a missing file included), 2 on a usage error
@@ -41,10 +41,10 @@ func (c *ctl) checkFlags(args []string) (path string, code int, done bool) {
 	case done:
 		return "", code, true
 	case len(set.Args()) > 0:
-		fmt.Fprintf(c.errw, "snitchd check: takes no words, got %q (flags only)\n", set.Args())
+		_, _ = fmt.Fprintf(c.errw, "snitchd check: takes no words, got %q (flags only)\n", set.Args())
 		return "", exitUsage, true
 	case path == "":
-		fmt.Fprintln(c.errw, "snitchd check: -rules must not be empty")
+		_, _ = fmt.Fprintln(c.errw, "snitchd check: -rules must not be empty")
 		return "", exitUsage, true
 	}
 	return path, exitOK, false
@@ -63,14 +63,14 @@ func (c *ctl) checkRules(path string) int {
 	if err != nil {
 		return c.refuse(err.Error())
 	}
-	warn := func(msg string) { fmt.Fprintf(c.errw, "snitchd check: %s\n", msg) }
+	warn := func(msg string) { _, _ = fmt.Fprintf(c.errw, "snitchd check: %s\n", msg) }
 	res, err := rules.Resolve(f, rules.OSFS(warn))
 	if err != nil {
 		return c.refuse(err.Error())
 	}
-	fmt.Fprintln(c.out, summary(&snapshot{res: res, ent: rules.Encode(res)}))
+	_, _ = fmt.Fprintln(c.out, summary(&snapshot{res: res, ent: rules.Encode(res)}))
 	for _, u := range res.Unresolved {
-		fmt.Fprintln(c.out, unresolvedLine(u))
+		_, _ = fmt.Fprintln(c.out, unresolvedLine(u))
 	}
 	return exitOK
 }

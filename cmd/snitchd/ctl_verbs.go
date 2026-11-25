@@ -33,7 +33,7 @@ func (c *ctl) require() {
 
 // refuse is every refusal: one sentence on stderr, exit 1.
 func (c *ctl) refuse(msg string) int {
-	fmt.Fprintf(c.errw, "snitchd %s: %s\n", c.name, msg)
+	_, _ = fmt.Fprintf(c.errw, "snitchd %s: %s\n", c.name, msg)
 	return exitRefused
 }
 
@@ -68,12 +68,12 @@ func (c *ctl) report(text string, err error) int {
 	var usage usageErr
 	switch {
 	case errors.As(err, &usage):
-		fmt.Fprintf(c.errw, "snitchd %s: %v\n", c.name, err)
+		_, _ = fmt.Fprintf(c.errw, "snitchd %s: %v\n", c.name, err)
 		return exitUsage
 	case err != nil:
 		return c.refuse(err.Error())
 	}
-	fmt.Fprintln(c.out, text)
+	_, _ = fmt.Fprintln(c.out, text)
 	return exitOK
 }
 
@@ -91,7 +91,7 @@ func (c *ctl) trialFlags(args []string) (a trialArgs, code int, done bool) {
 		f.BoolVar(&a.extend, "extend", false, "move a running trial's deadline to now plus the duration (start moves too)")
 		f.BoolVar(&a.yes, "y", false, "start without the confirmation asked when no rules are loaded")
 		f.Usage = func() {
-			fmt.Fprintf(c.errw, "usage: snitchd trial [-extend] [-y] [duration]\n  duration in Go syntax (10m, 90s), %v to %v, default %v\n",
+			_, _ = fmt.Fprintf(c.errw, "usage: snitchd trial [-extend] [-y] [duration]\n  duration in Go syntax (10m, 90s), %v to %v, default %v\n",
 				trial.MinTrial, trial.MaxTrial, trial.DefaultTrial)
 			f.PrintDefaults()
 		}
@@ -101,12 +101,12 @@ func (c *ctl) trialFlags(args []string) (a trialArgs, code int, done bool) {
 	}
 	a.d = trial.DefaultTrial
 	if rest := set.Args(); len(rest) > 1 {
-		fmt.Fprintf(c.errw, "snitchd trial: one duration at most, got %q (flags go before it)\n", rest)
+		_, _ = fmt.Fprintf(c.errw, "snitchd trial: one duration at most, got %q (flags go before it)\n", rest)
 		return a, exitUsage, true
 	} else if len(rest) == 1 {
 		d, err := time.ParseDuration(rest[0])
 		if err != nil {
-			fmt.Fprintf(c.errw, "snitchd trial: duration %q: use Go syntax such as 10m or 90s\n", rest[0])
+			_, _ = fmt.Fprintf(c.errw, "snitchd trial: duration %q: use Go syntax such as 10m or 90s\n", rest[0])
 			return a, exitUsage, true
 		}
 		a.d = d

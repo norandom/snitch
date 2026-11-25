@@ -21,7 +21,7 @@ var errVersion = fmt.Errorf("-version: %w", flag.ErrHelp)
 var stdout io.Writer = os.Stdout
 
 // printVersion is the -version answer: the version and a newline.
-func printVersion(w io.Writer, v string) { fmt.Fprintln(w, mustVersion(v)) }
+func printVersion(w io.Writer, v string) { _, _ = fmt.Fprintln(w, mustVersion(v)) }
 
 // startupLine is the journal line after the hooks are attached: which build runs in which mode.
 func startupLine(v, mode string, src modeSource) string {

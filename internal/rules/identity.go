@@ -53,7 +53,7 @@ func devViaMountinfo(mnt uint64) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	dev, ok, err := devFromMountinfo(mnt, f)
 	if err != nil {
 		return 0, err

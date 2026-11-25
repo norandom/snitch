@@ -77,7 +77,7 @@ func writeAtomic(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op after a successful rename
 	_, err = tmp.Write(data)
 	if cerr := tmp.Close(); err == nil {
 		err = cerr

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -55,7 +56,7 @@ func TestObserveUnderSnapshotStorm(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		f.s.Emit(f.event(fmt.Sprintf("7.7.7.%d", i), "allow-rule"))
 	}
-	_ = f.s.tick(nil)
+	_ = f.s.tick(context.Background())
 	conn, err := net.Dial("unix", f.path)
 	if err != nil {
 		t.Fatal(err)

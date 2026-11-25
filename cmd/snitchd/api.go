@@ -166,7 +166,7 @@ func listenUnix(path string) (*net.UnixListener, error) {
 		return nil, err
 	}
 	if err := os.Chmod(path, 0o666); err != nil {
-		l.Close()
+		_ = l.Close()
 		return nil, err
 	}
 	l.SetUnlinkOnClose(true)

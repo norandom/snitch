@@ -28,7 +28,7 @@ func lookupPinned(name string, key uint32, out any) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	return m.Lookup(key, out)
 }
 

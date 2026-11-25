@@ -30,7 +30,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	path := fs.String("api", "", "socket path to serve the API on (required)")
 	if err := fs.Parse(args); err != nil || *path == "" || fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: fakedaemon -api PATH (commands on stdin)")
+		_, _ = fmt.Fprintln(stderr, "usage: fakedaemon -api PATH (commands on stdin)")
 		return 2
 	}
 	var mu sync.Mutex // the edits arrive on connection goroutines
@@ -39,17 +39,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Record: func(r api.Request) {
 			b, _ := json.Marshal(r) // a Request always marshals
 			mu.Lock()
-			fmt.Fprintln(stdout, string(b))
+			_, _ = fmt.Fprintln(stdout, string(b))
 			mu.Unlock()
 		},
-		Log: func(l string) { fmt.Fprintln(stderr, l) },
+		Log: func(l string) { _, _ = fmt.Fprintln(stderr, l) },
 	})
 	if err != nil {
-		fmt.Fprintln(stderr, "fakedaemon:", err)
+		_, _ = fmt.Fprintln(stderr, "fakedaemon:", err)
 		return 1
 	}
 	defer s.Stop()
-	fmt.Fprintln(stderr, "fakedaemon: serving on "+*path+"; commands on stdin, quit to stop")
+	_, _ = fmt.Fprintln(stderr, "fakedaemon: serving on "+*path+"; commands on stdin, quit to stop")
 	sc := bufio.NewScanner(stdin)
 	for sc.Scan() {
 		err := s.Do(sc.Text())
@@ -57,7 +57,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 0
 		}
 		if err != nil {
-			fmt.Fprintf(stderr, "fakedaemon: %q: %v\n", sc.Text(), err)
+			_, _ = fmt.Fprintf(stderr, "fakedaemon: %q: %v\n", sc.Text(), err)
 		}
 	}
 	return 0

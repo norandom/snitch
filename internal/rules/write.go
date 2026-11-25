@@ -25,7 +25,7 @@ func WriteWith(path string, f *File, header string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op after a successful rename
 	if _, err = tmp.WriteString(format(f, header)); err == nil {
 		err = tmp.Chmod(0o644)
 	}

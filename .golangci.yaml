@@ -1,0 +1,111 @@
+# The committed Go lint configuration: the single source of the golangci
+# layer's strictness (ci-debs R2.1, R2.3). The pipeline runs this file as
+# given (`golangci-lint run --config .golangci.yaml` inside the
+# digest-pinned image, .dagger/pins.go imageGolangciLint), so a run on a
+# workstation and a run in CI read the same settings and nothing about the
+# strictness is implicit state on any host. Shape: the v2 schema of the
+# pinned golangci-lint; the image's own `golangci-lint config verify`
+# checks this file against exactly that schema.
+version: "2"
+
+run:
+  # Bounded analysis: v2's default timeout is 0 - disabled - and the
+  # pipeline's layer must not be able to hang a check door on a runaway
+  # analysis until the engine gives up. A real run on this repository
+  # finishes far inside this bound (cache warmth only changes first-run
+  # cost, never correctness); a time budget exceeded fails the check by
+  # name instead of wedging silently.
+  timeout: 5m
+  # Findings fail the gate: the zero-findings acceptance criterion (R2.1)
+  # needs the run to exit non-zero when anything is reported. That is
+  # golangci-lint's default exit code, but the layer's contract is
+  # written out instead of trusted - the check's banner/exit behavior is
+  # decided here, not by an upstream default that a future version could
+  # move.
+  issues-exit-code: 1
+
+linters:
+  # The design's baseline: v2's `standard` set (errcheck, govet,
+  # ineffassign, staticcheck, unused). It matches the repo's existing
+  # vet-strong culture without importing house caps - funlen/gocyclo
+  # stay in scripts/caps.sh where their thresholds live today: one
+  # gate, one owner, so the linter layer adds judgment, not a second
+  # opinion already owned elsewhere.
+  default: standard
+  # The two cheap adds the design names (R2.1):
+  # - copyloopvar flags loop variables copied into helper variables
+  #   (`c := c` inside the loop body) - an idiom required before Go
+  #   1.22 gave each iteration its own variable. The repo's floor is
+  #   1.26.8, so every loop has the newer semantics and any such copy
+  #   is dead weight that hides the intent.
+  # - misspell catches misspelled words in comments and identifiers,
+  #   pure surface quality, zero behavioral risk.
+  enable:
+    - copyloopvar
+    - misspell
+  exclusions:
+    # Strict generated-file handling: only files carrying the Go
+    # convention `// Code generated ... DO NOT EDIT.` before their
+    # first code line count as generated. The bpf2go bindings under
+    # internal/bpf carry exactly that header, and their regeneration is
+    # a deliberate act (go generate with clang, internal/bpf/gen.go),
+    # so the mode covers them by design. Written out even though it is
+    # v2's default, because the layer's correctness (never reviewing
+    # generated code) depends on it and must not regress silently.
+    generated: strict
+    # The same bindings, belt and braces, by path: v2 paths are regular
+    # expressions matched against module-relative file names (not
+    # globs). The bindings are committed artifacts regenerated only by
+    # the go:generate line in internal/bpf/gen.go; the generated shapes
+    # (kernel-mirroring map field sets in particular) are exactly what
+    # unused/staticcheck chapters read as dead fields, and none of it
+    # is authored code anyone should be asked to review or fix.
+    paths:
+      - '^internal/bpf/.*_bpfel\.go$'
+    # Idiom-level triage decisions, each with its reason (R2.3: every
+    # loosening of strictness is a reviewable diff to this file):
+    rules:
+      # Tests observe their own setup. The deliberate discards the
+      # tests make - os.WriteFile for a fixture the very next read
+      # parses, teardown closes of fixtures, exits probed through
+      # runMain/parseFlagsTo - are enforced by each test's own
+      # assertions: a broken write or close surfaces as that test
+      # failing at the next line that touches the artifact. Production
+      # code keeps every errcheck finding; only _test.go files carry
+      # this rule, and only for errcheck.
+      - path: _test\.go
+        linters:
+          - errcheck
+      # QF1001 (apply De Morgan's law) rewrites negated conjunctions
+      # this repo writes on purpose: tray live() states its false
+      # condition as one negated clause (facts kept of a daemon that
+      # is gone), and the expanded form (a || !b) is strictly harder
+      # to read than the author's phrasing. The class is excluded as a
+      # pure rewrite of deliberate phrasing, not a defect class; every
+      # other staticcheck finding in the tree is fixed in code.
+      - linters:
+          - staticcheck
+        text: "QF1001:"
+      # S1005 on one line of clienttest/standin.go (its Stop join):
+      # errcheck demands the blank receive for an error-typed channel,
+      # staticcheck's S1005 calls that same blank assignment
+      # unnecessary, and its alternative (S1000's simple receive) is
+      # what errcheck flagge - the two linters give contradictory
+      # guidance on this construct. The errcheck-sanctioned form is
+      # the deliberate choice; the exclusion is scoped to this one
+      # file and check so no other S1005 finding can hide behind it.
+      - path: clienttest/standin\.go
+        linters:
+          - staticcheck
+        text: "S1005:"
+
+# The gate's own reporting: no caps. golangci-lint's defaults (50
+# issues per linter, 3 per identical message) exist for incremental
+# adoption into large codebases; a gate whose acceptance is ZERO
+# findings must see and report every finding, not the first three of
+# a class - a capped report would silently hide whole classes from
+# this layer's triage, and a code shift in numbers would change
+# nothing the pipeline can see.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

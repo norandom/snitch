@@ -168,7 +168,7 @@ func (l *Learned) Observations() []Observed {
 	out := make([]Observed, 0, len(l.entries))
 	for _, k := range l.sortedKeys(names) {
 		e := l.entries[k]
-		out = append(out, Observed{Program: names[k.subject], Path: k.subject.path, Exe: k.subject.exe,
+		out = append(out, Observed{Program: names[k.subject], Path: k.path, Exe: k.exe,
 			Name: k.name, Addr: k.addr, Proto: k.proto, Port: k.port, Count: e.count, First: e.first, Last: e.last})
 	}
 	contract.Ensure(l.dirty == was, "a read projection leaves the dirty flag alone")

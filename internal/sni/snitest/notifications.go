@@ -147,13 +147,6 @@ func (n *Notifications) Closed(id uint32, reason uint32) {
 	_ = n.conn.Emit(notificationsPath, notificationsIface+".NotificationClosed", id, reason)
 }
 
-// setCapabilities changes what GetCapabilities answers from now on.
-func (n *Notifications) setCapabilities(caps ...string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.caps = append([]string(nil), caps...)
-}
-
 // Calls is every Notify call the server has seen, oldest first, as copies.
 func (n *Notifications) Calls() []NotifyCall {
 	n.mu.Lock()

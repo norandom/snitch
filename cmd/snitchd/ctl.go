@@ -77,7 +77,7 @@ func realDeps(in io.Reader, out io.Writer) deps {
 func askYN(in io.Reader, out io.Writer) func(string) bool {
 	r := bufio.NewReader(in)
 	return func(question string) bool {
-		fmt.Fprint(out, question, " ")
+		_, _ = fmt.Fprint(out, question, " ")
 		line, _ := r.ReadString('\n')
 		answer := strings.ToLower(strings.TrimSpace(line))
 		return answer == "y" || answer == "yes"
@@ -146,12 +146,12 @@ func dispatch(table []verb, c *ctl, args []string) int {
 		}
 		c.name = v.name
 		if v.root && c.euid() != 0 {
-			fmt.Fprintf(c.errw, "snitchd %s: run as root (the pinned maps and the state files need it)\n", c.name)
+			_, _ = fmt.Fprintf(c.errw, "snitchd %s: run as root (the pinned maps and the state files need it)\n", c.name)
 			return exitUsage
 		}
 		return v.run(c, args[1:])
 	}
-	fmt.Fprintf(c.errw, "snitchd: %q is not a command; commands: %s (flags alone run the daemon, -h lists them)\n",
+	_, _ = fmt.Fprintf(c.errw, "snitchd: %q is not a command; commands: %s (flags alone run the daemon, -h lists them)\n",
 		args[0], verbNames(table))
 	return exitUsage
 }

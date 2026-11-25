@@ -151,7 +151,13 @@ func (s *StandIn) Stop() {
 	s.run = nil // no new announcement from here on
 	s.pmu.Unlock()
 	s.stop()
-	<-s.done
+	// Join the serving goroutine; the serve error was for the harness to
+	// observe while it ran. The blank receive is the one shape errcheck
+	// accepts for an error-typed channel; staticcheck's S1005 dislikes
+	// exactly that (and S1000 the select alternative), so this one line
+	// is adjudicated in .golangci.yaml - the exclusion is scoped to this
+	// file and that one check id.
+	_ = <-s.done
 	s.pending.Wait()
 	s.stop, s.done = nil, nil
 }

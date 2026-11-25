@@ -14,7 +14,7 @@ import (
 var version = "dev"
 
 // printVersion is the -version answer: the version and a newline.
-func printVersion(w io.Writer, v string) { fmt.Fprintln(w, mustVersion(v)) }
+func printVersion(w io.Writer, v string) { _, _ = fmt.Fprintln(w, mustVersion(v)) }
 
 // mustVersion is the one place the version is read for output: a link with an empty value
 // (-X main.version=) would otherwise print an empty line.

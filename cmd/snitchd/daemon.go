@@ -285,10 +285,10 @@ func guard(j jobs.Job) jobs.Job {
 // the objects; the pinned control and kill maps stay.
 func (d *daemon) close() {
 	for _, l := range d.links {
-		l.Close()
+		_ = l.Close()
 	}
 	if d.rd != nil {
-		d.rd.Close()
+		_ = d.rd.Close()
 	}
-	d.objs.Close()
+	_ = d.objs.Close()
 }

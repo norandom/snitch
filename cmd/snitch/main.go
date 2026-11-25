@@ -35,7 +35,10 @@ func runMain(args []string, stdout, stderr io.Writer) (code int) {
 		if r := recover(); r != nil {
 			var v *contract.Violation
 			if err, ok := r.(error); ok && errors.As(err, &v) {
-				fmt.Fprintf(stderr, "snitch: %v\n%s", v, debug.Stack())
+				// The console print is best-effort: this handler exists to report the
+				// panic, and a writer that cannot take the report has nowhere better
+				// to send an error about it.
+				_, _ = fmt.Fprintf(stderr, "snitch: %v\n%s", v, debug.Stack())
 				code = exitViolation
 				return
 			}
@@ -49,13 +52,13 @@ func runMain(args []string, stdout, stderr io.Writer) (code int) {
 // Everything else, including no word at all, is a usage error.
 func dispatch(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, usage)
+		_, _ = fmt.Fprintln(stderr, usage)
 		return exitUsage
 	}
 	switch args[0] {
 	case "-version", "--version":
 		if len(args) != 1 {
-			fmt.Fprintln(stderr, "snitch: -version takes no arguments\n"+usage)
+			_, _ = fmt.Fprintln(stderr, "snitch: -version takes no arguments\n"+usage)
 			return exitUsage
 		}
 		printVersion(stdout, version)
@@ -63,6 +66,6 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 	case "tray":
 		return runTray(args[1:], stderr)
 	}
-	fmt.Fprintf(stderr, "snitch: unknown command %q\n%s\n", args[0], usage)
+	_, _ = fmt.Fprintf(stderr, "snitch: unknown command %q\n%s\n", args[0], usage)
 	return exitUsage
 }

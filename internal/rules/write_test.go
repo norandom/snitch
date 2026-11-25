@@ -84,7 +84,7 @@ func TestWriteWithRequiresAHeader(t *testing.T) {
 func TestWriteFileKeepsTheLearnedHeader(t *testing.T) {
 	// cmd/snitchd passes rules.WriteFile by value to the learner: its shape and header stay
 	path := filepath.Join(t.TempDir(), "learned.toml")
-	var write func(string, *rules.File) error = rules.WriteFile
+	var write = rules.WriteFile
 	if err := write(path, rules.NewLearned(nil).File()); err != nil {
 		t.Fatal(err)
 	}

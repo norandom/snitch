@@ -4,6 +4,7 @@ import (
 	"golang.org/x/sys/unix"
 	"time"
 
+	"context"
 	"fmt"
 	"os"
 	"reflect"
@@ -190,7 +191,7 @@ func TestServerOneReplyPerRequestAndWindows(t *testing.T) {
 		t.Fatalf("empty snapshot: %+v", r)
 	}
 	f.s.Emit(f.event("1.1.1.1", "allow-rule"))
-	_ = f.s.tick(nil)
+	_ = f.s.tick(context.Background())
 	var batch strings.Builder
 	for i, w := range []string{"15m", "30m", "1h", "24h", "7d"} {
 		fmt.Fprintf(&batch, `{"type":"snapshot","id":%d,"window":"%s"}`+"\n", i+1, w)

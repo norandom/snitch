@@ -198,7 +198,7 @@ func (f statusFacts) lines() [][2]string {
 
 func statusUsage(f *flag.FlagSet) func() {
 	return func() {
-		fmt.Fprint(f.Output(), `usage: snitchd status [flags]
+		_, _ = fmt.Fprint(f.Output(), `usage: snitchd status [flags]
   one line per fact, a stable key each: daemon: mode: trial: kept: kill: learning: rules: status: dns: version:
   exit 1 when the daemon is not running (no pinned maps or a heartbeat older than 15 s), 0 otherwise
 `)
@@ -214,7 +214,7 @@ func runStatus(c *ctl, args []string) int {
 	}
 	f := c.gather()
 	for _, l := range f.lines() {
-		fmt.Fprintf(c.out, "%-10s %s\n", l[0]+":", l[1])
+		_, _ = fmt.Fprintf(c.out, "%-10s %s\n", l[0]+":", l[1])
 	}
 	if !f.running() {
 		return exitRefused

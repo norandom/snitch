@@ -95,10 +95,10 @@ func protoName(p Proto) string {
 }
 
 func checkProgramName(p *Program, seen map[string]*Program) error {
-	switch {
-	case p.Name == "":
+	switch p.Name {
+	case "":
 		return fmt.Errorf("program without a name")
-	case p.Name == anyProgram:
+	case anyProgram:
 		return fmt.Errorf("program name %q is reserved for rules that apply to every program", anyProgram)
 	}
 	if other, dup := seen[p.Name]; dup {
