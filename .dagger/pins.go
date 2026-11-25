@@ -43,6 +43,21 @@ const (
 	// current development distro of this project's workstation.
 	imageDebian = "debian:forky"
 
+	// The bindings check's base (c-hardening 7.1): the same forky, but by
+	// digest, because here the bytes are the subject, not the distro. The
+	// committed internal/bpf/ objects are tied to clang 21.1.8-13 and libbpf
+	// 1.7.0-1 as this image's apt resolved them: regenerated in it and
+	// cmp-identical to the committed files (c-hardening research,
+	// "Regeneration procedure (task 1.1)", 2026-11-25; again for 7.1 the same
+	// day, and through the dated snapshot below). imageDebian above stays a
+	// rolling tag on purpose for the distro-proof lanes. This value must equal
+	// IMAGE in scripts/bindings-regen.sh (the bindings check enforces it); the
+	// package versions, the snapshot.debian.org timestamp (20261123T000000Z,
+	// the one this image was built from) and the expected `clang --version`
+	// line live only in that script, the single source the check and a
+	// maintainer's --docker run both read, so none of them is repeated here.
+	imageBindings = "debian@sha256:f3671d5a279b1ae356c7318ce6cdb84c600c2063d708ee97d3cce607bebfb85a"
+
 	// The Go linter layer. The official image is rebuilt when the Go it was
 	// built against changes (upstream builds it FROM golang:1.27 with
 	// GOTOOLCHAIN auto), so a tag alone does not freeze the bytes: the digest

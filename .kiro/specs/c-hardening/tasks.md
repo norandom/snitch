@@ -224,7 +224,7 @@ change that moves their lines.
   - _Requirements: 8.1, 8.2, 8.4, 8.5, 8.7_
 
 - [ ] 7. The bindings check in the pipeline
-- [ ] 7.1 (P) Pin the check's environment
+- [x] 7.1 (P) Pin the check's environment
   - Pin the base image by digest, the compiler and its tools by package version, and record
     the expected compiler version string; try a dated package snapshot as the source and keep
     it only if it works inside the engine
@@ -361,4 +361,8 @@ change that moves their lines.
   limit, port 0) could be listed explicitly. Fuzz targets: FuzzDecodeEvent (cmd/snitchd),
   FuzzDecode (internal/dns), FuzzParse + FuzzLineReader (internal/api), FuzzParse +
   FuzzParseOverlay (internal/rules); `scripts/fuzz.sh FuzzParse` matches both FuzzParse targets.
+- 7.1: `--install` reads apt from snapshot.debian.org 20261123T000000Z (the snapshot the pinned
+  image names), replacing the image's live sources; `BINDINGS_SNAPSHOT` overrides, empty = live.
+  For 7.2: build the check on `imageBindings` AND fail if the script's IMAGE differs from it
+  (pins.go already claims this is enforced); add BINDINGS_SNAPSHOT to the script's usage text.
 

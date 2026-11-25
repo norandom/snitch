@@ -25,6 +25,11 @@ IMAGE=debian@sha256:f3671d5a279b1ae356c7318ce6cdb84c600c2063d708ee97d3cce607bebf
 # not reach the output, so golang-go is not pinned.
 PACKAGES="clang=1:21.1.8-74 clang-21=1:21.1.8-13 llvm=1:21.1.8-74 llvm-21=1:21.1.8-13 libbpf-dev=1:1.7.0-1 golang-go ca-certificates"
 CLANG_EXPECTED="Debian clang version 21.1.8 (13)"
+# --install reads apt from this dated snapshot.debian.org state (the one IMAGE was built
+# from, its debian.sources names it), so the pinned versions stay installable after forky
+# moves on. BINDINGS_SNAPSHOT overrides it; BINDINGS_SNAPSHOT= (empty) uses IMAGE's live
+# sources. Plain http: the base image has no CA bundle, apt checks the archive signature.
+SNAPSHOT=${BINDINGS_SNAPSHOT-20261123T000000Z}
 
 usage() { sed -n '12,19p' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -76,6 +81,7 @@ if [ "$docker" = yes ]; then
   out=$(mktemp -d)
   rc=0
   docker run --rm -v "$repo":/src:ro -v "$out":/out -e HOME=/tmp -e OWNER="$(id -u):$(id -g)" \
+    -e BINDINGS_SNAPSHOT="$SNAPSHOT" \
     "$IMAGE" sh -c 'sh /src/scripts/bindings-regen.sh --install --emit /out; rc=$?; chown -R "$OWNER" /out; exit $rc' \
     || rc=$?
   if [ "$rc" -eq 0 ]; then
@@ -91,11 +97,17 @@ if [ "$docker" = yes ]; then
 fi
 
 if [ "$install" = yes ]; then
+  if [ -n "$SNAPSHOT" ]; then
+    printf '%s\n' "Types: deb" "URIs: http://snapshot.debian.org/archive/debian/$SNAPSHOT/" \
+      "Suites: forky" "Components: main" "Check-Valid-Until: no" \
+      "Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp" \
+      >/etc/apt/sources.list.d/debian.sources
+  fi
   # $PACKAGES is a word list on purpose
   # shellcheck disable=SC2086
   if ! { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
       --no-install-recommends $PACKAGES >/dev/null; }; then
-    echo "bindings: environment unavailable: the pinned packages do not install ($PACKAGES)"
+    echo "bindings: environment unavailable: the pinned packages do not install ($PACKAGES; snapshot ${SNAPSHOT:-none})"
     exit 4
   fi
 fi

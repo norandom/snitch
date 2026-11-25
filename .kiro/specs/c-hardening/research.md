@@ -267,6 +267,16 @@ runs must reproduce these unchanged (design "Testing Strategy", 4.8, 9.2).
 - **Follow-up**: try `snapshot.debian.org` as apt source so the pin outlives forky's
   rotation; adopt it if it works inside the engine, otherwise keep the version pin. A
   local export function for hosts without the pinned clang is deliberately not built.
+  Outcome (task 7.1, 2026-11-25): adopted. The pinned image's own `debian.sources` names
+  its build snapshot `20261123T000000Z`; `--install` now writes that snapshot (plain http,
+  `Check-Valid-Until: no`, the archive keyring) and finds exactly the pinned candidates
+  (clang-21 1:21.1.8-13, clang/llvm 1:21.1.8-74, libbpf-dev 1:1.7.0-1; `20261124T202946Z`
+  has the same). `--install --check` passed twice under `docker run` (~80 s each) and once
+  inside the Dagger v0.21.12 engine through `dagger core container from … with-exec` (48 s);
+  the live sources still pass (`BINDINGS_SNAPSHOT=` opts out). The timestamp lives in the
+  script only, beside the packages and the expected compiler; `pins.go` holds the digest
+  (`imageBindings`). Scratch copies: a non-existent version exits 4, a wrong expected
+  compiler line exits 3.
 
 ### Decision: decoders return errors
 - **Context**: 8.2, 8.3. `decodeEvent` panics through `contract.Require` on a short record;
