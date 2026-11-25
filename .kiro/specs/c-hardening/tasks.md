@@ -310,4 +310,10 @@ change that moves their lines.
   `cmd/snitchd/counters_test.go` (TestEgressNamesMatchMapSize), not in abi_test.go, because the
   tables are unexported in package main. 5.4 wires `egressCounters` with a closure over
   `objs.SnitchStats.Lookup` (cilium's Lookup takes `any`); abi_test's sizeMismatch now has a unit.
+- 6.1 (review round 1): newer kernels (reportedly v7.1+, upstream 12bec2bd4b76; not verified by the
+  controller) refuse a BPF_PROG_TEST_RUN skb whose L3 header is shorter than iphdr/ipv6hdr with
+  EINVAL before the program runs. Corpus entries with such frames set `mayRefuse` (EINVAL or
+  return 1, nothing counted/learned/mirrored either way); `truncation-ipv4-ihl-beyond-frame` is
+  the network-header case that always reaches the tap. A question cannot be matched across two
+  test runs (fresh socket cookie, unverified), so a `skipQ=false` entry can assert NoQuestion only.
 

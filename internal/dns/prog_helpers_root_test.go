@@ -72,6 +72,18 @@ func progStats(t *testing.T, c *ebpf.Collection) Stats {
 	return s
 }
 
+// progContracts reads the contract counters dns_stats holds after the StatsCount counters.
+func progContracts(t *testing.T, c *ebpf.Collection) Contracts {
+	t.Helper()
+	values := make([]uint64, ContractsCount)
+	for i := range values {
+		mustProg(t, c.Maps["dns_stats"].Lookup(uint32(StatsCount+i), &values[i]))
+	}
+	got, err := DecodeContracts(values)
+	mustProg(t, err)
+	return got
+}
+
 func progTrie(t *testing.T, trie *ebpf.Map) map[rules.RuleKey]rules.RuleVal {
 	t.Helper()
 	out := map[rules.RuleKey]rules.RuleVal{}
