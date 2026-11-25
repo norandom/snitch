@@ -52,6 +52,16 @@ func (s *dnsState) facts() *api.DNSStatus {
 	return f
 }
 
+// counters is the status's dns section: the tap's on and reason as facts() reports them.
+func (s *dnsState) counters() api.ProgramCounters {
+	if s == nil {
+		return unavailable("unavailable")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return dnsContractCounters(s.contracts, s.on, s.reason)
+}
+
 func (s *dnsState) recordLine() string {
 	f := s.facts()
 	if !f.On {

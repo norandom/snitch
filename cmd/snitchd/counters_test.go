@@ -115,3 +115,17 @@ func TestEgressNamesMatchMapSize(t *testing.T) {
 		t.Fatalf("snitch_stats has %d entries, the name tables %d", n, want)
 	}
 }
+
+// The contract names cover the dns_stats tail after the dns_stat counters exactly.
+func TestDNSContractNamesMatchMapSize(t *testing.T) {
+	spec, err := bpf.LoadDns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, want := int(spec.Maps["dns_stats"].MaxEntries)-dns.StatsCount, len(dnsContractNames); n != want {
+		t.Fatalf("dns_stats has %d entries after dns.StatsCount, the name table %d", n, want)
+	}
+	if len(dnsContractNames) != dns.ContractsCount {
+		t.Fatalf("dns.ContractsCount %d, the name table %d", dns.ContractsCount, len(dnsContractNames))
+	}
+}

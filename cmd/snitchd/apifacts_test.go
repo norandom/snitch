@@ -19,7 +19,10 @@ func TestFactsOfAFlagDaemon(t *testing.T) {
 	if got.DNS == nil || *got.DNS != (api.DNSStatus{On: false, Reason: "unavailable"}) {
 		t.Fatalf("DNS: %+v", got.DNS)
 	}
-	got.DNS = nil
+	if got.Counters == nil || got.Counters.Egress.Available || got.Counters.DNS.Reason != "unavailable" {
+		t.Fatalf("Counters: %+v", got.Counters)
+	}
+	got.DNS, got.Counters = nil, nil
 	want := api.Status{Running: true, Pid: os.Getpid(), Version: "dev", Mode: "monitor", Source: "flag", Kill: true, Learning: true,
 		Rules:   api.RulesSummary{Programs: 1, Resolved: 0, Executables: 0, Rules: 1, File: "/etc/snitch/rules.toml", Overlay: "/etc/snitch/rules.d/local.toml"},
 		Started: "2026-10-10T12:00:00Z", Counting: true}

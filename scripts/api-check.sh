@@ -10,7 +10,10 @@
 # The same two shapes are the command lines examples/api.md documents.
 #
 # A1 status reply: running true, a version (printed), the pid kept for A6; mode monitor, which
-#    A2 and B2 rely on (allow-monitor is the monitor verdict for an unruled destination)
+#    A2 and B2 rely on (allow-monitor is the monitor verdict for an unruled destination);
+#    the counters object (spec c-hardening, Req 5): counters.egress available with every
+#    contract counter 0; counters.dns the same when status.dns.on, else unavailable with its
+#    reason (printed, not a failure); with --fake an absent object is skipped and said so
 # A2 subscribe, curl https://DENY/  -> an event for curl (program curl, or the curl path while
 #    no rules file declares it) with verdict allow-monitor within 1 s
 # A3 when status says counting: curl https://1.1.1.1/ -> that entry's bytesSent grows within 5 s
@@ -45,7 +48,9 @@ usage() {
   cat <<'U'
 usage: scripts/api-check.sh [-s socket] [-x deny-addr] [--fake] [-h]
   run as the desktop user, never as root (exit 2)
-  A1 status reply (running, version, mode)    A2 subscribe + curl event within 1 s
+  A1 status reply (running, version, mode), counters: egress available, contracts 0;
+     dns the same when the tap is on, else its reason
+  A2 subscribe + curl event within 1 s
   A3 bytes grow within 5 s (when counting)    A4 rule.add refused for a reader
   B  as the operator: deny rule -> curl fails with EPERM and the event says deny-rule,
      remove -> curl connects again, allow-monitor again
@@ -54,7 +59,8 @@ usage: scripts/api-check.sh [-s socket] [-x deny-addr] [--fake] [-h]
   -s <socket>  the API socket (default /run/snitch/api.sock; -api of a hand-started daemon)
   -x <addr>    address no rule covers (default 9.9.9.9); an IPv6 address bare, no brackets
   --fake       the socket is served by a fake with no kernel behind it (script development):
-               the curl EPERM and reconnect assertions in B are skipped and said so
+               the curl EPERM and reconnect assertions in B are skipped and said so, and so is
+               the counters assertion when the fake's status has no counters object
   -h           this text
   wait 10 s between runs: the daemon dedupes identical events for 10 s
 exit 0 all steps passed, 1 a step failed, 2 usage or root
@@ -97,6 +103,8 @@ sub_pid=0; sub_log=""
 #    call <sock> <type> [field=value ...]  one request, prints the reply line with its id
 #    sub <sock> <seconds>                  subscribe, prints every line for N seconds
 #    get <json> <dotted.path>              a field: true/false, a string, a number
+#    nonzero <json> <dotted.path> [key..]  the non-zero entries of a counter map and the named keys it
+#                                          lacks; exit 1 when absent or empty
 #    event <log> <addr> <path> <verdict>   exit 0 and the line when an event matches
 #    dns-event <log> <program> <addr>     named rule event, or literal-address event without name
 #    bytes <reply> <addr> <path>           the bytesSent summed over the matching entries (a declared program changes the key)
@@ -134,6 +142,11 @@ def value(v):
         return ""
     return v if isinstance(v, str) else json.dumps(v)
 
+def walk(obj, path):
+    for key in path.split("."):
+        obj = obj.get(key) if isinstance(obj, dict) else None
+    return obj
+
 mode, args = sys.argv[1], sys.argv[2:]
 if mode == "call":
     sock, req = args[0], request(args[1:])
@@ -169,10 +182,14 @@ elif mode == "sub":
             sys.stdout.write(line.decode() + "\n")
             sys.stdout.flush()
 elif mode == "get":
-    obj = json.loads(args[0])
-    for key in args[1].split("."):
-        obj = obj.get(key) if isinstance(obj, dict) else None
-    print(value(obj))
+    print(value(walk(json.loads(args[0]), args[1])))
+elif mode == "nonzero":
+    obj = walk(json.loads(args[0]), args[1])
+    if not isinstance(obj, dict) or not obj:
+        sys.exit(1)
+    bad = [f"{k}={v}" for k, v in sorted(obj.items()) if v != 0]
+    bad += [f"{k}=missing" for k in args[2:] if k not in obj]
+    print(" ".join(bad))
 elif mode == "event":
     log, addr, path, verdict = args
     for line in open(log, encoding="utf-8", errors="replace"):
@@ -256,6 +273,16 @@ status_read() { # fills last_status; a connect failure prints the client's reaso
   last_status=$out
 }
 status_running() { status_read && [ "$(jget "$last_status" status.running)" = true ]; }
+contracts_zero() { # contracts_zero <dotted.path> <key>...: every named key present, every entry 0
+  local bad
+  bad=$(pyrun nonzero "$last_status" "$@") || { note "$1: absent or empty"; return 1; }
+  [ -z "$bad" ] || { note "$1: $bad"; return 1; }
+}
+section_available() { # section_available <egress|dns>: available true, else the reason printed
+  [ "$(jget "$last_status" "status.counters.$1.available")" = true ] && return 0
+  note "counters.$1 unavailable: $(jget "$last_status" "status.counters.$1.reason")"
+  return 1
+}
 
 # -- the subscription: a client kept open in the background, its lines in $sub_log. python3
 #    runs directly (not through pyrun) so $! is its pid and stop_sub ends it, not a subshell.
@@ -421,6 +448,20 @@ overlay=$(jget "$last_status" status.rules.overlay)
 step "A1 status: version '$version', pid $pid1"           test -n "$version"
 mode=$(jget "$last_status" status.mode)
 step "A1 status: mode monitor (A2 and B2 expect allow-monitor)"   test "$mode" = monitor
+if [ -n "$(jget "$last_status" status.counters)" ]; then
+  step "A1 counters.egress available"                       section_available egress
+  step "A1 counters.egress.contracts all 0"                 contracts_zero status.counters.egress.contracts kill_slot control_slot rule_verdict mode
+  if [ "$(jget "$last_status" status.dns.on)" = true ]; then
+    step "A1 counters.dns available (status.dns.on)"        section_available dns
+    step "A1 counters.dns.contracts all 0"                  contracts_zero status.counters.dns.contracts name_shape dot_range
+  else
+    echo "  skip  A1 counters.dns: the tap is off, unavailable: $(jget "$last_status" status.counters.dns.reason)"
+  fi
+elif [ "$fake" -eq 1 ]; then
+  echo "  skip  A1 counters: --fake, the fake's status has no counters object"
+else
+  step "A1 status has a counters object (a daemon older than c-hardening has none)"   false
+fi
 step "A2 event for curl -> $deny: allow-monitor within 1 s"   probe_event allow-monitor
 counting=$(jget "$last_status" status.counting)
 if [ "$counting" = true ]; then

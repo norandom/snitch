@@ -12,6 +12,8 @@ import (
 var (
 	egressCounterNames  = []string{"decisions", "addr_unreadable", "no_exe", "event_lost"}
 	egressContractNames = []string{"kill_slot", "control_slot", "rule_verdict", "mode"}
+	// dnsContractNames are the dns_stats entries after dns.StatsCount, in order.
+	dnsContractNames = []string{"name_shape", "dot_range"}
 )
 
 // perCPULookup fills out with one value per CPU for a snitch_stats key.
@@ -48,8 +50,15 @@ func dnsContractCounters(read func() (dns.Contracts, error), on bool, reason str
 	if err != nil {
 		return unavailable("dns_stats: " + err.Error())
 	}
-	return api.ProgramCounters{Available: true,
-		Contracts: map[string]uint64{"name_shape": c.NameShape, "dot_range": c.DotRange}}
+	return api.ProgramCounters{Available: true, Contracts: named(dnsContractNames, []uint64{c.NameShape, c.DotRange})}
+}
+
+// egressCounters is the status's egress section from the loaded program's snitch_stats.
+func (a apiState) egressCounters() api.ProgramCounters {
+	if a.egressStats == nil {
+		return unavailable("snitch_stats: no reader")
+	}
+	return egressCounters(a.egressStats)
 }
 
 func countersStatus(egress, dnsTap api.ProgramCounters) *api.CountersStatus {

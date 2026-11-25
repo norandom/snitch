@@ -39,6 +39,8 @@ type apiState struct {
 	kill     func() bool
 	rulesErr func() (time.Time, error)
 	started  time.Time
+	// egressStats reads one snitch_stats slot per CPU; nil reports the section unavailable.
+	egressStats perCPULookup
 }
 
 // apiJobs is the one line daemon.go adds: nothing without -api; otherwise the listener (a
@@ -54,7 +56,8 @@ func (d *daemon) apiJobs(r *reloader) []jobs.Job {
 		return nil
 	}
 	d.installAPI(apiState{operator: operatorUID(operatorPath, lookupUID, os.Stat, d.log),
-		kill: killOf(d.objs.Kill), rulesErr: r.rulesError, started: time.Now()})
+		kill: killOf(d.objs.Kill), rulesErr: r.rulesError, started: time.Now(),
+		egressStats: func(k uint32, out *[]uint64) error { return d.objs.SnitchStats.Lookup(k, out) }})
 	return append([]jobs.Job{d.api.server.Job(l), d.operatorJob(operatorPath)}, d.sweepJobs()...)
 }
 
@@ -91,6 +94,7 @@ func (d *daemon) facts() api.Status {
 		Clients: a.server.Clients(), Dropped: int(a.server.Dropped()), Entries: a.table.Len(), Evictions: a.table.Evictions(),
 		Started: a.started.UTC().Format(time.RFC3339), Counting: d.counting, DNS: d.dns.facts()}
 	s.Rules.Programs, s.Rules.Resolved, s.Rules.Executables, s.Rules.Rules = counts(d.st.current())
+	s.Counters = countersStatus(a.egressCounters(), d.dns.counters())
 	return s
 }
 

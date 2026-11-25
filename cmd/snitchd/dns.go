@@ -40,6 +40,7 @@ type dnsState struct {
 	mu                        sync.Mutex
 	rules, domains, resolvers putDel
 	stats                     func() (dns.Stats, error)
+	contracts                 func() (dns.Contracts, error)
 	now                       func() time.Time
 	log                       func(string)
 	links                     []io.Closer
@@ -108,6 +109,7 @@ func loadDNSWith(cfg config, trie *ebpf.Map, deps dnsDeps) *dnsState {
 	}
 	s.rules, s.domains, s.resolvers = deps.ops(trie), deps.ops(s.objs.Domains), deps.ops(s.objs.Resolvers)
 	s.stats = func() (dns.Stats, error) { return readDNSStats(s.objs.DnsStats.Lookup) }
+	s.contracts = func() (dns.Contracts, error) { return readDNSContracts(s.objs.DnsStats.Lookup) }
 	// Stamp before reading so a concurrent replacement is noticed on the next tick.
 	s.lastStamp, _ = s.stamp()
 	if err := s.refreshResolvers(); err != nil {
@@ -147,7 +149,7 @@ func (s *dnsState) attach(deps dnsDeps) error {
 func (s *dnsState) off(err error) *dnsState {
 	s.close()
 	s.on, s.reason = false, err.Error()
-	s.stats = nil
+	s.stats, s.contracts = nil, nil
 	s.rules, s.domains, s.resolvers = putDel{}, putDel{}, putDel{}
 	s.log("dns tap off: " + s.reason)
 	return s
