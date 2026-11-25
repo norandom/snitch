@@ -189,15 +189,14 @@ struct pkt {
 	struct __sk_buff *skb;
 };
 
-static __always_inline int pkt_init(struct pkt *p, struct __sk_buff *skb)
+static __always_inline void pkt_init(struct pkt *p, struct __sk_buff *skb)
 {
 	p->skb = skb;
-	return 0;
 }
 
 static __always_inline int rd(struct pkt *p, __u32 off, void *dst, __u32 len)
 {
-	return bpf_skb_load_bytes(p->skb, off, dst, len);
+	return (int)bpf_skb_load_bytes(p->skb, off, dst, len);  // 0 or a negative errno: fits an int
 }
 
 struct l4 {
@@ -244,7 +243,7 @@ static __always_inline int parse_l34(struct pkt *p, struct l4 *l, int peer_is_sr
 	l->dport = bpf_ntohs(uh.dest);
 	if (bpf_ntohs(uh.len) < sizeof(uh) + 12)
 		return -1;
-	l->dns_off = off + sizeof(uh);
+	l->dns_off = (__u16)(off + sizeof(uh));  // off <= 60 (IPv4 ihl) or 40 (IPv6): fits 16 bits
 	return 0;
 }
 
@@ -275,8 +274,8 @@ static __always_inline __u32 read_qname(struct pkt *p, __u32 off, __u8 *buf, __u
 		} else if (L & 0xC0) {
 			return 0;
 		} else {
-			dots[i] = n;  // i < LABELS_MAX by the loop bound
-			labels = i + 1;
+			dots[i] = (__u8)n;  // i < LABELS_MAX by the loop bound; n < NAME_MAX (checked after every add)
+			labels = (__u32)(i + 1);  // 1..LABELS_MAX
 			n += 1 + L;
 			if (n >= NAME_MAX)
 				return 0;
@@ -309,7 +308,7 @@ static __always_inline __u32 read_qname(struct pkt *p, __u32 off, __u8 *buf, __u
 	// rule's name (internal/dns Key) for any suffix the lookup starts at, and the daemon decodes
 	// the record's name by splitting on '.'. Only the first LEVELS_MAX labels are lookup starts.
 	for (int k = 0; k < LABELS_MAX; k++) {
-		if (k >= labels)
+		if ((__u32)k >= labels)  // k >= 0: the conversion the comparison does anyway
 			break;
 		buf[dots[k] & (NAME_MAX - 1)] = '.';
 	}
@@ -346,14 +345,14 @@ static __always_inline void compile_addr(struct walk *w, const __u8 *addr, __u8 
 	k.prefixlen = 64 + (family == AF_INET ? 32 : 128);
 	__builtin_memcpy(k.addr, addr, 16);
 	for (int lvl = 0; lvl < LEVELS_MAX; lvl++) {
-		if (lvl >= w->labels)
+		if ((__u32)lvl >= w->labels)  // lvl >= 0: the conversion the comparison does anyway
 			break;
 		__u32 start = w->dots[lvl] & (NAME_MAX - 1);
 		struct domain_val *v = bpf_map_lookup_elem(&domains, w->buf + start);
 		if (!v)
 			continue;
 		for (int s = 0; s < SLOTS_MAX; s++) {
-			struct domain_slot *sl = &v->slot[s];
+			const struct domain_slot *sl = &v->slot[s];
 			if (!sl->id)
 				continue;
 			k.program = sl->program;
@@ -374,7 +373,7 @@ static __always_inline void compile_addr(struct walk *w, const __u8 *addr, __u8 
 	}
 }
 
-static __attribute__((noinline)) long walk_step(__u32 i, void *data)
+static __attribute__((noinline)) long walk_step(__u32 i __attribute__((unused)), void *data)  // i: bpf_loop's fixed callback signature; the step state is in data
 {
 	struct walk *w = data;
 	__u32 off = w->off;
@@ -420,7 +419,7 @@ static __attribute__((noinline)) long walk_step(__u32 i, void *data)
 			return 1;
 		}
 		rec->family[n] = family;
-		rec->n = n + 1;
+		rec->n = (__u8)(n + 1);  // n < ADDRS_MAX: fits 8 bits
 		if (ttl < rec->ttl)
 			rec->ttl = ttl;
 		compile_addr(w, slot, family);  // straight from the record: no 16-byte stack copy
@@ -436,8 +435,7 @@ SEC("cgroup_skb/ingress")
 int dns_answer(struct __sk_buff *skb)
 {
 	struct walk w = {};
-	if (pkt_init(&w.p, skb))
-		return 1;
+	pkt_init(&w.p, skb);
 	struct l4 l = {};
 	if (parse_l34(&w.p, &l, 1) || l.sport != DNS_PORT)
 		return 1;
@@ -511,8 +509,7 @@ SEC("cgroup_skb/egress")
 int dns_query(struct __sk_buff *skb)
 {
 	struct pkt p;
-	if (pkt_init(&p, skb))
-		return 1;
+	pkt_init(&p, skb);
 	struct l4 l = {};
 	if (parse_l34(&p, &l, 0) || l.dport != DNS_PORT)
 		return 1;

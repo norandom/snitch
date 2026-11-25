@@ -40,7 +40,7 @@ change that moves their lines.
   - Done when this program compiles without a warning under the extended set and every
     annotation carries a comment at its line
   - _Requirements: 1.5, 2.1_
-- [ ] 2.3 Clear the warnings and findings in the DNS tap
+- [x] 2.3 Clear the warnings and findings in the DNS tap
   - Make the sign comparisons and conversions explicit without changing the conversion
     performed; mark the loop callback's unused index
   - Make the slot value the analyzer named read-only
