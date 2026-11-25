@@ -144,7 +144,7 @@ change that moves their lines.
     and the reader survives an undecodable record
   - _Boundary: Record decoders_
   - _Requirements: 8.3_
-- [ ] 5.2 (P) Add the counters object to the status wire type
+- [x] 5.2 (P) Add the counters object to the status wire type
   - The additive, optional counters object with one availability-marked section per kernel
     program, as the design's API contract states
   - Done when a status without the object and one with it both round-trip, and every existing

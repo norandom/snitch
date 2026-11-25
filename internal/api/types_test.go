@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -123,7 +124,7 @@ func TestDNSStatusJSONKeys(t *testing.T) {
 func TestOptionalNameAndDNSKeysOmitted(t *testing.T) {
 	for _, v := range []any{Event{}, Entry{}, Observation{}, Status{}} {
 		for _, k := range keysOf(t, v) {
-			if k == "name" || k == "dns" {
+			if k == "name" || k == "dns" || k == "counters" {
 				t.Fatalf("%T includes empty %s", v, k)
 			}
 		}
@@ -134,5 +135,83 @@ func TestObservationKeysAllowNameWithEmptyAddress(t *testing.T) {
 	b, err := json.Marshal(Observation{Name: "example.org"})
 	if err != nil || !strings.Contains(string(b), `"addr":""`) || !strings.Contains(string(b), `"name":"example.org"`) {
 		t.Fatalf("named observation: %s, %v", b, err)
+	}
+}
+
+// fullStatus sets every field a status carried before the counters object.
+func fullStatus() Status {
+	return Status{Running: true, Pid: 4242, Version: "v0.4.0", Mode: "monitor", Source: "trial", Trial: "2026-11-25T10:00:00Z",
+		Kept: true, Kill: true, Learning: true,
+		Rules: RulesSummary{Programs: 18, Resolved: 17, Executables: 21, Rules: 13, File: "/etc/snitch/rules.toml",
+			Overlay: "/etc/snitch/rules.d/local.toml"},
+		RulesError: "line 3: bad port", Clients: 2, Dropped: 1, Entries: 120, Evictions: 3,
+		Started: "2026-11-25T09:00:00Z", Counting: true,
+		DNS: &DNSStatus{On: true, Reason: "r", Seen: 10, Ignored: 2, Entries: 5, Names: 4, Compiled: 3, Evictions: 1}}
+}
+
+// statusGolden is fullStatus encoded by the type before the counters object was added.
+const statusGolden = `{"running":true,"pid":4242,"version":"v0.4.0","mode":"monitor","source":"trial",` +
+	`"trial":"2026-11-25T10:00:00Z","kept":true,"kill":true,"learning":true,"rules":{"programs":18,` +
+	`"resolved":17,"executables":21,"rules":13,"file":"/etc/snitch/rules.toml",` +
+	`"overlay":"/etc/snitch/rules.d/local.toml"},"rulesError":"line 3: bad port","clients":2,"dropped":1,` +
+	`"entries":120,"evictions":3,"started":"2026-11-25T09:00:00Z","counting":true,"dns":{"on":true,` +
+	`"reason":"r","seen":10,"ignored":2,"entries":5,"names":4,"compiled":3,"evictions":1}}` + "\n"
+
+// Req 5.3: without counters a status encodes byte for byte as before, and decodes back equal.
+func TestStatusWithoutCountersUnchanged(t *testing.T) {
+	s := fullStatus()
+	if got := string(Encode(s)); got != statusGolden {
+		t.Fatalf("status encoding drifted\n got %s\nwant %s", got, statusGolden)
+	}
+	var back Status
+	if err := json.Unmarshal([]byte(statusGolden), &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.Counters != nil || !reflect.DeepEqual(back, s) {
+		t.Fatalf("older daemon's status\n got %+v\nwant %+v", back, s)
+	}
+}
+
+// Req 5.3, 5.7: the counters object round-trips; zero contracts stay, an unavailable section
+// carries its reason and no maps, and the existing fields keep their bytes ahead of it.
+func TestStatusWithCountersRoundTrips(t *testing.T) {
+	s := fullStatus()
+	s.Counters = &CountersStatus{
+		Egress: ProgramCounters{Available: true,
+			Counters:  map[string]uint64{"decisions": 9001, "addr_unreadable": 0, "no_exe": 2, "event_lost": 0},
+			Contracts: map[string]uint64{"kill_slot": 0, "control_slot": 0, "rule_verdict": 1, "mode": 0}},
+		DNS: ProgramCounters{Available: false, Reason: "tap off: disabled"},
+	}
+	b := Encode(s)
+	var back Status
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(back, s) {
+		t.Fatalf("round trip\n got %+v\nwant %+v", back, s)
+	}
+	if !strings.HasPrefix(string(b), strings.TrimSuffix(statusGolden, "}\n")+`,"counters":{`) {
+		t.Fatalf("existing fields moved: %s", b)
+	}
+	for _, frag := range []string{`"egress":{"available":true,"counters":{`, `"addr_unreadable":0`, `"kill_slot":0`,
+		`"mode":0`, `"dns":{"available":false,"reason":"tap off: disabled"}`} {
+		if !strings.Contains(string(b), frag) {
+			t.Fatalf("counters %s lacks %s", b, frag)
+		}
+	}
+	wantKeys(t, keysOf(t, CountersStatus{}), "egress", "dns")
+	wantKeys(t, keysOf(t, ProgramCounters{}), "available")
+	wantKeys(t, keysOf(t, s.Counters.Egress), "available", "counters", "contracts")
+}
+
+// An older daemon's status line (no "counters" key) decodes with Counters nil.
+func TestStatusFromOlderDaemonHasNoCounters(t *testing.T) {
+	var r Reply
+	line := `{"type":"reply","id":1,"ok":true,"status":{"running":true,"mode":"monitor","dns":{"on":false}}}`
+	if err := json.Unmarshal([]byte(line), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Status == nil || r.Status.Counters != nil || !r.Status.Running {
+		t.Fatalf("older status: %+v", r.Status)
 	}
 }

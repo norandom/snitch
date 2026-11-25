@@ -159,6 +159,29 @@ type Status struct {
 	Counting   bool         `json:"counting"`
 	// DNS is absent only on daemons older than this version; an off tap has On false and a reason.
 	DNS *DNSStatus `json:"dns,omitempty"`
+	// Counters is absent only on daemons older than this version; it comes last so every
+	// field above keeps its name, type, meaning and place in the encoding.
+	Counters *CountersStatus `json:"counters,omitempty"`
+}
+
+// CountersStatus is the kernel programs' own counters, one section per program. Every value
+// is a total since the programs were loaded. A non-zero contract counter means a runtime
+// contract of the C was violated: a defect to report, not a tuning signal.
+type CountersStatus struct {
+	Egress ProgramCounters `json:"egress"`
+	DNS    ProgramCounters `json:"dns"`
+}
+
+// ProgramCounters is one program's section. Available false with a Reason (and no maps)
+// means the counters could not be read: never zeros in place of unavailable. An available
+// section always carries every contract key, zero included (omitempty drops only a nil or
+// empty map); Counters holds the program's own counters (egress: decisions, addr_unreadable,
+// no_exe, event_lost) and is absent for a program that has none beyond the contracts.
+type ProgramCounters struct {
+	Available bool              `json:"available"`
+	Reason    string            `json:"reason,omitempty"`
+	Counters  map[string]uint64 `json:"counters,omitempty"`
+	Contracts map[string]uint64 `json:"contracts,omitempty"`
 }
 
 // RulesSummary is the startup line's numbers plus the files they came from.
