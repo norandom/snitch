@@ -63,7 +63,8 @@ injection/propagation class defects are surfaced before release.
 2. When CI runs, the CodeQL databases shall cover the repository's Go packages, the BPF C
    sources, and the Python client; where a surface cannot be extracted by the scanner (the
    client script carries no `.py` extension), the coverage or its documented limitation shall
-   be recorded in the feature's documentation.
+   be recorded in the feature's documentation. (2026-11-25: all three are now extracted - the
+   BPF C through a traced observation compile, the client through a pre-scan `.py` copy.)
 3. If the CodeQL analysis infrastructure itself fails (not a finding, but an extraction or
    analysis error), the check shall fail visibly; the discovery of a security finding shall
    surface in code scanning for review without halting the pipeline.

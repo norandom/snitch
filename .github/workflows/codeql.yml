@@ -6,21 +6,23 @@ name: codeql
 # review: findings never gate a release (Req 3.3, 3.4). No continue-on-error
 # anywhere: the analyze action's own semantics already draw the right line.
 #
-# Matrix: go is traced (its build-mode is manual - init arms the trace observer, the
-# explicit `go build ./...` below is the traced build, and setup-go runs before init
-# because the toolchain has to be on PATH for that build); the BPF C and the python
-# client run with build-mode: none (GA since October 2025), which infers compilation
-# units without ever running a compiler - CI still never runs clang for the BPF
-# code (Req 3.2, the documented none-mode macro caveat lives in docs/ci-debs.md).
-# Each language carries its own category so the three results land as three Sarif
-# uploads, one per language, all under the security-extended suite.
-#
-# Covered: the repository's Go packages (go, and the trace covers the root module
-# the runner builds), the BPF C sources (c-cpp). The extension-less python client is
-# NOT extractable - its shebang does not match the extractor's pattern - which is
-# the recorded coverage limitation of Req 3.2 (ruff keeps covering the file on the
-# lint side); the python column keeps the suite pointed at the day the file moves to
-# a matched form.
+# Matrix: go and c-cpp are traced (build-mode manual: init arms the trace observer and
+# the build step after it is what the database sees). go: setup-go runs before init so the
+# toolchain is on PATH, and the traced build is the pipeline's own `go build ./...`.
+# c-cpp (c-hardening follow-up, user decision 2026-11-25): an observation compile of both
+# BPF programs with the runner's clang and libbpf headers, output to /dev/null - the
+# compiler observes, it produces nothing that is kept (the committed bindings, checked
+# byte for byte by the pipeline's bindings check, are what ships). The flags are the
+# project's (internal/bpf/gen.go) without -Werror: the runner's libbpf 1.3 declares
+# bpf_d_path without the const forky's 1.7 has, a warning that must not stop the
+# observation. Traced extraction replaces none-mode's inferred compilation units and its
+# macro-accuracy caveat, which mattered most for dns.bpf.c, the parser of
+# attacker-shaped DNS answers.
+# python: build-mode none, over a pre-scan copy of the extension-less client `snitch` as
+# `snitch-client.py` (same bytes; the extractor only picks up *.py), so the client gets
+# real taint coverage until the Go TUI retires it.
+# Each language carries its own category, so the three results land as three Sarif
+# uploads, all under the security-extended suite.
 
 on:
   push:
@@ -53,7 +55,7 @@ jobs:
           - language: go
             build-mode: manual
           - language: c-cpp
-            build-mode: none
+            build-mode: manual
           - language: python
             build-mode: none
     steps:
@@ -62,10 +64,19 @@ jobs:
 
       # The toolchain lands before init: a manual-mode trace builds with it
       - name: Install go (go.mod's toolchain, for the traced build)
-        if: matrix.build-mode == 'manual'
+        if: matrix.language == 'go'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Install clang and the libbpf headers (for the traced observation compile)
+        if: matrix.language == 'c-cpp'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends clang libbpf-dev
+
+      # The extension-less client becomes visible to the python extractor; same bytes
+      - name: Pre-scan copy of the python client
+        if: matrix.language == 'python'
+        run: cp snitch snitch-client.py
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -78,8 +89,16 @@ jobs:
       # The traced build: the exact command the pipeline's own go check runs, so the
       # database covers what CI actually builds
       - name: Build (traced)
-        if: matrix.build-mode == 'manual'
+        if: matrix.language == 'go'
         run: go build ./...
+
+      # The traced observation compile: gen.go's flags minus -Werror, output discarded
+      - name: Compile the BPF programs (traced, output discarded)
+        if: matrix.language == 'c-cpp'
+        run: |
+          flags="-target bpf -D__TARGET_ARCH_x86 -O2 -g -Wall -Wno-missing-declarations -Wextra -Wshadow -Wvla -Wundef -Wpointer-arith -Wimplicit-fallthrough -Wstrict-prototypes -Wnull-dereference -Wconversion -isystem bpf"
+          clang $flags -c bpf/snitch.bpf.c -o /dev/null
+          clang $flags -mcpu=v3 -c bpf/dns.bpf.c -o /dev/null
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

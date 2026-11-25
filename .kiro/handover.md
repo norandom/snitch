@@ -36,40 +36,27 @@ object at zero). Those tasks stay `[ ]` until the output proves them. Never enfo
   `DecodeContracts` (task 9.4, done). Still optional: the `internal/dns` reader's `malformed`
   counter is a plain uint64 (atomic if ever served).
 
-## Topic (a) leftovers: CodeQL lanes, PIE (ci-debs follow-up)
+## Topic (a) leftovers: PIE (ci-debs follow-up)
 
-1. CodeQL `c-cpp` → `build-mode: manual` (install `clang libbpf-dev` in the codeql job; the
-   tracer watches `clang -target bpf -c bpf/{snitch,dns}.bpf.c -o /dev/null`, observation
-   only; the bindings check's pinned image is the natural toolchain) and the Python lane's
-   pre-scan copy (`cp snitch snitch-client.py` before `init`, same bytes, noted in the
-   config). Today: go manual / c-cpp none / python none. Records: `docs/ci-debs.md` CodeQL
-   section, the ci-debs design/research decision `c9cfa6f1`. Expected yield is modest (stock
-   C queries model libc sinks BPF code lacks). Extraction only proves after push.
+1. Done 2026-11-25: CodeQL c-cpp is traced (`build-mode: manual`, an observation compile with
+   the runner's clang and libbpf 1.3, flags without `-Werror`, output to `/dev/null`) and the
+   python lane extracts the client through the pre-scan copy `snitch-client.py`. Extraction
+   only proves on the first live run after push.
 2. Undecided: `-buildmode=pie` for the two Go binaries (static non-PIE today); small gain,
    changes the release shas.
 
-## Topic (b): deb dependencies (decided: Suggests-only, not implemented)
+## Topic (b): deb dependencies (done 2026-11-25)
 
-`packaging/control` declares no relationship fields (ci-debs R4.5: static binaries). Target:
-
-- `Recommends: bpftool` (the kill switch, fail-safe 4) and the session D-Bus for `snitch tray`.
-- `Suggests:` `plasma-workspace` (StatusNotifierWatcher, notifications), `breeze-icon-theme`
-  (cosmetic). Not Recommends: a headless host must not pull Plasma.
-- No `Depends`; Linux >= 6.12 with BPF LSM stays in the Description.
-- Verify first with `apt-cache` in the smoke containers on both contract distros (forky,
-  26.04): `bpftool`, `default-dbus-session-bus | dbus-session-bus`, `plasma-workspace`,
-  `breeze-icon-theme`.
-- Records that change with it: R4.5 in `.kiro/specs/ci-debs/requirements.md`, the "declares
-  no runtime dependency" sentence in the control Description, the `statically-linked-binary`
-  comment in `packaging/lintian-overrides`, `docs/ci-debs.md`. The deb's sha256 changes.
-- Done: `Maintainer: Marius Ciepluch <wishinet@…>` in `packaging/control` and the changelog
-  line in `.dagger/deb.go` (committed with `9c3f5e0`).
+`packaging/control`: `Recommends: bpftool, default-dbus-session-bus | dbus-session-bus`,
+`Suggests: plasma-workspace, breeze-icon-theme`, no `Depends`; names checked with `apt-cache`
+in forky and 26.04; R4.5 amended; `docs/ci-debs.md` updated. The deb's sha256 changed. The
+maintainer line was corrected earlier (`9c3f5e0`).
 
 ## Pending verification (happens only after push)
 
 - First live `lint.yml` run: the four dispatch jobs plus the tag-skipped `linters` job, now
   with the `bindings` dispatch (cache-cold on runners: apt from snapshot.debian.org + regen).
-- First live `codeql.yml` run (current form above, or the upgraded lanes if item (a)1 lands).
+- First live `codeql.yml` run: go and c-cpp traced, python through the pre-scan copy.
 - The deb lane's first CI run (~2.5–3 min warm, both distro smokes included).
 
 ## Release-day runbook

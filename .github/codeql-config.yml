@@ -1,10 +1,10 @@
 # ci-debs (Req 3.2): the minimal CodeQL configuration. The one knob it sets is
 # paths-ignore, trimming trees that are not source for any of the three analyzed
-# languages (go, c-cpp, python), so the databases cover what the traced go build
-# and the none-mode extractors actually consume. The Go packages (cmd/, internal/,
-# tools/) and the BPF C sources (bpf/*.bpf.c beside their vmlinux.h) are analyzed -
-# NOT ignored. The extension-less python client is not ignorable here; it simply
-# does not match the extractor (the documented R3.2 limitation, docs/ci-debs.md).
+# languages (go, c-cpp, python), so the databases cover what the traced go build, the
+# traced BPF observation compile and the python extractor actually consume. The Go
+# packages (cmd/, internal/, tools/) and the BPF C sources (bpf/*.bpf.c beside their
+# vmlinux.h and authored headers) are analyzed - NOT ignored. The extension-less python
+# client is analyzed through the pre-scan copy snitch-client.py that codeql.yml makes.
 #
 # runs of paths-ignore:
 paths-ignore:

@@ -222,22 +222,20 @@ Coverage realities (R3.2):
   the workflow's explicit `go build ./...` (after `setup-go` from go.mod) is
   the traced build, the same command the pipeline's own go check runs, so the
   database covers what CI actually builds.
-- **The BPF C is analyzed with `build-mode: none`**: it infers compilation
-  units without ever running a compiler. That keeps this lane clang-free (the
-  bpf2go bindings are committed; the only clang in CI is the c-hardening
-  bindings check, an observer), with the recorded caveat that none-mode is
-  macro-accurate only up to its inference — a macro-heavy tree like `vmlinux.h`
-  can leave inferred units that a real compile would not produce. Macro-scale
-  bugs may therefore hide from this lane; it is accepted, recorded, and the C
-  code keeps the cppcheck layer as its line-level analyzer.
-- **The extension-less Python client is NOT extracted** — a deliberate,
-  documented limitation. Its shebang is
-  `#!/usr/bin/env -S uv run --quiet --script`, which does not match the
-  extractor's script pattern (the `env -S` form is invisible to it), and no
-  extractor override exists for a file the extractor classifies as nothing.
-  Ruff keeps covering the file on the lint side (pinned 0.16.10), and the
-  python matrix column keeps the suite pointed at the day the file moves to a
-  matched form.
+- **The BPF C is traced** (since 2026-11-25, user decision; it was `build-mode: none`
+  before): `build-mode: manual`, and the traced build is an observation compile of both
+  programs with the runner's clang and libbpf headers, output to `/dev/null` — the compiler
+  observes, nothing it produces is kept; the committed bindings, checked byte for byte by the
+  pipeline's bindings check, are what ships. The flags are `internal/bpf/gen.go`'s without
+  `-Werror` (the runner's libbpf 1.3 declares `bpf_d_path` without the const forky's 1.7 has;
+  that warning must not stop the observation). Traced extraction replaces none-mode's inferred
+  compilation units and its macro-accuracy caveat, which mattered most for `dns.bpf.c`, the
+  parser of attacker-shaped DNS answers. cppcheck stays the line-level layer.
+- **The Python client is extracted through a pre-scan copy** (since 2026-11-25): the job copies
+  the extension-less `snitch` to `snitch-client.py` before `init` (same bytes; the extractor
+  picks up `*.py` only — the client's `#!/usr/bin/env -S uv run --quiet --script` shebang does
+  not match its script pattern), so the client gets real taint coverage until the Go TUI
+  retires it. Ruff keeps covering the file on the lint side.
 
 The findings-review expectation (R3.3, R3.4): findings never gate anything —
 they surface in code scanning for human review; the release does not reference
