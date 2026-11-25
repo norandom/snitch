@@ -126,6 +126,11 @@ group() {
 
 group "1 conffile-keep over the authored rules" "1-conffile-keep.sh"
 group "2 fresh install" "2-fresh-install.sh"
+group "3 unit verify" "3-unit-verify.sh"
+group "4 trial-boot start" "4-trial-boot.sh"
+group "5 daemon journal signature" "5-daemon-journal.sh"
+group "6 installed-path check" "6-installed-check.sh"
+group "7 tray -version from PATH" "7-tray-version.sh"
 `
 
 // smokeConffileKeepScript is assertion group 1 (the design's conffile
@@ -233,6 +238,103 @@ test -x /usr/local/sbin/snitchd && test -x /usr/bin/snitch \
 	|| die "a shipped binary lost its executable bit"
 
 say "Status 'install ok installed', version $PKGVER; all 9 payload files byte-equal to the deb; binaries executable"
+`
+
+// smokeUnitVerifyScript is assertion group 3 (5.3's parse verification):
+// systemd-analyze verify on both shipped units in the installed location -
+// the distro's own systemd judging the package's units. The verifier's exit
+// code is the verdict; any note it prints is evidence, not pass criteria.
+const smokeUnitVerifyScript = `#!/usr/bin/env bash
+set -uo pipefail
+die() { echo "smoke: $DISTRO: 3 unit verify: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 3 unit verify: $*"; }
+out=$(systemd-analyze verify /usr/lib/systemd/system/snitchd.service /usr/lib/systemd/system/snitchd-trial-boot.service 2>&1) || {
+	echo "$out"
+	die "$(echo "$out" | head -1)"
+}
+[ -z "$out" ] || say "verifier notes: $(echo "$out" | head -3)"
+say "systemd-analyze verify: both shipped units clean"
+`
+
+// smokeTrialBootScript is assertion group 4 (5.3's headless-trial assert):
+// the trial-boot oneshot needs no kernel objects, so it must fully run in the
+// container - Result=success, ExecMainStatus=0 (the daemon's end -at-boot
+// path, against the StateDirectory the unit itself provisions). The units
+// landed on a booted system, so daemon-reload runs first - the same step an
+// operator's deploy flow runs after placing units.
+const smokeTrialBootScript = `#!/usr/bin/env bash
+set -uo pipefail
+die() { echo "smoke: $DISTRO: 4 trial-boot: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 4 trial-boot: $*"; }
+systemctl daemon-reload || die "daemon-reload refused the installed units"
+systemctl start snitchd-trial-boot.service || die "the oneshot did not start"
+show=$(systemctl show snitchd-trial-boot.service -p Result -p ExecMainStatus)
+echo "$show" | grep -qx "Result=success" || { echo "$show"; die "Result is not success"; }
+echo "$show" | grep -qx "ExecMainStatus=0" || { echo "$show"; die "ExecMainStatus is not 0"; }
+journalctl -u snitchd-trial-boot.service --no-pager -q | tail -3
+say "the oneshot fully ran headless: Result=success, ExecMainStatus=0"
+`
+
+// smokeDaemonJournalScript is assertion group 5 (5.3's expected state of the
+// real daemon on a headless container): snitchd.service starts, its daemon
+// resolves the binary (systemd found ExecStart) and the rules (its own first
+// startup step, whose mode line only prints when the rules parsed), then
+// fails at the kernel step - the pinned-maps load, stopped by the /sys/fs/bpf
+// tmpfs the sibling boots with, on every host the same way. The journal
+// therefore must carry the pin-dir/load/attach failure signature and must
+// not carry any missing-file error: a missing ExecStart binary or an absent
+// rules file is a packaging error, not an environment limitation.
+const smokeDaemonJournalScript = `#!/usr/bin/env bash
+set -uo pipefail
+die() { echo "smoke: $DISTRO: 5 daemon journal: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 5 daemon journal: $*"; }
+systemctl start snitchd.service || true   # the daemon is expected to exit on the kernel step; the journal is the assert
+sleep 6                                    # RestartSec=2: at least one full restart cycle leaves its signature
+j=$(journalctl -u snitchd.service --no-pager -q)
+[ -n "$j" ] || die "the journal holds nothing for snitchd.service"
+sig=$(echo "$j" | grep -E "snitchd: (pin dir|load|attach):" | head -1) || die "no pin-dir/load/attach failure signature in the journal"
+echo "$sig"
+if echo "$j" | grep -iq "no such file"; then
+	echo "$j" | grep -i "no such file" | head -3
+	die "the journal carries a missing-file error - a packaging error, not a kernel limitation"
+fi
+echo "$j" | grep -q "snitchd: mode: monitor (" || die "the daemon never reached its mode decision - the rules never loaded"
+systemctl stop snitchd.service 2>/dev/null || true   # stop the restart churn; the signature stays recorded in the journal
+say "signature present with no missing-file error; rules parsed (mode decided) before the kernel step"
+`
+
+// smokeInstalledCheckScript is assertion group 6 (4.3's fresh-install start
+// condition proven as far as headless allows): the installed daemon's own
+// rules check over the installed sample path must exit 0. The check prints
+// one unresolvable-path line per program this container does not have - the
+// daemon's documented tolerated state, mapped not enforced (the same output
+// the deb assembly accepted when it proved the sample before packing it).
+const smokeInstalledCheckScript = `#!/usr/bin/env bash
+set -uo pipefail
+die() { echo "smoke: $DISTRO: 6 installed check: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 6 installed check: $*"; }
+out=$(/usr/local/sbin/snitchd check -rules /etc/snitch/rules.toml 2>&1) || {
+	rc=$?
+	echo "$out"
+	die "snitchd check exited $rc"
+}
+[ -n "$out" ] && echo "$out" | tail -3
+say "snitchd check -rules /etc/snitch/rules.toml: exit 0 on the installed sample"
+`
+
+// smokeTrayVersionScript is assertion group 7 (4.4, 5.3): the tray binary
+// the deskop entry's Exec= and every operator shell must resolve does
+// resolve from PATH, and it answers the version it was linked with - the
+// same assertion every build function runs, here against the installed
+// package's own binary instead of the build's output.
+const smokeTrayVersionScript = `#!/usr/bin/env bash
+set -uo pipefail
+die() { echo "smoke: $DISTRO: 7 tray -version: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 7 tray -version: $*"; }
+p=$(command -v snitch) || die "snitch does not resolve from PATH"
+v=$(snitch -version) || die "snitch -version exited non-zero"
+[ "$v" = "v$PKGVER" ] || die "snitch -version answered '$v', expected 'v$PKGVER'"
+say "resolved from PATH at $p; answers $v"
 `
 
 // Smoke is the deb's in-container proof on one contract distro (R5.3): the
@@ -372,5 +474,10 @@ func smokeContainer(distro Distro, image, version string, deb *dagger.Directory,
 		WithMountedDirectory("/deb", deb).
 		WithNewFile("/smoke/run.sh", smokeDriverScript).
 		WithNewFile("/smoke/groups/1-conffile-keep.sh", smokeConffileKeepScript).
-		WithNewFile("/smoke/groups/2-fresh-install.sh", smokeFreshInstallScript)
+		WithNewFile("/smoke/groups/2-fresh-install.sh", smokeFreshInstallScript).
+		WithNewFile("/smoke/groups/3-unit-verify.sh", smokeUnitVerifyScript).
+		WithNewFile("/smoke/groups/4-trial-boot.sh", smokeTrialBootScript).
+		WithNewFile("/smoke/groups/5-daemon-journal.sh", smokeDaemonJournalScript).
+		WithNewFile("/smoke/groups/6-installed-check.sh", smokeInstalledCheckScript).
+		WithNewFile("/smoke/groups/7-tray-version.sh", smokeTrayVersionScript)
 }
