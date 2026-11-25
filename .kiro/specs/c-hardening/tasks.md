@@ -76,7 +76,7 @@ change that moves their lines.
   - Done when both programs compile and every structure in that table has a size contract and
     member contracts
   - _Requirements: 3.1, 3.2_
-- [ ] 3.4 State the relations between the DNS tap's limits
+- [x] 3.4 State the relations between the DNS tap's limits
   - The relations in the design's contract table, including the walk-step bound against the
     kernel's loop limit and the slot array's element count
   - Done when the tap compiles and each relation in the table is present as a build-time
@@ -294,4 +294,7 @@ change that moves their lines.
 - `CONTRACT(cond, on_violation)` is a C11 conditional expression (no statement expression):
   `if (!CONTRACT(p, bump(SC_X))) { fail-open branch }`; `CONTRACT_CONST`'s msg must be a string
   literal.
+- Finding from 3.4 for the corpus (6.3): the answer walk's owner-name steps have no per-name
+  label cap, so a long owner name can use up `STEPS_MAX` early and later records are not walked.
+  Fail-safe (fewer allow entries, never a wrong one); add a corpus entry that pins this outcome.
 

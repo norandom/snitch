@@ -131,6 +131,25 @@ CONTRACT_OFFSET(struct dns_answer_record, family, 72);
 CONTRACT_OFFSET(struct dns_answer_record, addrs, 80);
 CONTRACT_OFFSET(struct dns_answer_record, slots, 208);
 
+// The relations between the limits that the bounded walks below rely on.
+// Masking with NAME_MAX - 1 keeps a suffix start inside buf (2 * NAME_MAX), so buf + start
+// covers NAME_MAX bytes for the domains lookup (read_qname, compile_addr).
+CONTRACT_CONST(NAME_MAX > 0 && (NAME_MAX & (NAME_MAX - 1)) == 0, "NAME_MAX is a power of two");
+// The SWAR lowercase and the question compare run NAME_MAX / 8 u64 lanes over the whole name.
+CONTRACT_CONST(NAME_MAX % 8 == 0, "NAME_MAX is a multiple of 8");
+// bpf_loop rejects nr_loops above BPF_MAX_LOOPS (1 << 23, not in vmlinux.h) with -E2BIG and
+// runs no step: the answer walk would compile nothing.
+CONTRACT_CONST(STEPS_MAX <= (1 << 23), "STEPS_MAX <= bpf_loop limit BPF_MAX_LOOPS");
+// compile_addr writes slots[lvl * SLOTS_MAX + s] for lvl < LEVELS_MAX, s < SLOTS_MAX.
+CONTRACT_CONST(sizeof(((struct dns_answer_record *)0)->slots) / sizeof(struct domain_slot) ==
+		       LEVELS_MAX * SLOTS_MAX,
+	       "dns_answer_record.slots has LEVELS_MAX * SLOTS_MAX elements");
+// compile_addr reads dots[lvl] for lvl < LEVELS_MAX; dots has LABELS_MAX entries.
+CONTRACT_CONST(LABELS_MAX >= LEVELS_MAX, "LABELS_MAX >= LEVELS_MAX");
+// The walk collects at most one address per answer record walked, so ADDRS_MAX beyond RR_MAX
+// could never fill.
+CONTRACT_CONST(RR_MAX >= ADDRS_MAX, "RR_MAX >= ADDRS_MAX");
+
 // These indices are the user-space stats ABI; keep exists before update_fail.
 enum dns_stat {
 	ST_SEEN = 0,        // UDP datagrams from port 53
