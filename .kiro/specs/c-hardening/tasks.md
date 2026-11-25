@@ -233,6 +233,9 @@ change that moves their lines.
   - _Depends: 1.1_
   - _Requirements: 7.5, 7.8_
 - [ ] 7.2 Implement the bindings check
+  - (user direction 2026-11-25) The check runs `scripts/bindings-regen.sh --install --check` in
+    the pinned image: the script is the one place naming the packages and the expected compiler;
+    `.dagger/pins.go` names the same image digest as the script's IMAGE (keep them equal)
   - Regenerate on a copy inside the pinned container and compare every binding file byte for
     byte with the committed one; nothing is written back or exported
   - Three distinct failures: environment unavailable, compiler differs from the recorded
@@ -248,6 +251,18 @@ change that moves their lines.
   - Done when each scratch case fails with its own message, the workflow file passes the
     workflow linter, and the release workflow is unchanged
   - _Requirements: 7.1, 7.2, 7.3, 7.5, 7.7, 7.8_
+
+- [ ] 7.4 The rugged pre-release suite in the pipeline
+  - (user direction 2026-11-25) A non-gating `fuzz` pipeline function running
+    `scripts/fuzz.sh -t <duration>` in the Go checks container, and a `rugged` composite that runs
+    every pipeline check (the lint-all set including the bindings check) plus the fuzz function -
+    the one call to make before tagging a release
+  - The root-only gate stays outside the pipeline: `sudo scripts/root-checks.sh --at <rev>` on the
+    dev VM; the composite's output names it as the remaining manual step
+  - Done when `dagger call rugged` passes on the tree, `dagger call fuzz --duration 5s` runs every
+    fuzz target, neither joins the release chain's gate, and the workflow linter passes
+  - _Depends: 7.2, 6.6_
+  - _Requirements: 7.1, 7.7, 8.4, 8.6, 9.2_
 
 - [ ] 8. Records and final validation
 - [ ] 8.1 Write the feature documentation and bring the affected documents up to date
@@ -334,4 +349,11 @@ change that moves their lines.
   entries). The design table's "16 labels" limit entry became `limits-15-labels-*` plus
   `names-16-labels` (refused). Fix either side in a follow-up: ParseName refuses > 15, or the
   loop runs LABELS_MAX + 1 turns (re-check 3.4 relations and the verifier budget).
+- Reusable scripts (user direction 2026-11-25, committed outside the task loop, tested by hand):
+  `scripts/bindings-regen.sh` (--check | --write, --docker for hosts, --install for containers;
+  exit 1 stale, 3 compiler moved, 4 environment unavailable; stale detection proven on a copy
+  with one added C line), `scripts/fuzz.sh` (every Fuzz target, -t per target, -m minimize cap
+  default 5s), `scripts/root-checks.sh` (the root batch; `--at <rev>` makes and removes its own
+  worktree). Gates are now run as `sudo scripts/root-checks.sh --at <commit>`; the scratch
+  worktrees are gone. 7.2 and 7.4 use these scripts; 8.1 documents them.
 
