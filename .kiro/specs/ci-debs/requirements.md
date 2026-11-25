@@ -93,7 +93,9 @@ a distribution package, so that a system can run the service's stack the Debian 
    `snitch tray`, the command shall resolve from PATH.
 5. The package metadata (name, architecture, description, dependencies) shall declare only
    what the static binaries actually need, and shall not declare a dependency on any scripting
-   runtime, C library version or desktop environment.
+   runtime, C library version or desktop environment. (Amended 2026-11-25 by the user's
+   decision: no Depends; Recommends bpftool and a D-Bus session bus; Suggests the KDE side,
+   plasma-workspace and breeze-icon-theme, so a headless host never pulls Plasma in.)
 6. Where the package installs a file that a previous version or an external deployment already
    authored, upgrade semantics shall preserve the host's authored content for configuration
    files (the packaging system's own conffile rules govern this).

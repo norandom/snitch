@@ -36,7 +36,7 @@ Payload (every mode explicit, every file root-owned, `DEBIAN/` as listed):
 | `/usr/share/doc/snitch/copyright` | `LICENSE` | 0644 | the license, where policy puts it |
 | `/usr/share/doc/snitch/changelog.Debian.gz` | generated (version + epoch date) | 0644 | `gzip -9n`, `LC_ALL=C` — a function of the commit alone |
 | `/usr/share/lintian/overrides/snitch` | `packaging/lintian-overrides` | 0644 | the package's policy-deviation review record (see below) |
-| `DEBIAN/control` | `packaging/control` + injected Version and Installed-Size | 0644 | declares no runtime `Depends` at all (R4.5) |
+| `DEBIAN/control` | `packaging/control` + injected Version and Installed-Size | 0644 | no `Depends`; `Recommends` bpftool and a session bus, `Suggests` the KDE side (R4.5) |
 | `DEBIAN/conffiles` | `packaging/conffiles` | 0644 | lists exactly `/etc/snitch/rules.toml` |
 | `DEBIAN/md5sums` | generated, `LC_ALL=C` sorted | 0644 | dpkg's own verification form |
 
@@ -83,8 +83,16 @@ client era units — `snitch-trial*.service`, `snitch-trial.timer`,
 
 No runtime `Depends` (R4.5): both binaries are static (`CGO_ENABLED=0`,
 `-trimpath`), so the control file declares no scripting runtime, no libc and no
-desktop environment; D-Bus is provided by the desktop session at runtime, and
-the installation needs nothing but the archive.
+desktop environment, and the installation needs nothing but the archive. What
+the package uses at run time is declared softly (amended 2026-11-25):
+`Recommends: bpftool, default-dbus-session-bus | dbus-session-bus` (the kill
+switch is a `bpftool` command; the tray talks to the session bus) and
+`Suggests: plasma-workspace, breeze-icon-theme` (the tray's host and the icon
+its notifications name). Suggests, not Recommends, for the KDE side: apt
+installs Recommends by default, and a headless host must not pull Plasma in.
+`dpkg -i` ignores both fields, so the smoke's zero-dependency install stands.
+The names were checked with `apt-cache` in forky and 26.04 (the session bus is
+virtual; `dbus-user-session` provides it in both).
 
 ## The distro stratagem: what the smoke proves (R5.3, R5.4)
 
