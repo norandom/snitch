@@ -64,7 +64,7 @@ change that moves their lines.
   - Done when a scratch translation unit using each form compiles, and a deliberately false
     contract of each build-time form fails with a message naming its subject
   - _Requirements: 3.1, 3.2, 3.6_
-- [ ] 3.2 Give the trie key and value one definition shared by both programs
+- [x] 3.2 Give the trie key and value one definition shared by both programs
   - Move the two structures and their contracts into one shared header; remove both copies
   - Keep each program's type export so both generated Go types still exist
   - Done when both programs compile from the single definition and no second definition of

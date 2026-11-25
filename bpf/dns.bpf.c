@@ -20,6 +20,8 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 
+#include "rules_abi.h"  // snitchd's trie key and value: one definition for both programs
+
 #define AF_INET 2
 #define AF_INET6 10
 #define ETH_P_IP 0x0800
@@ -39,22 +41,6 @@
 #define STEPS_MAX (RR_MAX * (LABELS_MAX + 1))  // bpf_loop iterations: one label or one RR each
 
 char LICENSE[] SEC("license") = "GPL";
-
-// --- snitchd's trie key and value, byte for byte (bpf/snitch.bpf.c) ---
-struct rule_key {
-	__u32 prefixlen;
-	__u32 program;
-	__u8  family;
-	__u8  proto;
-	__u16 port;
-	__u8  addr[16];
-};
-
-struct rule_val {
-	__u8  verdict;     // 1 allow, 2 deny
-	__u8  pad[3];
-	__u32 id;
-};
 
 // A domain entry: the key is the lowercase name with a '.' before every label, left aligned,
 // zero padded ("\x2egithub\x2ecom" for github.com). The suffix of a question name at label k is

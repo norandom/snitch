@@ -13,6 +13,8 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 
+#include "rules_abi.h"
+
 #define AF_INET 2
 #define AF_INET6 10
 #define EPERM 1
@@ -55,24 +57,6 @@ struct exe_key {
 	__u64 ino;
 	__u32 dev;
 	__u32 pad;
-};
-
-// LPM key: the fixed part (program, family, proto, port) is always fully covered by prefixlen,
-// the address prefix follows. proto 0 / port 0 mean "any"; program 0 means "any program".
-struct rule_key {
-	__u32 prefixlen;
-	__u32 program;
-	__u8  family;
-	__u8  proto;
-	__u16 port;
-	__u8  addr[16];
-};
-
-// Trie value: the verdict and which rule it came from (for the event stream).
-struct rule_val {
-	__u8  verdict;     // 1 allow, 2 deny
-	__u8  pad[3];
-	__u32 id;
 };
 
 #define FLAG_WANT_PATH 1  // daemon asks for the exe path on every event (learning mode)
