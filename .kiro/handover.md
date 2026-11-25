@@ -13,12 +13,17 @@ root gates (below) and the deb lane's first CI run, which happens on the first `
   bindings check and written into `.kiro/steering/tech.md` ("The compiler as observer").
 - **deb dependencies: Suggests-only for KDE, one package** (no `snitch-tray` split). Topic (b).
 
-## Dependabot (new, undecided)
+## Dependabot (partly fixed 2026-11-25)
 
-13 alerts, all in `.dagger/go.mod` (the CI pipeline module, never shipped): grpc (3 high, 1
-medium), x/net and otel packages. Dependabot PR #1 bumps six of them and fails every lint job,
-most likely because Dagger's generated SDK pins those versions. Options: bump the Dagger engine
-and SDK (`dagger develop` on a newer engine), or dismiss the alerts as pipeline-only.
+All alerts were in `.dagger/go.mod` (the CI pipeline module, never shipped). Fixed: grpc
+(1.79.3 -> 1.83.2, all high) and `golang.org/x/net` (0.60.0); commits `3ef4f14`, `f15d84b`.
+Open: 8 otel alerts (4 medium, 4 low: otel/sdk, otel/trace, otlp exporters). They need otel
+1.45+ with otel/log 1.47, but engine v0.21.12 (the newest release) rewrites the module's
+`replace` lines to otel/log v0.16.0, and otel 1.47 with log v0.16 does not compile - so any
+Dependabot PR bumping otel (#1 closed, #2 open) fails every lint job. Wait for a Dagger
+release that drops those replaces (its `main` still has them), or dismiss the 8 as
+"tolerable risk: telemetry exporters of the CI-only pipeline module".
+
 
 ## c-hardening: root gates not yet run
 
