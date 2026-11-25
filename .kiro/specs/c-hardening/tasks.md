@@ -197,7 +197,7 @@ change that moves their lines.
   - Done when every group in the design's corpus table has its entries and all pass under the
     root test script (needs root)
   - _Requirements: 6.1, 6.5_
-- [ ] 6.4 (P) Fuzz the kernel-record decoders
+- [x] 6.4 (P) Fuzz the kernel-record decoders
   - Fuzz tests for the egress event decoder with its accessors and for the DNS answer decoder,
     with seeds for a valid record and the boundary sizes
   - Run each for a bounded time; fix any defect found and keep its input as a seed
