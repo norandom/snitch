@@ -121,6 +121,25 @@ const (
 	// a versioned tool.
 	aptCaCertificates = "ca-certificates"
 
+	// The distro build scaffolding (build.go installs the pair beside
+	// aptCaCertificates, before anything fetches): git, because the
+	// distro build runs ReleaseBuild's guards and keeps the same stamping
+	// parity (the golang image ships git; the bare distro bases do not),
+	// and curl, which the plain test suite itself needs: the rules test
+	// resolves a real OS identity of /usr/bin/curl, and both of today's
+	// suite environments have it (the hosted runner's image and the
+	// golang checks image) while the bare distro images do not - the
+	// distro build container had to install it or fail a test that has
+	// nothing to say about the distro. curl also fetches the pinned go
+	// tarball over that trust store, so no second fetch tool. Named,
+	// unpinned on purpose: these are scaffolding, not bytes of the
+	// release - every byte-level input is pinned elsewhere (the image
+	// tags, the tarball's sha256) - and the two distro archives would
+	// not agree on one version anyway; any way they diverged would have
+	// to survive the distro proof's own checksum comparison to matter.
+	aptGit  = "git"
+	aptCurl = "curl"
+
 	// The smoke and lintian layer installs these by name, unpinned by
 	// version on purpose (the design pins cppcheck/libbpf only): the package
 	// IS the distro's implementation, so a distro's own choice is the input

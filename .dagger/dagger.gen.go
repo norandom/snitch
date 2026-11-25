@@ -73,6 +73,52 @@ func (r *Snitch) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
+func (r Distro) IsEnum() {}
+
+func (r Distro) Name() string {
+	switch r {
+	case DistroDebianForky:
+		return "DebianForky"
+	case DistroUbuntu2604:
+		return "Ubuntu2604"
+	}
+	return ""
+}
+
+func (r Distro) Value() string {
+	return string(r)
+}
+
+func (r Distro) MarshalJSON() ([]byte, error) {
+	if r == "" {
+		return []byte("\"\""), nil
+	}
+	name := r.Name()
+	if name == "" {
+		return nil, fmt.Errorf("invalid enum value %q", r)
+	}
+	return json.Marshal(name)
+}
+
+func (r *Distro) UnmarshalJSON(bs []byte) error {
+	var s string
+	err := json.Unmarshal(bs, &s)
+	if err != nil {
+		return err
+	}
+	switch s {
+	case "":
+		*r = ""
+	case "DebianForky":
+		*r = DistroDebianForky
+	case "Ubuntu2604":
+		*r = DistroUbuntu2604
+	default:
+		return fmt.Errorf("invalid enum value %q", s)
+	}
+	return nil
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -220,6 +266,34 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return nil, (*Snitch).Cppcheck(&parent, ctx, source)
+		case "DistroBuild":
+			var parent Snitch
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var source *dagger.Directory
+			if inputArgs["source"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["source"]), &source)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg source", err))
+				}
+			}
+			var distro Distro
+			if inputArgs["distro"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["distro"]), &distro)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg distro", err))
+				}
+			}
+			var version string
+			if inputArgs["version"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["version"]), &version)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg version", err))
+				}
+			}
+			return (*Snitch).DistroBuild(&parent, ctx, source, distro, version)
 		case "Fmt":
 			var parent Snitch
 			err = json.Unmarshal(parentJSON, &parent)
