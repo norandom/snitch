@@ -265,7 +265,7 @@ change that moves their lines.
   - _Requirements: 7.1, 7.7, 8.4, 8.6, 9.2_
 
 - [ ] 8. Records and final validation
-- [ ] 8.1 Write the feature documentation and bring the affected documents up to date
+- [x] 8.1 Write the feature documentation and bring the affected documents up to date
   - The contract approach at its three levels; how to regenerate so the bindings check
     passes; the command that runs each fuzz test for a chosen duration
   - The counters object in the API documentation, with the statement that a non-zero contract

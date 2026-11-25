@@ -169,6 +169,59 @@ An off tap retains address rules and reports its counters and sizes as zero:
           "names": 0, "compiled": 0, "evictions": 0}}}
 ```
 
+`counters` carries the kernel programs' own counters, read from their maps at the time of the
+request: one object for the egress program (`egress`) and one for the DNS tap (`dns`). It comes
+last in the status and is absent only on older daemons; every field above keeps its name, type
+and meaning. Every value is a total since the kernel programs were loaded (a daemon restart
+loads them anew and starts from zero). Every reader may read it, like the rest of `status`.
+
+Each object has `available`. When it is `true`, `contracts` holds every runtime-contract
+counter of that program, zero included (a key is never omitted because its value is zero), and
+the egress object also has `counters`, the program's own counters:
+
+| object | key | counts |
+|---|---|---|
+| `egress.counters` | `decisions` | connections that reached the verdict chain |
+| `egress.counters` | `addr_unreadable` | destinations the program could not read (allowed, no event) |
+| `egress.counters` | `no_exe` | connections of a task with no executable file (decided as program 0) |
+| `egress.counters` | `event_lost` | events lost to a full ring buffer (the verdict stands; complements `dropped`) |
+| `egress.contracts` | `kill_slot` | the kill-switch slot was unreadable: allowed as `allow-stale` |
+| `egress.contracts` | `control_slot` | the control slot was unreadable: allowed as `allow-stale` |
+| `egress.contracts` | `rule_verdict` | a matched rule's verdict was neither allow nor deny: allowed in every mode, as `allow-monitor` with the rule id kept |
+| `egress.contracts` | `mode` | the mode was neither monitor nor enforce: treated as monitor |
+| `dns.contracts` | `name_shape` | a parsed name had no label, too many labels or a wire length at or beyond the limit: the packet passed, nothing learned |
+| `dns.contracts` | `dot_range` | a label offset lay outside the name: the packet passed, nothing learned |
+
+The tap's own counters stay in the `dns` object above; `counters.dns` has no `counters` map.
+
+**A non-zero contract counter indicates a defect: report it** (with the daemon's version and
+the status reply). A contract is an assumption the kernel code rests on; a violation never
+denies or drops anything, it resolves to allow (egress) or pass (DNS tap) and is counted here.
+The four `egress.counters` are ordinary operating counts, not defects. See
+`docs/c-hardening.md` for the contracts.
+
+```json
+"counters": {
+  "egress": {"available": true,
+             "counters": {"addr_unreadable": 0, "decisions": 51200, "event_lost": 0, "no_exe": 3},
+             "contracts": {"control_slot": 0, "kill_slot": 0, "mode": 0, "rule_verdict": 0}},
+  "dns": {"available": true, "contracts": {"dot_range": 0, "name_shape": 0}}}
+```
+
+When a program's counters cannot be read, its object says so instead of reporting zeros:
+`available` is `false`, `reason` names the cause, and neither map is present. The status reply
+is still sent. With the tap off, `counters.dns` carries the same reason as the `dns` object
+(`flag`, or the load or attach error); a failed map read gives `snitch_stats: <error>` or
+`dns_stats: <error>`:
+
+```json
+"counters": {
+  "egress": {"available": true,
+             "counters": {"addr_unreadable": 0, "decisions": 51200, "event_lost": 0, "no_exe": 3},
+             "contracts": {"control_slot": 0, "kill_slot": 0, "mode": 0, "rule_verdict": 0}},
+  "dns": {"available": false, "reason": "flag"}}
+```
+
 ### rules
 
 The effective rules in file order, base first, overlay after it, each with the file it came

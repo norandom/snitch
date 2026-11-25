@@ -215,8 +215,9 @@ Coverage realities (R3.2):
   the traced build, the same command the pipeline's own go check runs, so the
   database covers what CI actually builds.
 - **The BPF C is analyzed with `build-mode: none`**: it infers compilation
-  units without ever running a compiler. That keeps CI clang-free (the bpf2go
-  bindings are committed), with the recorded caveat that none-mode is
+  units without ever running a compiler. That keeps this lane clang-free (the
+  bpf2go bindings are committed; the only clang in CI is the c-hardening
+  bindings check, an observer), with the recorded caveat that none-mode is
   macro-accurate only up to its inference — a macro-heavy tree like `vmlinux.h`
   can leave inferred units that a real compile would not produce. Macro-scale
   bugs may therefore hide from this lane; it is accepted, recorded, and the C
@@ -277,14 +278,22 @@ The command set, from the repo root (a throwaway tag such as v0.0.0-cidev
 satisfies the tag guard; never push it, delete it after):
 
 ```sh
-dagger call lint-all                                                        # every check, nine PASS banners
+dagger call lint-all                                                        # every check, ten PASS banners
 dagger call release-build --version=vX.Y.Z --output=dist                    # the four existing artifacts
 dagger call deb --version=vX.Y.Z --output=dist-deb                          # the deb + its sha256
 dagger call smoke --distro=UBUNTU_2604 --version=vX.Y.Z --docker-socket=/var/run/docker.sock
 dagger call smoke --distro=DEBIAN_FORKY --version=vX.Y.Z --docker-socket=/var/run/docker.sock
 dagger call deb-release --version=vX.Y.Z --docker-socket=/var/run/docker.sock --output=dist-deb   # the release lane in one call
-dagger check                                                               # the seven-check gate
+dagger check                                                               # the eight-check gate
 ```
+
+`dagger check` runs the eight functions marked `+check`: fmt, go, shellcheck,
+ruff, actionlint, golangci, cppcheck and — added by c-hardening — bindings,
+which regenerates `internal/bpf/` with the pinned clang in a pinned forky
+image and fails when the committed bindings differ from their source (the
+compiler only observes; nothing it produces is committed or shipped; see
+`docs/c-hardening.md`). `lint-all` runs the same eight, the first five
+through `lint-core`.
 
 The build functions enforce, not assume, the two determinism guards: a clean
 tree (`git status --porcelain` empty) and `version` being a tag on HEAD — a
@@ -334,7 +343,8 @@ the same bytes by construction (R6.1, R7.1).
   and the deb lane run as parallel artifact jobs behind the checks gate, and
   the publish job needs both artifact sets before it touches the release
   (R1.1, R6.2).
-- The linters job (golangci + cppcheck, one engine for both steps) skips
+- The linters job (golangci, cppcheck and the c-hardening bindings check,
+  one engine for the three steps) skips
   `refs/tags/v*`, so a release is gated exactly on the checks that gated it
   before the feature (R6.2). The skip's basis is workflow_call semantics: a
   called workflow receives the caller's event payload, so `github.ref` inside
@@ -353,15 +363,18 @@ the same bytes by construction (R6.1, R7.1).
 
 ## Honesty records
 
-- **Deferred cppcheck improvements, deliberately recorded as deferred**: four
-  `constVariablePointer` findings are real const-correctness improvements —
-  `bpf/snitch.bpf.c:218`, `:219`, `:241` and `bpf/dns.bpf.c:356`. Fixing them
-  edits `bpf/*.c`, and the committed bpf2go bindings regenerate only under
-  clang (`internal/bpf`'s go:generate), which neither CI nor the packaging
-  workstation runs — fixing the C without regenerating the bindings would ship
-  a stale pair. Each line is suppressed standing alone (with this reason) in
-  `bpf/cppcheck-suppressions.txt`, so any *new* finding of the class stays
-  visible at its own site. Fix them the day a bindings-regen host has clang.
+- **The formerly deferred cppcheck findings are fixed (c-hardening)**: this
+  feature shipped with four `constVariablePointer` findings recorded as
+  deferred — real const-correctness improvements at `bpf/snitch.bpf.c:218`,
+  `:219`, `:241` and `bpf/dns.bpf.c:356` — because fixing the C needed a
+  regeneration of the committed bindings under clang. The c-hardening feature
+  fixed all four (the pointers now point to const) and the two
+  `knownConditionTrueFalse` reports in `dns.bpf.c` (`pkt_init` returns `void`,
+  its dead error branches are gone), regenerated the bindings in the pinned
+  forky image (`scripts/bindings-regen.sh`) and dropped the six suppressions.
+  Every line left in `bpf/cppcheck-suppressions.txt` now stands for a
+  modelling limit, not a known defect, and the cppcheck check reports zero
+  unsuppressed findings. None of the four is open. See `docs/c-hardening.md`.
 - **actionlint runs unpinned on purpose**: the workflow it mirrors
   (`uvx --from actionlint-py actionlint -color`) never pinned the package, and
   parity with the workflow wins over inventing a pin the workflow does not
