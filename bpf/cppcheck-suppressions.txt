@@ -5,7 +5,7 @@
 # --suppressions-list. The layer's contract is zero UNSUPPRESSED
 # findings, so a rule may exist only for a class a real run reported,
 # and the reason must state why the class is not a defect in this
-# tree (or why its fix is deferred) - never "silence and see".
+# tree - never "silence and see".
 
 # vmlinux.h is the generated BTF dump of the running kernel's types
 # (bpftool btf dump), ~140k lines of kernel ABI shapes, not authored
@@ -39,22 +39,3 @@ returnDanglingLifetime:bpf/snitch.bpf.c
 # them dead; the rule covers each file's whole struct set.
 unusedStructMember:bpf/snitch.bpf.c
 unusedStructMember:bpf/dns.bpf.c
-
-# A real const-correctness improvement at each line: the looked-up
-# values are only ever read here. Fixing it edits bpf/*.c, and the
-# committed bindings regenerate only under clang
-# (internal/bpf go:generate), which this workstation does not have -
-# the code fix is deferred; each line stands alone so any NEW finding
-# of the class stays visible at its own site.
-constVariablePointer:bpf/snitch.bpf.c:218
-constVariablePointer:bpf/snitch.bpf.c:219
-constVariablePointer:bpf/snitch.bpf.c:241
-constVariablePointer:bpf/dns.bpf.c:356
-
-# pkt_init stores the skb pointer and returns 0, a shape cppcheck
-# cannot infer value-flow for, so it assumes the constant return and
-# marks the error branch's condition dead. The branches are live
-# code any nonzero return of the initializer takes; the conditions
-# are not decidable by the analyzer, per line.
-knownConditionTrueFalse:bpf/dns.bpf.c:439
-knownConditionTrueFalse:bpf/dns.bpf.c:514
