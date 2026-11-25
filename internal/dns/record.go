@@ -98,10 +98,12 @@ type Contracts struct{ NameShape, DotRange uint64 }
 // ContractsCount is the number of contract counters dns_stats holds after StatsCount.
 const ContractsCount = 2
 
-// DecodeContracts takes the dns_stats values from index StatsCount on.
+// DecodeContracts takes the dns_stats values from index StatsCount on: exactly ContractsCount
+// of them, so a tail that grew in the kernel without a decoder change is an error, not a
+// silently ignored counter.
 func DecodeContracts(values []uint64) (Contracts, error) {
-	if len(values) < ContractsCount {
-		return Contracts{}, fmt.Errorf("DNS contracts: need %d counters, got %d", ContractsCount, len(values))
+	if len(values) != ContractsCount {
+		return Contracts{}, fmt.Errorf("DNS contracts: need exactly %d counters, got %d", ContractsCount, len(values))
 	}
 	return Contracts{NameShape: values[0], DotRange: values[1]}, nil
 }

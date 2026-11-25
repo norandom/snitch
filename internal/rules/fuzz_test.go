@@ -57,6 +57,15 @@ var fuzzSeeds = []string{
 	"[[program]]\nname = \"a\"\n[[program.rule]]\n",
 	"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.1\"\nverdict = \"allow\"\nfirst = 1979-05-27T07:32:00Z\ncount = 3\n",
 	"[[program]]\nname = \"any\"\n",
+	// boundaries: port 0, the port-count limit and one past it, a name at the character limit
+	// and one past it, the label limit and one past it
+	"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.1\"\nport = 0\nverdict = \"allow\"\n",
+	"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.1\"\nport = \"1000-1255\"\nverdict = \"allow\"\n",
+	"[[rule]]\nprogram = \"curl\"\nto = \"1.1.1.1\"\nport = \"1000-1256\"\nverdict = \"allow\"\n",
+	"[[rule]]\nprogram = \"curl\"\nto = \"" + strings.Repeat("a", 58) + ".com\"\nverdict = \"allow\"\n",
+	"[[rule]]\nprogram = \"curl\"\nto = \"" + strings.Repeat("a", 59) + ".com\"\nverdict = \"allow\"\n",
+	"[[rule]]\nprogram = \"curl\"\nto = \"" + strings.Repeat("a.", 14) + "com\"\nverdict = \"allow\"\n",
+	"[[rule]]\nprogram = \"curl\"\nto = \"" + strings.Repeat("a.", 15) + "com\"\nverdict = \"allow\"\n",
 	"[[program]]\n[[rule]]\n",
 }
 
@@ -187,9 +196,41 @@ func checkMerged(t *testing.T, base, over, m *File) {
 			t.Fatalf("a kept rule from %s", r.Source)
 		}
 	}
+	checkShadowing(t, base, over, m.Rules[:kept])
 	assertSourced(m)
 	assertDenseIDs(m)
 	assertDenseIDs(base)
 	assertDenseIDs(over)
 	checkFile(t, base, fuzzBase, true)
+}
+
+// checkShadowing states Merge's documented rule as a property: a base rule survives exactly
+// when none of its expanded keys is one an overlay rule encodes to, and survivors keep their
+// base order. Base rules are told apart by their line.
+func checkShadowing(t *testing.T, base, over *File, kept []Rule) {
+	t.Helper()
+	overlay := map[ruleKey]bool{}
+	for i := range over.Rules {
+		for _, k := range expandedKeys(&over.Rules[i]) {
+			overlay[k] = true
+		}
+	}
+	var want []int
+	for i := range base.Rules {
+		hit := false
+		for _, k := range expandedKeys(&base.Rules[i]) {
+			hit = hit || overlay[k]
+		}
+		if !hit {
+			want = append(want, base.Rules[i].Line)
+		}
+	}
+	if len(want) != len(kept) {
+		t.Fatalf("kept %d base rules, the shadowing rule keeps %d", len(kept), len(want))
+	}
+	for i, r := range kept {
+		if r.Line != want[i] {
+			t.Fatalf("kept base rule %d is from line %d, want line %d", i, r.Line, want[i])
+		}
+	}
 }
