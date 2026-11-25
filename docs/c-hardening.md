@@ -118,8 +118,8 @@ The daemon has two kinds of failure and treats them differently:
   allowed: the daemon's contracts fail open too, by ending the process.
 - Bad input is never a programming error. The decoders of kernel records (`decodeEvent` in
   `cmd/snitchd`, `dns.Decode`) reject a record whose length differs from the expected size
-  with an error (Req 8.3), and `dns.DecodeContracts` rejects fewer counter values than the
-  tap's contracts; the event reader logs once per kind, counts the record as undecodable and
+  with an error (Req 8.3), and `dns.DecodeContracts` rejects any number of counter values other
+  than the tap's contracts; the event reader logs once per kind, counts the record as undecodable and
   continues. A malformed API line or rules file is answered
   with an error, as before.
 
@@ -302,23 +302,23 @@ Either outcome is accepted, and nothing may be counted, learned or mirrored in e
 The corpus records what the tap does, including where that falls short of "a malformed
 packet adds nothing". These are open and recorded here so they are not mistaken for proof:
 
-- **Ten entries learn from a packet that is malformed in one field** (deviations from
-  Req 6.3). Five length entries — UDP length 20 or 65535, IPv4 total length 20 or 65535, IPv6
-  payload length 65535 — learn their A record because the tap's parser never compares these
-  fields with the frame; on a real host the kernel's IP and UDP receive paths drop or trim such
+- **Nine entries learn from a packet that is malformed in one field** (accepted in Req 6.3,
+  amended 2026-11-25). A UDP length larger than the bytes present is rejected in `parse_l34`
+  (`lengths-udp-beyond-frame*`, `lengths-udp-one-beyond-frame`). Four length entries — UDP
+  length 20 (shorter than the message), IPv4 total length 20 or 65535, IPv6 payload length
+  65535 — still learn their A record because the parser does not compare these fields with the
+  frame; on a real host the kernel's IP and UDP receive paths drop or trim such
   packets before cgroup ingress, so only the test-run entry can deliver them. Two entries with
   an answer count larger than the records present learn the one real record and then stop: the
   record came from a registered resolver and was complete, and inserts made during the walk
   cannot be undone. Three `compression-owner-*` entries learn their A record because the walk
   ends an owner name at a pointer without following it and never uses the owner name. In every
   case the learned bytes are a complete A record from a resolver the operator registered, and
-  the tap can only ever add allow entries (fail-safe rule 1). A possible hardening is to bound
-  reads by `uh.len <= skb->len - off` in `parse_l34`, which turns the UDP-length entry into a
-  reject.
-- **15 labels, not 16.** `read_qname` reads at most 15 labels: its `LABELS_MAX` (16) turns
-  need one for the closing zero. `rules.ParseName` and `examples/rules.toml` accept 16, so a
-  16-label domain rule can never be learned (fewer entries: fail-safe). The corpus pins it as
-  `limits-15-labels-*` plus `names-16-labels` (refused). See "Findings outside this feature".
+  the tap can only ever add allow entries (fail-safe rule 1).
+- **15 labels.** `read_qname` reads at most 15 labels: its `LABELS_MAX` (16) turns need one for
+  the closing zero. Rule names are limited to the same 15 (`rules.NameLabelsMax`, pinned to the
+  tap by `TestRuleNameLabelsFitTheTap`); a rules file with a longer name is refused at load.
+  The corpus pins it as `limits-15-labels-*` plus `names-16-labels` (refused).
 - **The walk-step budget.** Owner names in the answer walk have no per-name label cap, so a
   run of long, legal owner names can use up `STEPS_MAX` (544 steps) before a later record is
   reached; that record is then not learned. `limits-steps-a-on-last-step` (the A record on
@@ -348,10 +348,6 @@ restored on exit. On a workstation without an active BPF LSM it runs the DNS tes
 
 ## Findings outside this feature (open)
 
-- **CI does not enforce gofmt.** Since ci-debs task 7.1 (commit `6132913`) replaced the inline
-  `gofmt -l .` with `call: go`, no job in `lint.yml` dispatches `fmt`. `dagger check`,
-  `lint-all` and `rugged` still run it; CI does not. Fix: add a `call: fmt` dispatch, or fold
-  the fmt check into the go job.
-- **The 15/16-label mismatch** above: either `rules.ParseName` refuses names of more than 15
-  labels, or `read_qname`'s loop runs `LABELS_MAX + 1` turns (re-check the limit contracts and
-  the verifier budget).
+- None from this feature. Fixed in the same follow-up (2026-11-25): CI enforces gofmt again
+  (a `fmt` job in `lint.yml`; since ci-debs task 7.1, commit `6132913`, no job had dispatched it),
+  and rule names are limited to the 15 labels the tap can learn.

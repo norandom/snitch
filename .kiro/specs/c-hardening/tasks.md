@@ -291,6 +291,23 @@ change that moves their lines.
     monitor run, and no step entered enforce mode
   - _Requirements: 2.3, 7.4, 9.1, 9.2, 9.3_
 
+- [ ] 9. Follow-ups decided by the user (2026-11-25)
+- [ ] 9.1 Reject a UDP length larger than the packet in the DNS tap
+  - `parse_l34` refuses `uh.len > skb->len - off` before ST_SEEN; bindings regenerated;
+    `lengths-udp-beyond-frame` now expects nothing learned, plus an IPv6 twin and the
+    one-byte-beyond boundary entry; Req 6.3 amended to name the nine remaining exceptions
+  - Done when the root corpus run passes the three entries (pending the operator's run)
+  - _Requirements: 6.1, 6.3_
+- [x] 9.2 Limit rule names to the 15 labels the tap can learn
+  - `rules.NameLabelsMax = 15`; `TestRuleNameLabelsFitTheTap` pins it to the tap's
+    LABELS_MAX - 1; a rules file with a longer name is now refused at load
+  - _Requirements: 6.5_
+- [x] 9.3 CI enforces gofmt again: a `fmt` job in lint.yml (every ref, release tags included)
+  - _Requirements: 9.2_
+- [x] 9.4 Fuzz review leftovers: rules fuzzer checks which base rules survive shadowing and
+  carries boundary seeds; `dns.DecodeContracts` requires exactly ContractsCount values
+  - _Requirements: 8.2, 8.3_
+
 ## Implementation Notes
 
 - Regeneration happens only in the `debian:forky` container (research.md, "Regeneration

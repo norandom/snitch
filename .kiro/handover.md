@@ -25,20 +25,16 @@ It proves 1.2, 2.4, 3.5, 4.4, 5.4, 6.1–6.3 and the root half of 8.3 (DNS root 
 58-frame corpus, a 75 s bounded monitor run, `scripts/api-check.sh` incl. the `counters`
 object at zero). Those tasks stay `[ ]` until the output proves them. Never enforce mode.
 
-## c-hardening: open for the user's decision
+## c-hardening: decided 2026-11-25 (task group 9)
 
-- **Ten Req 6.3 deviations**: corpus entries where the tap learns from a packet malformed in
-  one field (five length entries, two ancount-surplus, three `compression-owner-*`). Fail-safe
-  rule 1 holds. Accept as documented, or harden (`uh.len <= skb->len - off` in `parse_l34`
-  turns the UDP-length entry into a reject). See `docs/c-hardening.md` "Known limits".
-- **15 vs 16 labels**: `read_qname` reads at most 15 labels, `rules.ParseName` and
-  `examples/rules.toml` accept 16, so a 16-label domain rule is never learned. Fix either side
-  (ParseName refuses > 15, or the loop runs `LABELS_MAX + 1` turns; re-check the limit
-  contracts and the verifier budget).
-- **CI does not enforce gofmt** (pre-existing, since ci-debs 7.1 / `6132913`): no lint.yml job
-  dispatches `fmt`. Add a `call: fmt` dispatch or fold it into the go job.
-- Optional: 6.6 review suggestions (survivor check in the overlay fuzz, explicit boundary
-  seeds); `internal/dns` reader's `malformed` counter is a plain uint64 (atomic if ever served).
+- **Req 6.3**: the tap now rejects a UDP length larger than the packet (task 9.1, root run
+  pending); Req 6.3 is amended to name the nine remaining exceptions (`docs/c-hardening.md`
+  "Known limits").
+- **15 labels**: rule names are limited to 15 labels (task 9.2, done).
+- **gofmt in CI**: a `fmt` job in lint.yml (task 9.3, done).
+- **Fuzz leftovers**: survivor check and boundary seeds in the rules fuzzer, exact-length
+  `DecodeContracts` (task 9.4, done). Still optional: the `internal/dns` reader's `malformed`
+  counter is a plain uint64 (atomic if ever served).
 
 ## Topic (a) leftovers: CodeQL lanes, PIE (ci-debs follow-up)
 
