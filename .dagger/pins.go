@@ -99,11 +99,17 @@ const (
 	// instead of silently changing the linter.
 	aptCppcheck = "cppcheck=2.22.0-1"
 
-	// libbpf-dev rides the same exact-version rule, but its pin is decided
-	// when the cppcheck function is implemented (task 3 reads the current
-	// forky version off the archive and records it here). Compiling
-	// bpf/*.c must have one known headers version, same reviewable-pin
-	// rule as cppcheck; TODO(ci-debs task 3): fill in.
+	// libbpf-dev rides the same exact-version rule: it puts the
+	// <bpf/*.h> headers on the containers' include path for the C
+	// linter layer (and later for anything else that compiles bpf/*.c).
+	// Verified against the live forky archive from a debian:forky
+	// container (apt-cache madison, 2026-11-25): exactly 1:1.7.0-1, the
+	// same candidate the Debian tracker lists for the suite. The epoch
+	// (1:) is written out on purpose - apt pins compare full versions,
+	// and a bare 1.7.0-1 would simply not match the package version -
+	// so an archive move (libbpf 1.8.0) fails the install loudly, the
+	// same reviewable moment as cppcheck.
+	aptLibbpfDev = "libbpf-dev=1:1.7.0-1"
 
 	// The TLS root bundle for the Python-checks host container (checks.go
 	// installs it): the ubuntu:26.04 base image ships without it - the

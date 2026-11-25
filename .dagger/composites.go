@@ -46,9 +46,9 @@ func (c *Snitch) LintCore(
 }
 
 // LintAll is lint-core plus the linter layer of this feature: golangci
-// over the Go packages (2.1, linters.go). The C linter (cppcheck over
-// bpf/*.c, 2.2) joins this composite and linters.go with the layer's
-// second function; this door stays the one lint-everything command.
+// over the Go packages (2.1) and cppcheck over bpf/*.c (2.2), both from
+// linters.go. It is the one lint-everything command: every check of
+// today's workflow plus everything this feature adds to it.
 func (c *Snitch) LintAll(
 	ctx context.Context,
 	// The repository root every constituent checks against.
@@ -59,6 +59,9 @@ func (c *Snitch) LintAll(
 		return err
 	}
 	if err := c.Golangci(ctx, source); err != nil {
+		return err
+	}
+	if err := c.Cppcheck(ctx, source); err != nil {
 		return err
 	}
 	fmt.Println("check lint-all: PASS")
