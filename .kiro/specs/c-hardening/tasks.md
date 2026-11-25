@@ -223,7 +223,7 @@ change that moves their lines.
   - _Boundary: Rules file decoding and its fuzz tests_
   - _Requirements: 8.1, 8.2, 8.4, 8.5, 8.7_
 
-- [ ] 7. The bindings check in the pipeline
+- [x] 7. The bindings check in the pipeline
 - [x] 7.1 (P) Pin the check's environment
   - Pin the base image by digest, the compiler and its tools by package version, and record
     the expected compiler version string; try a dated package snapshot as the source and keep
