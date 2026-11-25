@@ -499,6 +499,132 @@ func (c *Snitch) DistroBuild(
 	return dist, nil
 }
 
+// DistroProof is requirement 5.1's executable form: one source and one
+// version built in both distro containers (via DistroBuild, whose own
+// step lines report through naming the distro they ran in), then the
+// two distro.sha256 lists compared entry for entry - agreement is
+// green with both distros' identical checksums printed per binary,
+// any difference refuses with the first differing entry and both
+// distros' hashes named, and dagger exits non-zero. The comparison is
+// a real assertion in this module (compareDistroSums below), not
+// something the caller is trusted to run afterwards: green from
+// `dagger call distro-proof --version=<tag>` IS the distro proof, R5.1
+// executed rather than expressed. The returned directory is the forky
+// build's dist/, because the design pins the deb assembly to the
+// forky dpkg-deb: the deb builder receives exactly the binaries the
+// proof covered (and engine caching makes running the proof and then
+// the assembly free of rework). Not a +check, for the same reason as
+// DistroBuild: the answer is an artifact, and the lint contract keeps
+// its seven.
+func (c *Snitch) DistroProof(
+	ctx context.Context,
+	// The repository root: what both distro containers build from.
+	// +defaultPath="/"
+	source *dagger.Directory,
+	// The release tag in its `v`-prefixed form, ReleaseBuild's
+	// contract; both distro builds run under the one tag.
+	version string,
+) (*dagger.Directory, error) {
+	// The proof pair, both members of the contract and never a
+	// parameter: the proof is over exactly this pair, and an argument
+	// could quietly compare a distro against itself.
+	dists := make(map[Distro]*dagger.Directory, 2)
+	sums := make(map[Distro]string, 2)
+	for _, distro := range []Distro{DistroUbuntu2604, DistroDebianForky} {
+		dist, err := c.DistroBuild(ctx, source, distro, version)
+		if err != nil {
+			fmt.Printf("distro-proof: %s: FAIL\n", distro)
+			return nil, fmt.Errorf("distro-proof: %s: %w", distro, err)
+		}
+		list, err := dist.File(distroSums).Contents(ctx)
+		if err != nil {
+			fmt.Printf("distro-proof: %s: sha list: FAIL\n", distro)
+			return nil, fmt.Errorf("distro-proof: %s: sha list: %w", distro, err)
+		}
+		dists[distro] = dist
+		sums[distro] = list
+	}
+	entries, err := compareDistroSums(
+		string(DistroUbuntu2604), sums[DistroUbuntu2604],
+		string(DistroDebianForky), sums[DistroDebianForky],
+	)
+	if err != nil {
+		fmt.Println("distro-proof: FAIL")
+		return nil, err
+	}
+	// The agreement itself is the evidence: every entry with both
+	// distros' (identical) hash beside it, then the claim.
+	for _, entry := range entries {
+		fmt.Printf("distro-proof: %s: %s=%s, %s=%s\n",
+			entry.name, DistroUbuntu2604, entry.hash, DistroDebianForky, entry.hash)
+	}
+	fmt.Println("distro-proof: PASS")
+	return dists[DistroDebianForky], nil
+}
+
+// distroSum is one line of a distro.sha256 list in sha256sum's
+// `<hash>  <name>` form, split so the comparison reports explicit
+// fields (a hash, a name) instead of whole opaque lines.
+type distroSum struct {
+	hash string
+	name string
+}
+
+// compareDistroSums is the distro proof's assertion (R5.1): the two
+// lists agree entry for entry, or the first divergence names itself
+// with the entry and both distros' hashes. It is a plain function of
+// its two strings on purpose: the assertion lives in the module where
+// a caller cannot skip it, and the mismatch path is exercisable
+// hand-seeded, without building anything - which is how the named
+// failure was demonstrated for the record. Agreement returns the
+// entries as the proof's evidence; the lists are written by one
+// sorted command, so entry-per-entry is byte-per-byte.
+func compareDistroSums(distroA, sumsA, distroB, sumsB string) ([]distroSum, error) {
+	a, err := parseDistroSums(distroA, sumsA)
+	if err != nil {
+		return nil, err
+	}
+	b, err := parseDistroSums(distroB, sumsB)
+	if err != nil {
+		return nil, err
+	}
+	if len(a) != len(b) {
+		return nil, fmt.Errorf("distro-proof: %s lists %d entries, %s lists %d: the checksum lists differ",
+			distroA, len(a), distroB, len(b))
+	}
+	for i, entry := range a {
+		if entry == b[i] {
+			continue
+		}
+		if entry.name == b[i].name {
+			// The case the proof exists for: the same binary, two
+			// different builds.
+			return nil, fmt.Errorf("distro-proof: %s: %s=%s, %s=%s",
+				entry.name, distroA, entry.hash, distroB, b[i].hash)
+		}
+		return nil, fmt.Errorf("distro-proof: %s lists %q, %s lists %q: the checksum lists name different binaries",
+			distroA, entry.name, distroB, b[i].name)
+	}
+	return a, nil
+}
+
+// parseDistroSums splits one distro's distro.sha256 into its entries,
+// naming the distro in the refusal so a malformed list is the distro's
+// own artifact rejecting itself, not a bare sentinel error.
+func parseDistroSums(distro, sums string) ([]distroSum, error) {
+	lines := strings.Split(strings.TrimSpace(sums), "\n")
+	entries := make([]distroSum, 0, len(lines))
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("distro-proof: %s: malformed %s line %q",
+				distro, distroSums, line)
+		}
+		entries = append(entries, distroSum{hash: fields[0], name: fields[1]})
+	}
+	return entries, nil
+}
+
 // distroImage maps the distro selector to its pins.go image. The enum's
 // members are the distros the release contract names, so this switch
 // is the whole definition of what each member means as a container;
