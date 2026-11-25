@@ -42,6 +42,37 @@
   the forky container (task 1.1), and the drift check pins libbpf-dev as well. Do not cast
   away the const to make 1.6.3 build.
 
+#### Regeneration procedure (task 1.1)
+Measured 2026-11-25 on commit `5b8073a`, rootful `docker` used without sudo (the output
+files come out owned by root; copying them works, removing the output directory needs
+`docker run --user "$(id -u):$(id -g)"`). Image
+`debian:forky` = `debian@sha256:f3671d5a279b1ae356c7318ce6cdb84c600c2063d708ee97d3cce607bebfb85a`.
+
+```sh
+T=$(mktemp -d); git archive HEAD | tar -x -C "$T/"; mkdir "$T.out"
+docker run --rm -v "$T":/src:ro -v "$T.out":/out \
+  -e GOTOOLCHAIN=auto -e GOFLAGS=-buildvcs=false -e HOME=/tmp debian:forky bash -ec '
+  apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+    clang llvm libbpf-dev golang-go ca-certificates
+  clang --version | head -1
+  cp -a /src /tmp/w && cd /tmp/w && go generate ./internal/bpf/ && cp internal/bpf/* /out/'
+for f in internal/bpf/*; do cmp "$f" "$T.out/${f##*/}"; done   # silent = identical
+```
+
+- Installed in the container: `clang` 1:21.1.8-74 → `clang-21` 1:21.1.8-13
+  (`Debian clang version 21.1.8 (13)`), `llvm` 1:21.1.8-74 → `llvm-21` 1:21.1.8-13 (provides
+  `llvm-strip`, which bpf2go calls), `libbpf-dev` 1:1.7.0-1, `golang-go` 2:1.27~1
+  (`go1.27.4`, satisfies `go 1.26.8` in go.mod, no toolchain download), `libc6-dev` 2.43-7,
+  `linux-libc-dev` 7.3.5-1.
+- Result: two runs, all five files of `internal/bpf/` `cmp`-identical to the committed ones:
+  `dns_x86_bpfel.o` `b17adce3fde4a1c60d20d07bd570c8fb2ed1d438a5796086f53cf1296c31f08d`,
+  `snitch_x86_bpfel.o` `1b29a1521c55b65ec1911ec12ad8200275c25baec7e36213a4faa6fcc3ace22d`,
+  `dns_x86_bpfel.go` `11aa0600…`, `snitch_x86_bpfel.go` `2a951de6…`, `gen.go` unchanged.
+- For a maintainer regenerating after a C change: the same commands on the working tree
+  (`tar -c . | tar -x -C "$T/"` instead of `git archive`), then copy `"$T.out"/*` over
+  `internal/bpf/`. The host toolchain (Ubuntu libbpf 1.6.3) is not a substitute, see above.
+
 ### What does the stricter warning set report today?
 - **Context**: Requirement 1; size of the fix work and whether `-Wconversion` is affordable.
 - **Sources Consulted**: same probe; `clang -O2 -g -Wall <set> -target bpf -c … -o /dev/null`

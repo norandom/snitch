@@ -8,7 +8,7 @@ task changes them; line-bound analyzer suppressions are re-anchored in the same
 change that moves their lines.
 
 - [ ] 1. Foundation: a reproducible starting point
-- [ ] 1.1 Establish the regeneration environment and prove it reproduces the committed bindings
+- [x] 1.1 Establish the regeneration environment and prove it reproduces the committed bindings
   - Provide an environment with the compiler version the design names, the strip tool and the
     kernel helper headers, either on the host or as the container procedure measured in
     research.md
@@ -275,3 +275,14 @@ change that moves their lines.
   - Done when every check passes, the status shows all contract counters at zero after the
     monitor run, and no step entered enforce mode
   - _Requirements: 2.3, 7.4, 9.1, 9.2, 9.3_
+
+## Implementation Notes
+
+- Regeneration happens only in the `debian:forky` container (research.md, "Regeneration
+  procedure (task 1.1)"): the workstation's libbpf 1.6.3 fails `snitch.bpf.c:270`; forky's
+  clang-21 1:21.1.8-13 + libbpf-dev 1:1.7.0-1 reproduce the committed bindings byte for byte.
+  The container needs network for the Go module download.
+- Root checks are batched (user decision 2026-11-25): the user runs the scratch script
+  `root-checks.sh` with sudo and pastes the output. This workstation has no active BPF LSM, so
+  the monitor run and api-check run on the dev VM; the DNS root tests can run here. Tasks whose
+  done state needs root stay `[ ]` until the pasted output proves them.
