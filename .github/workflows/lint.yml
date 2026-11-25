@@ -1,5 +1,11 @@
 name: lint
 
+# ci-debs (Req 1.1, 2.4): every job below is a thin dispatch into the Dagger module
+# at the repo root - the workflow carries no pipeline logic of its own beyond the
+# dispatch, and a green CI run means the same checks a green local `dagger call
+# <function>` run means. The toolchains live in the module's pinned containers, so
+# the setup-go/setup-uv steps are gone: the runner only checks out and dispatches.
+
 on:
   push:
     branches: [main]
@@ -15,39 +21,64 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10.2.0
-      - name: ruff (settings in pyproject.toml)
-        run: uvx ruff@0.16.10 check --output-format github snitch
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: ruff
 
   go:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: dagger/dagger-for-github@v8.4.1
         with:
-          go-version-file: go.mod
-      - name: build + vet + test (the BPF object and its Go bindings are committed; no clang needed)
-        run: |
-          gofmt -l . | tee /dev/stderr | wc -l | grep -qx 0
-          go build ./...
-          go vet ./...
-          go vet -tags root ./...
-          go vet -tags live ./...
-          go test ./...
-      - name: caps (functions <= 40 lines, cyclomatic <= 10, files <= 300 lines)
-        run: scripts/caps.sh
+          version: "0.21.12"
+          verb: call
+          call: go
 
   shellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: shellcheck
-        run: shellcheck snitch-trial scripts/*.sh
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: shellcheck
 
   actionlint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10.2.0
-      - name: actionlint
-        run: uvx --from actionlint-py actionlint -color
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: actionlint
+
+  linters:
+    # The ci-debs linter layer (Req 2.1, 2.2): golangci-lint over the Go packages and
+    # cppcheck over the BPF C sources, each as its own dispatch so the runner's log
+    # names the function that failed. Two calls in one job boot the engine container
+    # once - the second call reuses it and its warm caches - so the pair costs one
+    # engine plus two sessions, not two engines.
+    # The v*-tag skip (ci-debs Req 6.2): the release workflow calls this file over
+    # the pinned six-asset gate and the new phase must not join that gate. github.ref
+    # inside a called workflow is the caller's ref (GitHub's workflow_call docs: the
+    # event payload is the caller's), so the condition holds on the release's tag
+    # push exactly as it does on lint's own runs.
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: golangci
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: cppcheck
