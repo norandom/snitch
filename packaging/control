@@ -1,0 +1,19 @@
+Package: snitch
+Version: (injected by the deb assembly)
+Installed-Size: (injected by the deb assembly)
+Architecture: amd64
+Maintainer: marius <wishynet@gmail.com>
+Homepage: https://github.com/norandom/snitch
+Section: net
+Priority: optional
+Description: egress control for Linux, decided at connect() in the kernel
+ snitchd gates outgoing connections in the kernel (BPF LSM), keyed by the
+ program's executable and the destination. Rules from /etc/snitch/rules.toml
+ name who may talk to where; monitor mode reports, a bounded trial can enforce
+ deny-by-default with a boot revert. The snitch tray binary shows connections
+ and asks about the ones nobody has decided on yet. This package ships the
+ daemon, the tray, their systemd units, the autostart desktop entry and a
+ documented sample configuration as a declarable conffile. The binaries are
+ static (CGO_ENABLED=0), so the package declares no Depends: installation
+ needs nothing but the archive, and the units and the desktop entry stay
+ unpacked, never enabled.

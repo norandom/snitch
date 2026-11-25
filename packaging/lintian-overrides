@@ -1,0 +1,22 @@
+# This file ships as /usr/share/lintian/overrides/snitch (0644). It is the
+# package's review record for the two deviations it takes on purpose; lintian
+# reads one tag name per line, and the comment above each line states the
+# justification the review accepts it under (ci-debs design: "justified
+# deviations only").
+
+# statically-linked-binary: both installed binaries (snitchd at
+# /usr/local/sbin, snitch at /usr/bin) are built with CGO_ENABLED=0 and -trimpath,
+# static by design. The package declares no Depends on any scripting runtime,
+# C library or desktop environment (requirement 4.5) precisely because nothing
+# in it links against one; a shared build would contradict the package's own
+# metadata. A stripped static Go binary is the shipped product.
+statically-linked-binary
+
+# dir-or-file-in-usr-local: the daemon sits at /usr/local/sbin/snitchd because
+# both shipped units name that exact path in ExecStart, and that path is the
+# frozen contract with the deployments that already run snitchd: the VM repo's
+# pyinfra flow installs its copies of the same units and pinned binaries at the
+# same place (requirement 4.2: "reachable at the path its shipped units name in
+# ExecStart"). Moving to /usr/sbin would break every existing host at upgrade;
+# /usr/local/sbin is where this product lives.
+dir-or-file-in-usr-local
