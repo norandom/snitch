@@ -316,4 +316,12 @@ change that moves their lines.
   return 1, nothing counted/learned/mirrored either way); `truncation-ipv4-ihl-beyond-frame` is
   the network-header case that always reaches the tap. A question cannot be matched across two
   test runs (fresh socket cookie, unverified), so a `skipQ=false` entry can assert NoQuestion only.
+- DEVIATION from Req 6.3 (6.2, open for the user): seven corpus entries expect the tap to learn
+  from a packet that is malformed in one field - five length entries (UDP length 20 / 65535,
+  IPv4 total length 20 / 65535, IPv6 payload length 65535: parse_l34 never compares these with
+  the frame; the kernel's ip_rcv_core / ip6_rcv_core / __udp*_lib_rcv drop or trim such skbs
+  before cgroup ingress, so only BPF_PROG_TEST_RUN can deliver them) and two ancount-surplus
+  entries (a real record from a registered resolver is learned, then the walk stops; inserts
+  made during the walk cannot be undone). Fail-safe rule 1 holds. Optional hardening: bound
+  reads by `uh.len <= skb->len - off` in parse_l34 (turns the UDP-length entry into a reject).
 

@@ -7,7 +7,6 @@ package dns
 
 import (
 	"errors"
-	"net/netip"
 	"testing"
 
 	"github.com/cilium/ebpf"
@@ -28,6 +27,12 @@ type corpusCase struct {
 	// mayRefuse: the kernel's test-run entry may refuse the frame with EINVAL before the tap
 	// runs (an L3 header shorter than a full IPv4/IPv6 header); either outcome is accepted
 	mayRefuse bool
+	// asked: a real client socket in a test cgroup first asks this name (id 0) of a fake
+	// resolver on 127.0.0.1:53, which answers with the frame's DNS payload; empty: the frame
+	// runs through the kernel's test run, whose socket cookie no question can carry
+	asked string
+	// questions: entries left in the questions map afterwards (only an asked entry adds one)
+	questions int
 }
 
 // Offsets into the frames answerFrame builds: the Ethernet header, then IPv4 (no options) or
@@ -63,21 +68,32 @@ func TestCorpusFramesBuild(t *testing.T) {
 }
 
 func corpusCases() []corpusCase {
-	return append(truncationHeaderCases(), truncationDNSCases()...)
+	groups := [][]corpusCase{truncationHeaderCases(), truncationDNSCases(), lengthCases(), countCases(), questionCases()}
+	var out []corpusCase
+	for _, g := range groups {
+		out = append(out, g...)
+	}
+	return out
 }
 
 // checkCorpusCase asserts pass (runDNSProg: return 1, 6.2), the counters (6.4), zero
-// contract counters (6.4), the exact trie (6.3, 6.5) and the record or its absence (6.3).
+// contract counters (6.4), the exact trie (6.3, 6.5), the record or its absence (6.3) and the
+// questions left recorded.
 func checkCorpusCase(t *testing.T, tc corpusCase) {
 	t.Helper()
 	c, trie := loadDNSForTest(t, tc.skipQ)
 	r := progReader(t, c)
 	putResolver(t, c, "10.0.0.1")
 	putResolver(t, c, "2001:db8::1")
+	putResolver(t, c, "127.0.0.1") // the fake resolver of an asked entry
 	if len(tc.slots) > 0 {
 		putDomain(t, c, "github.com", tc.slots)
 	}
-	runCorpusFrame(t, c, tc)
+	if tc.asked != "" {
+		runCorpusExchange(t, c, tc)
+	} else {
+		runCorpusFrame(t, c, tc)
+	}
 	equalProg(t, progStats(t, c), tc.stats)
 	equalProg(t, progContracts(t, c), Contracts{})
 	want := tc.entries
@@ -86,6 +102,7 @@ func checkCorpusCase(t *testing.T, tc corpusCase) {
 	}
 	equalProg(t, progTrie(t, trie), want)
 	checkProgRecord(t, r, tc.record)
+	equalProg(t, len(progQuestions(t, c)), tc.questions)
 }
 
 // runCorpusFrame runs the entry's frame through dns_answer and asserts return 1 (6.2). A
@@ -113,12 +130,12 @@ func runCorpusFrame(t *testing.T, c *ebpf.Collection, tc corpusCase) {
 // for api.github.com and one A (AAAA) record, uncompressed, from a registered resolver.
 func v4Answer(t *testing.T) []byte {
 	t.Helper()
-	return answerFrame(t, frameOptions{name: "api.github.com", addr: netip.MustParseAddr("93.184.216.34")})
+	return answerFrame(t, frameOptions{name: "api.github.com", addr: corpusAddr4})
 }
 
 func v6Answer(t *testing.T) []byte {
 	t.Helper()
-	return answerFrame(t, frameOptions{name: "api.github.com", ipv6: true, addr: netip.MustParseAddr("2001:db8::42")})
+	return answerFrame(t, frameOptions{name: "api.github.com", ipv6: true, addr: corpusAddr6})
 }
 
 // cutAt keeps the first n bytes of the base frame.

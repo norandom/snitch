@@ -65,7 +65,12 @@ func appendAnswers(t *testing.T, b *dnsmessage.Builder, o frameOptions, owner dn
 
 func answerFrame(t *testing.T, o frameOptions) []byte {
 	t.Helper()
-	payload := dnsPayload(t, o)
+	return wrapFrame(o, dnsPayload(t, o))
+}
+
+// wrapFrame puts a DNS payload into Ethernet, IP and UDP headers with matching lengths; o
+// chooses the family, the source, the source port and the direction (query or answer).
+func wrapFrame(o frameOptions, payload []byte) []byte {
 	source := o.source
 	if source == "" {
 		source = "10.0.0.1"
