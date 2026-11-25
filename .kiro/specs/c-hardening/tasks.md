@@ -93,7 +93,7 @@ change that moves their lines.
     fails naming its contract, the changed trie member fails the build of both programs, the
     analyzer reports zero unsuppressed findings, and the root tests pass
   - _Requirements: 1.6, 2.3, 3.2, 3.4, 3.6_
-- [ ] 3.6 Test that the daemon's view of each shared structure equals the kernel programs' view
+- [x] 3.6 Test that the daemon's view of each shared structure equals the kernel programs' view
   - Read each shared structure's size from the type information embedded in the bindings and
     compare it with the generated Go type and with the hand-written trie mirrors; no root
   - Done when the test passes on the regenerated bindings and a deliberately wrong expected
@@ -297,4 +297,9 @@ change that moves their lines.
 - Finding from 3.4 for the corpus (6.3): the answer walk's owner-name steps have no per-name
   label cap, so a long owner name can use up `STEPS_MAX` early and later records are not walked.
   Fail-safe (fewer allow entries, never a wrong one); add a corpus entry that pins this outcome.
+- `internal/bpf/abi_test.go` is an external `bpf_test` package (internal/rules and internal/dns
+  import internal/bpf). For 5.4: its `sizeMismatch` message always says "bytes" (wrong for entry
+  counts and array lengths) - give it a unit; `dns.addrsMax` is unexported and not covered there
+  (TestMirrorKernelConstants in internal/dns covers it); `dns.StatsCount` vs `dns_stats` must move
+  with task 4.3's counter tail.
 
