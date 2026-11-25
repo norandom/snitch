@@ -2,7 +2,7 @@
 
 ## Organization Philosophy
 
-A standard Go module layout around one BPF program. The kernel side lives in `bpf/`, its
+A standard Go module layout around two BPF programs. The kernel side lives in `bpf/`, its
 generated Go bindings in `internal/bpf/`, each binary under `cmd/`. Shared daemon logic goes
 into `internal/<domain>/` packages as it appears (rules, api, dns, enrich); nothing under
 `internal/` is importable from outside the module. The legacy Python client and its systemd
@@ -12,14 +12,20 @@ units stay at the top level until the Go TUI replaces them.
 
 ### BPF program
 **Location**: `bpf/`
-**Purpose**: the C program (`snitch.bpf.c`) and `vmlinux.h` (CO-RE types from the running
-kernel's BTF). One program, one `decide()`, both LSM hooks call it.
-**Example**: adding a new map or struct → edit here, then `go generate ./internal/bpf/`.
+**Purpose**: two programs — `snitch.bpf.c` (the egress decision: one `decide()`, both LSM
+hooks call it) and `dns.bpf.c` (the DNS tap) — two authored headers — `contract.h`
+(build-time and runtime contracts) and `rules_abi.h` (the one definition of the `rules` trie
+key and value, shared by both programs) — and `vmlinux.h` (CO-RE types from the running
+kernel's BTF, included as a system header). `cppcheck-suppressions.txt` holds the analyzer's
+reasoned suppressions.
+**Example**: adding a new map or struct → edit here with its size/offset contracts, then
+`scripts/bindings-regen.sh --docker --write`.
 
 ### Generated bindings
 **Location**: `internal/bpf/`
-**Purpose**: bpf2go output (`snitch_x86_bpfel.go`, `.o`) and `gen.go` with the generate
-directive. Committed so CI and users build without clang. Never edited by hand.
+**Purpose**: bpf2go output (`snitch_x86_bpfel.go`, `dns_x86_bpfel.go`, their `.o`) and
+`gen.go` with the generate directives. Committed so CI and users build without clang; the
+bindings check regenerates in the pinned image and compares. Never edited by hand.
 
 ### Binaries
 **Location**: `cmd/snitchd/` (root daemon), `cmd/snitch/` (user binary: `snitch tray` today,

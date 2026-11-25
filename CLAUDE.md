@@ -104,13 +104,26 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
 
 - `bpf/snitch.bpf.c` the program; `bpf/dns.bpf.c` the DNS tap (its own bpf2go object `Dns`,
   `-mcpu=v3`, shares the `rules` trie by map replacement; root tests: `sudo scripts/dns-progtest.sh`);
-  `bpf/vmlinux.h` CO-RE types (regenerate on a new kernel:
+  `bpf/contract.h` the contracts (`CONTRACT_SIZE` / `_OFFSET` / `_CONST` at build time;
+  `CONTRACT(cond, counter)` at run time counts, the call site allows or passes, never denies);
+  `bpf/rules_abi.h` the one definition of the `rules` trie key and value, both programs
+  include it; `bpf/vmlinux.h` CO-RE types, included via `-isystem` (regenerate on a new kernel:
   `sudo bpftool btf dump file /sys/kernel/btf/vmlinux format c > bpf/vmlinux.h`)
 - `internal/bpf/` bpf2go output, committed (`go build` needs no clang). Regenerate after editing
-  the C: `go generate ./internal/bpf/` (needs clang, llvm, libbpf-dev; cflags in `gen.go`).
-  New C structs the Go side needs: add `-type <name>` in gen.go and a
-  `const struct x *unused __attribute__((unused));` so the type lands in BTF. A struct must not
-  share its name with a map (bpf2go: "found multiple types").
+  the C, the headers or the cflags in `gen.go` (extended warnings, `-Werror`):
+  `scripts/bindings-regen.sh --docker --write` (pinned debian image, clang 21.1.8, libbpf 1.7;
+  host `go generate ./internal/bpf/` needs the same — Ubuntu's libbpf 1.6.3 fails). New C
+  structs the Go side needs: add `-type <name>` in gen.go, a
+  `const struct x *unused __attribute__((unused));` so the type lands in BTF, and size/offset
+  contracts. A struct must not share its name with a map (bpf2go: "found multiple types").
+- The compiler only observes in the pipeline: `dagger call bindings` regenerates in the pinned
+  image and compares byte for byte (lint.yml `linters` job, skipped on tags); artifacts never
+  come from it, releases ship the committed bindings. Pin: top of `scripts/bindings-regen.sh`,
+  equal to `imageBindings` in `.dagger/pins.go`. Fuzz (no root): `scripts/fuzz.sh -t 60s
+  [substring]`, or `dagger call fuzz --duration 30s` (never a gate). Before a release:
+  `dagger call rugged --fuzz-duration 30s`, then `sudo scripts/root-checks.sh --at <rev>` on
+  the dev VM (DNS root tests with the hostile-input corpus, bounded monitor run, api-check;
+  never enforce). See `docs/c-hardening.md`.
 - `cmd/snitchd/` the daemon. Build + try: `go build -o /tmp/snitchd ./cmd/snitchd &&
   sudo /tmp/snitchd -mode monitor -duration 10s`.
 - `cmd/snitch/` the user binary: `snitch tray [-api PATH] [-ask all|enforce]
@@ -175,6 +188,11 @@ answer is one `rule.add` into the overlay — nothing changes a mode from the tr
 through `desktop/snitch-tray.desktop`, the godbus dependency above, released as
 `snitch-linux-amd64` with its sha256. Open there: the host check on chandali and the final
 caps/CI task.
+Spec `c-hardening` (2026-11-25, see `.kiro/specs/c-hardening/` and `docs/c-hardening.md`;
+implemented, root gates pending): extended clang warnings with `-Werror`, the four deferred
+cppcheck findings fixed, layout and limit contracts, counted fail-open runtime contracts in
+both programs served as `counters` in the API status, exact-size record decoders, six fuzz
+targets, a 58-frame hostile DNS corpus, and the pinned bindings check in CI.
 Not done yet, in order:
 
 1. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.

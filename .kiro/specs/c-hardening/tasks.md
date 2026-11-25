@@ -274,7 +274,7 @@ change that moves their lines.
   - Done when each of these statements can be found in the documents and no document still
     describes the four findings as open
   - _Requirements: 2.5, 5.6, 7.5, 8.6, 9.5_
-- [ ] 8.2 Amend the steering records and close the handover points
+- [x] 8.2 Amend the steering records and close the handover points
   - Replace "the pipeline never runs a C compiler" with the observer rule; add the new
     headers, the check and the fuzz commands to the project instructions; remove from the
     handover the points this feature closes

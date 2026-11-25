@@ -62,8 +62,24 @@ must not add a path that can deny local traffic or deny when the daemon is gone.
 ### Type and ABI discipline
 C structs shared with Go are exported through BTF (`-type` flags in `internal/bpf/gen.go` plus
 a `const struct x *unused __attribute__((unused));`). A struct must not share its name with a
-map. Changing a struct means regenerating with `go generate ./internal/bpf/` and committing
-the output; CI never runs clang.
+map. Every struct shared with Go carries size and offset contracts (`bpf/contract.h`); the
+`rules` trie key and value have one definition, `bpf/rules_abi.h`, included by both programs.
+Changing a struct means regenerating with `scripts/bindings-regen.sh --docker --write` and
+committing the output with the C.
+
+### The compiler as observer
+The pipeline may run a C compiler only as an observer: the bindings check (`dagger call
+bindings`, in lint.yml's `linters` job, skipped on tags) regenerates on a copy inside the
+pinned image and compares byte for byte, writing nothing back. Artifacts never come from a
+pipeline compiler; releases ship the committed bindings. The toolchain pin lives at the top of
+`scripts/bindings-regen.sh` (`IMAGE`, `PACKAGES`, `CLANG_EXPECTED`, `SNAPSHOT`), and `IMAGE`
+must equal `imageBindings` in `.dagger/pins.go`. Details: `docs/c-hardening.md`.
+
+### Kernel-side contracts
+Build-time contracts (`CONTRACT_SIZE` / `CONTRACT_OFFSET` / `CONTRACT_CONST`) cost no
+instructions. A runtime `CONTRACT(cond, counter)` counts a violation and the call site writes
+the fail-open branch (allow in the LSM hooks, pass in the DNS tap), never deny. The counters
+are in the API status (`counters`); a non-zero contract counter is a defect.
 
 ### Code quality
 `gofmt -l .` clean, `go vet ./...` clean; Python client checked with ruff (settings in
@@ -87,7 +103,13 @@ what the file does and its fail-safe implications.
 
 ### Testing
 - Unit tests for pure Go (rule parsing, path → inode/dev resolution, dev number conversion
-  `(major << 20) | minor`, event decoding).
+  `(major << 20) | minor`, event decoding). `internal/bpf/abi_test.go` ties the Go types to
+  the BTF sizes in the bindings.
+- Fuzz targets for every decoder of untrusted input (ring-buffer records, API request lines,
+  rules file and overlay); their seeds and kept failing inputs run in `go test ./...`.
+- The DNS tap's hostile-input corpus runs as root (`sudo scripts/dns-progtest.sh`, BTF
+  enough, no BPF LSM). The root gates are one batch: `sudo scripts/root-checks.sh --at <rev>`
+  (DNS root tests; on the dev VM also a bounded monitor run with `scripts/api-check.sh`).
 - Kernel behaviour is tested on the VM with a bounded run (`-duration`) and a shell trap that
   resets mode and kill switch. Enforce tests follow the script in `CLAUDE.md` (allow curl →
   one prefix, expect EPERM elsewhere, kill switch on/off, SIGSTOP the daemon → fail open after
@@ -97,7 +119,9 @@ what the file does and its fail-safe implications.
 
 ### Required Tools
 Go (see `go.mod`), `bpftool` (kill switch, BTF dump), root on the VM for attaching. For
-regenerating the BPF object only: clang, llvm, libbpf-dev.
+regenerating the BPF objects: docker (the pinned image brings clang 21.1.8, llvm, libbpf-dev
+1.7). A host `go generate ./internal/bpf/` needs the same versions; libbpf 1.6.3 (Ubuntu)
+fails `snitch.bpf.c`. The pipeline checks need `dagger`.
 
 ### Common Commands
 ```bash
@@ -109,8 +133,14 @@ go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -durat
 # the user binary: build to /tmp (never `go build -o snitch` in the repo root: `snitch`
 # there is the Python client, which owns that name until the TUI replaces it)
 go build -o /tmp/snitch ./cmd/snitch && /tmp/snitch -version
-# regenerate bindings after editing bpf/snitch.bpf.c
-go generate ./internal/bpf/
+# regenerate bindings after editing bpf/*.c, bpf/*.h or gen.go (pinned image), then check
+scripts/bindings-regen.sh --docker --write
+scripts/bindings-regen.sh --docker --check
+# fuzz every target for a chosen time (no root)
+scripts/fuzz.sh -t 60s
+# before a release: every pipeline check + fuzz, then the root batch on the dev VM
+dagger call rugged --fuzz-duration 30s
+sudo scripts/root-checks.sh --at <commit to tag>
 # new kernel: refresh CO-RE types
 sudo bpftool btf dump file /sys/kernel/btf/vmlinux format c > bpf/vmlinux.h
 # lint
@@ -142,3 +172,4 @@ the VM's disk is for the user's development.
 
 ---
 _Document standards and patterns, not every dependency_
+_updated 2026-11-25 (c-hardening): the compiler-as-observer rule replaces "CI never runs clang"_
