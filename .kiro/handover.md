@@ -61,6 +61,12 @@ maintainer line was corrected earlier (`9c3f5e0`).
 
 ## Release-day runbook
 
+Release note for the next tag (c-hardening 9.2): rule names now have at most 15 labels. A
+16-label name in `/etc/snitch/rules.toml` makes snitchd refuse to start (fail-open: nothing
+attached); in the overlay `local.toml` it makes the whole overlay skipped at startup. Before
+upgrading, run `snitchd check -rules /etc/snitch/rules.toml` and check `local.toml`. (The VM's
+deployed rules have their domain rules commented out; no current exposure.)
+
 Before tagging: `dagger call rugged --fuzz-duration 30s`, then
 `sudo scripts/root-checks.sh --at <commit to tag>` on the dev VM. Push a `vX.Y.Z` tag →
 `release.yml`: `checks` (lint.yml via workflow_call; linters, incl. the bindings check,

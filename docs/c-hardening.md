@@ -314,7 +314,9 @@ packet adds nothing". These are open and recorded here so they are not mistaken 
   cannot be undone. Three `compression-owner-*` entries learn their A record because the walk
   ends an owner name at a pointer without following it and never uses the owner name. In every
   case the learned bytes are a complete A record from a resolver the operator registered, and
-  the tap can only ever add allow entries (fail-safe rule 1).
+  the tap can only ever add allow entries (fail-safe rule 1). The UDP-length bound in `parse_l34` holds on egress too
+  (the question path): the stack writes the UDP length itself, so only a raw socket can lie,
+  and such a question is now not recorded.
 - **15 labels.** `read_qname` reads at most 15 labels: its `LABELS_MAX` (16) turns need one for
   the closing zero. Rule names are limited to the same 15 (`rules.NameLabelsMax`, pinned to the
   tap by `TestRuleNameLabelsFitTheTap`); a rules file with a longer name is refused at load.
