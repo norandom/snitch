@@ -1,0 +1,65 @@
+// The aggregates over the check functions: lint-core is exactly the set
+// of checks .github/workflows/lint.yml demands of a change today, and
+// lint-all is that set plus the linter layer this feature adds. Both are
+// aggregation only: no thresholds and no logic of their own - each
+// constituent runs through its own banner and exit contract, so a
+// failure names the constituent that failed and success names every
+// check that ran. Neither composite carries `+check`, because
+// `dagger check` already runs the annotated checks directly and a
+// composite re-running them there would do every check's work twice.
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"dagger/snitch/internal/dagger"
+)
+
+// LintCore runs the five existing checks in workflow order: fmt, the go
+// sequence (build, vet x3, test, caps), shellcheck, ruff, actionlint. It
+// is the dispatch economy door - one command, from the repo root, that
+// answers "is this tree green the way the lint workflow would say so".
+func (c *Snitch) LintCore(
+	ctx context.Context,
+	// The repository root every constituent checks against.
+	// +defaultPath="/"
+	source *dagger.Directory,
+) error {
+	if err := c.Fmt(ctx, source); err != nil {
+		return err
+	}
+	if err := c.Go(ctx, source); err != nil {
+		return err
+	}
+	if err := c.Shellcheck(ctx, source); err != nil {
+		return err
+	}
+	if err := c.Ruff(ctx, source); err != nil {
+		return err
+	}
+	if err := c.Actionlint(ctx, source); err != nil {
+		return err
+	}
+	fmt.Println("check lint-core: PASS")
+	return nil
+}
+
+// LintAll is lint-core plus the linter layer of this feature: golangci
+// over the Go packages and cppcheck over bpf/*.c (linters.go). Those
+// linter functions land with task 3 of the ci-debs spec, and this door
+// is where they join - until they exist, lint-all runs exactly the
+// checks that exist, the five of lint-core, and the task-3 work will add
+// its calls here rather than grow a third door.
+func (c *Snitch) LintAll(
+	ctx context.Context,
+	// The repository root every constituent checks against.
+	// +defaultPath="/"
+	source *dagger.Directory,
+) error {
+	if err := c.LintCore(ctx, source); err != nil {
+		return err
+	}
+	fmt.Println("check lint-all: PASS")
+	return nil
+}

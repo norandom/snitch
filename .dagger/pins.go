@@ -105,6 +105,16 @@ const (
 	// bpf/*.c must have one known headers version, same reviewable-pin
 	// rule as cppcheck; TODO(ci-debs task 3): fill in.
 
+	// The TLS root bundle for the Python-checks host container (checks.go
+	// installs it): the ubuntu:26.04 base image ships without it - the
+	// plain base leaves the ca-certificates package unpacked, verified on
+	// this runtime - while the workflow's runner image carries one, and
+	// actionlint-py's source build fetches the actionlint release over
+	// exactly that trust store. Named, unpinned, for the same reason as
+	// the smoke layer below: the distro's bundle IS the trust anchor, not
+	// a versioned tool.
+	aptCaCertificates = "ca-certificates"
+
 	// The smoke and lintian layer installs these by name, unpinned by
 	// version on purpose (the design pins cppcheck/libbpf only): the package
 	// IS the distro's implementation, so a distro's own choice is the input
