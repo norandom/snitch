@@ -189,15 +189,21 @@ func parsePorts(v any) ([]uint16, error) {
 }
 
 func portRange(lo, hi int64) ([]uint16, error) {
-	if lo < 1 || hi > 65535 || lo > hi {
+	// Both ends are bounded on their own (not only through lo <= hi), so the narrowing below is
+	// visibly safe to a reader and to CodeQL's go/incorrect-integer-conversion.
+	if lo < 1 || lo > 65535 || hi < 1 || hi > 65535 || lo > hi {
 		return nil, fmt.Errorf("port %d-%d: want 1-65535, low before high", lo, hi)
 	}
 	if hi-lo+1 > maxPortsPerRule {
 		return nil, fmt.Errorf("port %d-%d: a rule covers at most %d ports", lo, hi, maxPortsPerRule)
 	}
-	ports := make([]uint16, 0, hi-lo+1)
-	for p := lo; p <= hi; p++ {
-		ports = append(ports, uint16(p))
+	first, last := uint16(lo), uint16(hi)
+	ports := make([]uint16, 0, int(last-first)+1)
+	for p := first; ; p++ {
+		ports = append(ports, p)
+		if p == last { // stop before p++ could wrap at 65535
+			break
+		}
 	}
 	return ports, nil
 }
