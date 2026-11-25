@@ -140,6 +140,21 @@ const (
 	aptGit  = "git"
 	aptCurl = "curl"
 
+	// The docker CLI the smoke driver talks to the host daemon with: the
+	// one artifact that is NOT the distro under test, so it is pinned to an
+	// exact release instead of taken from apt (the distros' own docker.io
+	// packages differ from each other and pull a daemon nothing here runs).
+	// The static 29.10.1 build - the same release family as the docker-ce
+	// runtime this feature was probed on and the same API every supported
+	// host daemon speaks (dockerd stays backward compatible with older
+	// clients) - keeps one CLI byte-identical across both distro drivers.
+	// sha256 verified against the download (2026-11-25). The CLI is a
+	// transport only: it creates, feeds and removes the sibling smoke
+	// containers; no build step ever runs through it (R5.3's containers
+	// are the distro's own, booted with the researched recipe).
+	dockerCLIURL    = "https://download.docker.com/linux/static/stable/x86_64/docker-29.10.1.tgz"
+	dockerCLISHA256 = "061642059fa7f2ed9b2f04a327a951cff4249585cf04b2661c2a6539197c9962"
+
 	// The smoke and lintian layer installs these by name, unpinned by
 	// version on purpose (the design pins cppcheck/libbpf only): the package
 	// IS the distro's implementation, so a distro's own choice is the input
