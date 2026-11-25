@@ -162,6 +162,46 @@ struct {
 	__type(value, struct byte_count);
 } bytes SEC(".maps");
 
+// The egress program's own counters: SS_* count what happens on the decision path, SC_* count
+// violated runtime contracts. Index order is ABI: the daemon names the slots by position, so a
+// new counter goes before SS_MAX and an existing one never moves.
+enum snitch_stat {          /* index order is ABI */
+	SS_DECISIONS = 0,       /* decide() reached the verdict chain */
+	SS_ADDR_UNREADABLE,     /* destination could not be read: allowed, no event */
+	SS_NO_EXE,              /* no executable file: program 0 */
+	SS_EVENT_LOST,          /* ring buffer full: verdict stands, event missing */
+	SC_KILL_SLOT,           /* contract: kill slot readable */
+	SC_CONTROL_SLOT,        /* contract: control slot readable */
+	SC_RULE_VERDICT,        /* contract: a found rule's verdict is 1 or 2 */
+	SC_MODE,                /* contract: mode is 0 or 1 */
+	SS_MAX
+};
+
+// The map below has SS_MAX entries and the daemon's name table one name per index: a counter
+// added or removed changes this number, the Go table and the bindings together.
+CONTRACT_CONST(SS_MAX == 8, "snitch_stats entries == SS_MAX == the daemon's 8 counter names");
+
+// Not pinned: counters mean nothing without the daemon that reads them. Per-CPU: the decision
+// path runs on every connect(), and one slot per CPU shares no cache line between CPUs.
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, SS_MAX);
+	__type(key, __u32);
+	__type(value, __u64);
+} snitch_stats SEC(".maps");
+
+// Count one occurrence. The slot is this CPU's own and the program cannot migrate while it runs,
+// so no other CPU writes it and no cache line is shared. The add is still atomic: the hook can
+// be preempted on this CPU between a load and a store, and the status reports these as exact
+// totals since load (the tap's bump does the same). Counting never decides: a missing slot is
+// a lost count, nothing else.
+static __always_inline void bump(__u32 stat)
+{
+	__u64 *n = bpf_map_lookup_elem(&snitch_stats, &stat);
+	if (n)
+		__sync_fetch_and_add(n, 1);
+}
+
 static __always_inline int local_v4(__u32 be)
 {
 	__u32 a = bpf_ntohl(be);
@@ -205,8 +245,10 @@ static __always_inline struct rule_val *lookup(__u32 program, __u8 family, __u8 
 static __always_inline int decide(struct socket *sock, struct sockaddr *address, __u8 hook)
 {
 	struct sockaddr_in6 sa = {};
-	if (bpf_probe_read_kernel(&sa, sizeof(sa), address))
+	if (bpf_probe_read_kernel(&sa, sizeof(sa), address)) {
+		bump(SS_ADDR_UNREADABLE);
 		return 0;
+	}
 	__u8 addr[16] = {};
 	__u16 dport;
 	__u8 family;
@@ -247,6 +289,8 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	if (exe) {
 		ek.ino = BPF_CORE_READ(exe, f_inode, i_ino);
 		ek.dev = BPF_CORE_READ(exe, f_inode, i_sb, s_dev);
+	} else {
+		bump(SS_NO_EXE);
 	}
 	__u32 *pid_p = bpf_map_lookup_elem(&programs, &ek);
 	__u32 program = pid_p ? *pid_p : 0;
@@ -254,6 +298,7 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	// the truncation to the 8-bit proto of rule_key and event that the assignment always did.
 	__u8 proto = (__u8)BPF_CORE_READ(sock, sk, sk_protocol);
 
+	bump(SS_DECISIONS);
 	if (k && *k)
 		verdict = V_ALLOW_KILL;
 	else if (!c || c->heartbeat_ns == 0 || now - c->heartbeat_ns > HEARTBEAT_MAX_NS)
@@ -294,6 +339,8 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 			if (bpf_d_path(&exe->f_path, e->path, sizeof(e->path)) < 0)
 				e->path[0] = 0;
 		bpf_ringbuf_submit(e, 0);
+	} else {
+		bump(SS_EVENT_LOST);
 	}
 	if (exe)
 		bpf_put_file(exe);

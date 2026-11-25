@@ -101,7 +101,7 @@ change that moves their lines.
   - _Requirements: 3.5_
 
 - [ ] 4. Runtime contracts and counters in the kernel programs
-- [ ] 4.1 Give the egress decision program counters of its own
+- [x] 4.1 Give the egress decision program counters of its own
   - A per-CPU counter array with the fixed index order of the design; count decisions,
     unreadable destinations, missing executables and lost events where they occur today
   - State the array's size against the index list as a build-time contract
