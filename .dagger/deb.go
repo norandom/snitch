@@ -63,13 +63,16 @@ install -m 0644 /src/packaging/lintian-overrides /pkg/usr/share/lintian/override
 # the epoch's deterministic date and nothing else - no builder clock
 # anywhere. gzip -9n: -n stores no original name and no timestamp, the two
 # gzip header fields that would otherwise differ between clean rooms. The
-# maintainer line is packaging/control's Maintainer verbatim.
+# date runs under LC_ALL=C so its month and weekday spellings are the C
+# locale's, not the builder's environment - the same pin the md5sums sort
+# below carries; the changelog's bytes stay a function of the epoch alone.
+# The maintainer line is packaging/control's Maintainer verbatim.
 {
 	printf 'snitch (%s) unstable; urgency=medium\n\n' "$DEB_VERSION"
 	printf '  * Built from the release tag by the ci-debs pipeline; the binaries\n'
 	printf '    are the distro-proofed pair, byte-identical from the Ubuntu 26.04\n'
 	printf '    and Debian forky build containers.\n'
-	printf '\n -- %s  %s\n' 'marius <wishynet@gmail.com>' "$(date -u -R -d "@$SOURCE_DATE_EPOCH")"
+	printf '\n -- %s  %s\n' 'marius <wishynet@gmail.com>' "$(LC_ALL=C date -u -R -d "@$SOURCE_DATE_EPOCH")"
 } > /pkg/usr/share/doc/snitch/changelog.Debian
 gzip -9n -c /pkg/usr/share/doc/snitch/changelog.Debian > /pkg/usr/share/doc/snitch/changelog.Debian.gz
 rm /pkg/usr/share/doc/snitch/changelog.Debian
@@ -102,6 +105,36 @@ chmod 0644 DEBIAN/md5sums
 # commit; the touch is what makes the tree a function of the commit alone.
 find /pkg -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 `
+
+// The reproducibility record (7.2): the deb's sha256 is a function of these
+// properties and nothing else - each is pinned where it lives, so a rebuild
+// that holds them fixed can only rebuild the same bytes.
+//
+//   - the commit: DistroProof's guards (clean tree, tag on HEAD) refuse
+//     everything else, and the preserved VCS stamp carries the commit into
+//     both binaries; the proof's printed checksums are the binaries'
+//     identity for that commit and reach the deb as its only binaries
+//   - SOURCE_DATE_EPOCH: HEAD's committer timestamp, read from the owned
+//     .git at assembly time; it sets every tree mtime exactly (the script's
+//     touch) and dpkg-deb's archive member stamps
+//   - the version: the tag with its leading `v` stripped, charset-guarded;
+//     it names the deb, the sidecar, the control field and the changelog
+//   - the builder: debian:forky (pins.go's imageDebian), whose dpkg-deb
+//     1.23.11 the run's build line records; member ordering and ar headers
+//     are dpkg-deb's deterministic path (dpkg >= 1.18.5)
+//   - compression: -Znone - no compressor version anywhere near the
+//     archive's bytes; gzip -9n touches only the changelog's own content,
+//     with no stored name and no stored timestamp
+//   - ownership and modes: --root-owner-group, umask 022, explicit install
+//     -m everywhere - dpkg-deb normalizes neither, so both are the recipe's
+//     to pin
+//   - file lists: DEBIAN/md5sums' LC_ALL=C sorted enumeration, the
+//     Installed-Size st_size sum, and the changelog's LC_ALL=C date - all
+//     content-derived, never builder-environment-derived
+//
+// The clean-room rebuild (two invocations with cold engine state between
+// them, holding these properties fixed) is the 7.2 evidence: identical
+// sha256s or the recipe is wrong somewhere on this list.
 
 // Deb assembles `snitch_<version>_amd64.deb` (requirements 4.1-4.6, 7.2):
 // the distro-proofed forky binaries packaged together with the repository's
