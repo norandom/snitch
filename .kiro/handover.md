@@ -1,17 +1,24 @@
 # Handover — c-hardening implemented, ci-debs follow-ups open (2026-11-25)
 
-Status: spec `c-hardening` is implemented through task 8.2 (details in
-`.kiro/specs/c-hardening/` and `docs/c-hardening.md`); the root-only proof of 1.2, 2.4, 3.5,
-4.4, 5.4 and 6.1–6.3 and the final validation (8.3) are pending, so those tasks stay open.
-**58 commits ahead of `origin/main` after the 8.2 commit, nothing pushed** (ci-debs and c-hardening together). The ci-debs artifact shas recorded at
-`f48f7ee` are stale (the Maintainer correction and the regenerated bindings moved them);
-release shas settle per the tag commit.
+Status (2026-11-25, evening): everything is pushed; `main` = `origin/main`. The first live
+runs are green: lint.yml (fmt, go, shellcheck, ruff, actionlint, linters incl. the bindings
+check) and codeql.yml (go and c-cpp traced, python via the pre-scan copy, 0 open alerts). The
+repository's CodeQL *default setup* was switched off (user decision) because it blocked
+codeql.yml's uploads; its `actions` lane is no longer scanned. Still pending: the c-hardening
+root gates (below) and the deb lane's first CI run, which happens on the first `v*` tag.
 
 ## Decisions on record (2026-11-25)
 
 - **The compiler may run in CI as an observer**; artifacts never come from it. Landed as the
   bindings check and written into `.kiro/steering/tech.md` ("The compiler as observer").
 - **deb dependencies: Suggests-only for KDE, one package** (no `snitch-tray` split). Topic (b).
+
+## Dependabot (new, undecided)
+
+13 alerts, all in `.dagger/go.mod` (the CI pipeline module, never shipped): grpc (3 high, 1
+medium), x/net and otel packages. Dependabot PR #1 bumps six of them and fails every lint job,
+most likely because Dagger's generated SDK pins those versions. Options: bump the Dagger engine
+and SDK (`dagger develop` on a newer engine), or dismiss the alerts as pipeline-only.
 
 ## c-hardening: root gates not yet run
 
