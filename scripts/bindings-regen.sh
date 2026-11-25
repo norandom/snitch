@@ -15,6 +15,8 @@
 #   --docker   run inside the pinned image through docker (host use, no sudo needed)
 #   --install  apt-install the pinned packages first (inside a debian container)
 #   --emit DIR regenerate into DIR only (the inner half of --docker)
+# env BINDINGS_SNAPSHOT=<snapshot.debian.org timestamp> for --install (unset: the pinned
+#     default in this script; set but empty: the image's own live apt sources)
 # exit 0 identical / written, 1 stale or generation failed (names the files), 2 usage,
 #      3 the compiler differs from the pin, 4 the environment is unavailable
 set -eu
@@ -31,7 +33,7 @@ CLANG_EXPECTED="Debian clang version 21.1.8 (13)"
 # sources. Plain http: the base image has no CA bundle, apt checks the archive signature.
 SNAPSHOT=${BINDINGS_SNAPSHOT-20261123T000000Z}
 
-usage() { sed -n '12,19p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '12,21p' "$0" | sed 's/^# \{0,1\}//'; }
 
 mode=check docker=no install=no emit=""
 while [ $# -gt 0 ]; do

@@ -1,6 +1,7 @@
 // The aggregates over the check functions: lint-core is exactly the set
 // of checks .github/workflows/lint.yml demands of a change today, and
-// lint-all is that set plus the linter layer this feature adds. Both are
+// lint-all is that set plus the linter layer and the bindings check the
+// c-hardening feature adds. Both are
 // aggregation only: no thresholds and no logic of their own - each
 // constituent runs through its own banner and exit contract, so a
 // failure names the constituent that failed and success names every
@@ -45,10 +46,12 @@ func (c *Snitch) LintCore(
 	return nil
 }
 
-// LintAll is lint-core plus the linter layer of this feature: golangci
-// over the Go packages (2.1) and cppcheck over bpf/*.c (2.2), both from
-// linters.go. It is the one lint-everything command: every check of
-// today's workflow plus everything this feature adds to it.
+// LintAll is lint-core plus the linter layer: golangci over the Go
+// packages (2.1) and cppcheck over bpf/*.c (2.2), both from linters.go,
+// and the bindings check (bindings.go, c-hardening 7.1): the committed
+// internal/bpf/ regenerated with the pinned compiler, byte for byte. It
+// is the one lint-everything command: every check of today's workflow
+// plus everything added on top of it.
 func (c *Snitch) LintAll(
 	ctx context.Context,
 	// The repository root every constituent checks against.
@@ -62,6 +65,9 @@ func (c *Snitch) LintAll(
 		return err
 	}
 	if err := c.Cppcheck(ctx, source); err != nil {
+		return err
+	}
+	if err := c.Bindings(ctx, source); err != nil {
 		return err
 	}
 	fmt.Println("check lint-all: PASS")

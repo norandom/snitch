@@ -232,7 +232,7 @@ change that moves their lines.
   - _Boundary: Bindings check_
   - _Depends: 1.1_
   - _Requirements: 7.5, 7.8_
-- [ ] 7.2 Implement the bindings check
+- [x] 7.2 Implement the bindings check
   - (user direction 2026-11-25) The check runs `scripts/bindings-regen.sh --install --check` in
     the pinned image: the script is the one place naming the packages and the expected compiler;
     `.dagger/pins.go` names the same image digest as the script's IMAGE (keep them equal)
@@ -365,4 +365,7 @@ change that moves their lines.
   image names), replacing the image's live sources; `BINDINGS_SNAPSHOT` overrides, empty = live.
   For 7.2: build the check on `imageBindings` AND fail if the script's IMAGE differs from it
   (pins.go already claims this is enforced); add BINDINGS_SNAPSHOT to the script's usage text.
+- 7.2: `dagger call bindings` on an unchanged source digest is answered from the engine cache
+  (1.4 s); fresh runs need a changed source (CI runners are cache-cold). The expected compiler
+  line lives only in the script (no `bindingsClangVersion` Go constant, by user direction).
 
