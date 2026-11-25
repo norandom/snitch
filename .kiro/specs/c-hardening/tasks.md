@@ -56,7 +56,7 @@ change that moves their lines.
   - _Requirements: 1.6, 2.2, 2.3, 2.4, 9.1_
 
 - [ ] 3. Build-time contracts on shared layouts and limits
-- [ ] 3.1 Create the contract header
+- [x] 3.1 Create the contract header
   - Provide the three build-time contract forms (size, member position, relation of
     constants) and the runtime contract expression that counts and yields false without
     leaving the enclosing function
@@ -289,3 +289,9 @@ change that moves their lines.
 - A plain `go generate ./internal/bpf/` stops at the first failing directive; run
   `go generate -run "Snitch " ./internal/bpf/` and `-run "Dns "` separately to see each object's
   warnings. From 2.1 until 2.4, generation at HEAD fails by design (bindings stay committed).
+- Root gates are tested on detached worktrees pinned at the gate commit (scratch `gate24`, ...),
+  so the operator's run proves exactly that commit while later work continues on main.
+- `CONTRACT(cond, on_violation)` is a C11 conditional expression (no statement expression):
+  `if (!CONTRACT(p, bump(SC_X))) { fail-open branch }`; `CONTRACT_CONST`'s msg must be a string
+  literal.
+
