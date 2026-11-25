@@ -10,7 +10,7 @@
 // tree is clean and `version` is a tag on HEAD - then the stamp is the
 // same function of the same commit on both doors (guards first: a refused
 // run builds nothing). It is deliberately NOT a +check: `dagger check` is
-// the green/no-green gate and keeps exactly the seven checks of the lint
+// the green/no-green gate and keeps exactly the eight checks of the lint
 // contract; the release build is the artifact construction those gates
 // admit, so it answers with the artifact - dist/ as a directory for the
 // caller's --output export - not with a verdict.
@@ -515,7 +515,7 @@ func (c *Snitch) DistroBuild(
 // proof covered (and engine caching makes running the proof and then
 // the assembly free of rework). Not a +check, for the same reason as
 // DistroBuild: the answer is an artifact, and the lint contract keeps
-// its seven.
+// its eight.
 func (c *Snitch) DistroProof(
 	ctx context.Context,
 	// The repository root: what both distro containers build from.

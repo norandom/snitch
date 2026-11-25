@@ -1,5 +1,6 @@
 // The aggregates over the check functions: lint-core is exactly the set
-// of checks .github/workflows/lint.yml demands of a change today, and
+// of base checks .github/workflows/lint.yml demands of every ref (the
+// release tag's gate), and
 // lint-all is that set plus the linter layer and the bindings check the
 // c-hardening feature adds. Both are
 // aggregation only: no thresholds and no logic of their own - each

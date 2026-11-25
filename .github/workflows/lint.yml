@@ -59,10 +59,15 @@ jobs:
 
   linters:
     # The ci-debs linter layer (Req 2.1, 2.2): golangci-lint over the Go packages and
-    # cppcheck over the BPF C sources, each as its own dispatch so the runner's log
-    # names the function that failed. Two calls in one job boot the engine container
-    # once - the second call reuses it and its warm caches - so the pair costs one
-    # engine plus two sessions, not two engines.
+    # cppcheck over the BPF C sources, plus the c-hardening bindings check (Req 7.1):
+    # internal/bpf/ regenerated with the pinned clang and compared byte for byte with
+    # the committed bindings. Each is its own dispatch so the runner's log names the
+    # function that failed. Three calls in one job boot the engine container once -
+    # the later calls reuse it and its warm caches - so the three cost one engine
+    # plus three sessions, not three engines. The bindings check sits here because
+    # its compiler is an observer only (Req 7.6): it compares and exports nothing,
+    # and like the other linters it is skipped on v* tags, so the release still
+    # builds from the committed bindings with no C compiler in its gate (Req 7.7).
     # The v*-tag skip (ci-debs Req 6.2): the release workflow calls this file over
     # the pinned six-asset gate and the new phase must not join that gate. github.ref
     # inside a called workflow is the caller's ref (GitHub's workflow_call docs: the
@@ -82,3 +87,8 @@ jobs:
           version: "0.21.12"
           verb: call
           call: cppcheck
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: bindings

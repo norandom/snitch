@@ -397,7 +397,7 @@ fi
 // and tag produce; the engine caches that whole chain, so a Deb that just
 // ran (or just ran in another distro's smoke) is free. Not a +check: the
 // answer is a verdict, but a verdict that runs minutes of containers per
-// distro on every `dagger check` would make the seven-check lint contract a
+// distro on every `dagger check` would make the eight-check lint contract a
 // lie by performance - the smoke is invoked when a release asks for it.
 func (c *Snitch) Smoke(
 	ctx context.Context,
@@ -448,7 +448,7 @@ func (c *Snitch) Smoke(
 // both distros' smokes, so no invocation can ever mix binaries from two
 // commits or two tags (5.5's single-published-deb rule holds inside the
 // pipeline, not just across it). Not a +check, for the same reason as Deb
-// itself: the answer is the artifact, the seven-check lint contract keeps
+// itself: the answer is the artifact, the eight-check lint contract keeps
 // its shape, and a release asks for this gate by name when it wants it.
 func (c *Snitch) DebRelease(
 	ctx context.Context,

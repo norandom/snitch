@@ -243,7 +243,7 @@ change that moves their lines.
   - Add it to the aggregate that runs all linters
   - Done when the check passes twice in a row on the committed tree
   - _Requirements: 7.1, 7.4, 7.6, 7.8_
-- [ ] 7.3 Run the check in the workflow and prove each failure
+- [x] 7.3 Run the check in the workflow and prove each failure
   - Dispatch it from the linters job, which release tags skip; correct the comments that
     count the pipeline's checks
   - On scratch copies: a source change without regeneration, a flipped byte in an object, a
@@ -368,4 +368,10 @@ change that moves their lines.
 - 7.2: `dagger call bindings` on an unchanged source digest is answered from the engine cache
   (1.4 s); fresh runs need a changed source (CI runners are cache-cold). The expected compiler
   line lives only in the script (no `bindingsClangVersion` Go constant, by user direction).
+- FINDING (7.3 review, pre-existing, outside this feature, for the user): no job in lint.yml
+  dispatches `fmt` since ci-debs 7.1 (commit 6132913 replaced the inline `gofmt -l .` with
+  `call: go`, which does not run gofmt), so CI no longer enforces gofmt. Fix: add a `call: fmt`
+  dispatch (or fold Fmt into the go job). `dagger check` / lint-core / rugged still run it.
+- 7.3: a comment appended after the last code line of a .bpf.c does not change the objects
+  (no line info for it), so it is not a stale-detection probe; use a real code change.
 

@@ -2,7 +2,7 @@
 // facade. The answer an artifact-producing phase gives is the artifact, so
 // `deb` returns the directory holding `snitch_<version>_amd64.deb` and its
 // bare-filename sha256 sidecar (the caller's --output), never a verdict;
-// `dagger check` keeps exactly the seven checks of the lint contract, which
+// `dagger check` keeps exactly the eight checks of the lint contract, which
 // is why this is a plain function and not a +check. The binary source is
 // DistroProof's own return - the forky dist the proof just verified
 // checksum-for-checksum - so the package can only ever pack the
@@ -72,7 +72,7 @@ install -m 0644 /src/packaging/lintian-overrides /pkg/usr/share/lintian/override
 	printf '  * Built from the release tag by the ci-debs pipeline; the binaries\n'
 	printf '    are the distro-proofed pair, byte-identical from the Ubuntu 26.04\n'
 	printf '    and Debian forky build containers.\n'
-	printf '\n -- %s  %s\n' 'marius <wishynet@gmail.com>' "$(LC_ALL=C date -u -R -d "@$SOURCE_DATE_EPOCH")"
+	printf '\n -- %s  %s\n' 'Marius Ciepluch <wishinet@gmail.com>' "$(LC_ALL=C date -u -R -d "@$SOURCE_DATE_EPOCH")"
 } > /pkg/usr/share/doc/snitch/changelog.Debian
 gzip -9n -c /pkg/usr/share/doc/snitch/changelog.Debian > /pkg/usr/share/doc/snitch/changelog.Debian.gz
 rm /pkg/usr/share/doc/snitch/changelog.Debian

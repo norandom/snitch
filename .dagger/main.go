@@ -6,8 +6,8 @@
 // the repository, the workstation or the runner half-built, and it mutates no
 // host state beyond the engine's own caches. The GitHub workflows dispatch
 // into this module, so a green CI run and a green local run mean the same
-// thing (ci-debs design, requirements 1.1 and 1.2). The five checks of
-// today's lint workflow live in checks.go and their aggregates in
+// thing (ci-debs design, requirements 1.1 and 1.2). The five base checks of
+// the lint workflow live in checks.go and their aggregates in
 // composites.go; the build, deb and smoke functions arrive with the tasks
 // that own them.
 package main

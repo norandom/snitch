@@ -1,8 +1,10 @@
-// The five checks .github/workflows/lint.yml runs today, one function per
-// check, each a pinned container running the workflow's exact command
-// line (ci-debs design, requirements 1.1-1.4). Only the containing
-// environment changes - a GitHub runner becomes an image from pins.go -
-// so a green function and a green workflow mean the same result. Every
+// The five base checks of .github/workflows/lint.yml (the checks of the
+// jobs every ref runs, release tags included; the linters job adds three
+// more), one function per check, each a pinned container running the
+// workflow's exact command line (ci-debs design, requirements 1.1-1.4).
+// Only the containing environment changes - a GitHub runner becomes an
+// image from pins.go - so a green function and a green workflow mean the
+// same result. Every
 // function carries requirement 1.3's banner contract: a `check <name>:
 // PASS` line on success, an error naming the check on failure, a non-zero
 // exit whenever the container decides so. The `+check` annotations put

@@ -2,7 +2,7 @@ Package: snitch
 Version: (injected by the deb assembly)
 Installed-Size: (injected by the deb assembly)
 Architecture: amd64
-Maintainer: marius <wishynet@gmail.com>
+Maintainer: Marius Ciepluch <wishinet@gmail.com>
 Homepage: https://github.com/norandom/snitch
 Section: net
 Priority: optional
