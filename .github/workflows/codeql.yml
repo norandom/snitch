@@ -1,0 +1,87 @@
+name: codeql
+
+# ci-debs (Req 3.1-3.4): the security-oriented dataflow scan. A separate workflow by
+# design - never referenced by the release chain - so an extraction or analysis error
+# fails visibly here while a security finding only surfaces in code scanning for
+# review: findings never gate a release (Req 3.3, 3.4). No continue-on-error
+# anywhere: the analyze action's own semantics already draw the right line.
+#
+# Matrix: go is traced (its build-mode is manual - init arms the trace observer, the
+# explicit `go build ./...` below is the traced build, and setup-go runs before init
+# because the toolchain has to be on PATH for that build); the BPF C and the python
+# client run with build-mode: none (GA since October 2025), which infers compilation
+# units without ever running a compiler - CI still never runs clang for the BPF
+# code (Req 3.2, the documented none-mode macro caveat lives in docs/ci-debs.md).
+# Each language carries its own category so the three results land as three Sarif
+# uploads, one per language, all under the security-extended suite.
+#
+# Covered: the repository's Go packages (go, and the trace covers the root module
+# the runner builds), the BPF C sources (c-cpp). The extension-less python client is
+# NOT extractable - its shebang does not match the extractor's pattern - which is
+# the recorded coverage limitation of Req 3.2 (ruff keeps covering the file on the
+# lint side); the python column keeps the suite pointed at the day the file moves to
+# a matched form.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # weekly, Monday nights: the scheduled run re-analyzes main even without pushes
+    - cron: '15 4 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+# The minimum token permissions the starter's own shape asks for (code scanning
+# upload, the checkout, the pack fetch)
+permissions:
+  security-events: write
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: c-cpp
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The toolchain lands before init: a manual-mode trace builds with it
+      - name: Install go (go.mod's toolchain, for the traced build)
+        if: matrix.build-mode == 'manual'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+          config-file: ./.github/codeql-config.yml
+
+      # The traced build: the exact command the pipeline's own go check runs, so the
+      # database covers what CI actually builds
+      - name: Build (traced)
+        if: matrix.build-mode == 'manual'
+        run: go build ./...
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'
