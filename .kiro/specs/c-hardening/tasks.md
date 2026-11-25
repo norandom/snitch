@@ -24,7 +24,7 @@ change that moves their lines.
   - _Requirements: 9.2_
 
 - [ ] 2. Stricter compiler diagnostics and the deferred analyzer findings
-- [ ] 2.1 Enable the extended warning set and separate generated headers from authored ones
+- [x] 2.1 Enable the extended warning set and separate generated headers from authored ones
   - Add the extended set including implicit-conversion warnings to both generation commands
   - Include the kernel type dump as a system header; keep authored headers as user headers
   - Prove with a scratch authored header, included the way authored headers are and holding
@@ -286,3 +286,6 @@ change that moves their lines.
   `root-checks.sh` with sudo and pastes the output. This workstation has no active BPF LSM, so
   the monitor run and api-check run on the dev VM; the DNS root tests can run here. Tasks whose
   done state needs root stay `[ ]` until the pasted output proves them.
+- A plain `go generate ./internal/bpf/` stops at the first failing directive; run
+  `go generate -run "Snitch " ./internal/bpf/` and `-run "Dns "` separately to see each object's
+  warnings. From 2.1 until 2.4, generation at HEAD fails by design (bindings stay committed).

@@ -15,7 +15,7 @@
 // over the answer section that compiles each address where it is found; a branch-free SWAR
 // lowercase; the ring buffer record reserved before the walk so addresses never sit on the
 // stack. Two consecutive bpf_loop calls or a byte-wise lowercase state machine blow the budget.
-#include "vmlinux.h"
+#include <vmlinux.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>

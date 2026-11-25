@@ -7,7 +7,7 @@
 //   rules        (program + destination prefix + proto/port -> allow/deny)
 //   default      (monitor: allow and report; enforce: deny and report)
 // Egress only: nothing here looks at accept() or inbound traffic.
-#include "vmlinux.h"
+#include <vmlinux.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
