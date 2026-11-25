@@ -1,8 +1,13 @@
 # This file ships as /usr/share/lintian/overrides/snitch (0644). It is the
-# package's review record for the two deviations it takes on purpose; lintian
+# package's review record for the deviations it takes on purpose; lintian
 # reads one tag name per line, and the comment above each line states the
 # justification the review accepts it under (ci-debs design: "justified
-# deviations only").
+# deviations only"). The names below are the tags lintian 2.144 (forky) and
+# 2.129 (26.04) actually emit, renamed from the pre-split ones the first
+# draft carried: the old combined dir-or-file-in-usr-local tag no longer
+# exists in either archive's lintian, and an override naming a tag lintian
+# does not know is itself an error (alien-tag) - the real triage run's first
+# catch (ci-debs 6.4, recorded in docs/ci-debs.md).
 
 # statically-linked-binary: both installed binaries (snitchd at
 # /usr/local/sbin, snitch at /usr/bin) are built with CGO_ENABLED=0 and -trimpath,
@@ -12,11 +17,28 @@
 # metadata. A stripped static Go binary is the shipped product.
 statically-linked-binary
 
-# dir-or-file-in-usr-local: the daemon sits at /usr/local/sbin/snitchd because
-# both shipped units name that exact path in ExecStart, and that path is the
-# frozen contract with the deployments that already run snitchd: the VM repo's
-# pyinfra flow installs its copies of the same units and pinned binaries at the
-# same place (requirement 4.2: "reachable at the path its shipped units name in
-# ExecStart"). Moving to /usr/sbin would break every existing host at upgrade;
-# /usr/local/sbin is where this product lives.
-dir-or-file-in-usr-local
+# dir-in-usr-local + file-in-usr-local (the tag lintian 2.117+ split the old
+# dir-or-file-in-usr-local into): the daemon sits at /usr/local/sbin/snitchd
+# because both shipped units name that exact path in ExecStart, and that path
+# is the frozen contract with the deployments that already run snitchd: the
+# VM repo's pyinfra flow installs its copies of the same units and pinned
+# binaries at the same place (requirement 4.2: "reachable at the path its
+# shipped units name in ExecStart"). Moving to /usr/sbin would break every
+# existing host at upgrade; /usr/local/sbin is where this product lives.
+dir-in-usr-local
+file-in-usr-local
+
+# uses-no-compression-for-control-tarball + uses-no-compression-for-data-
+# tarball: the deb is built with dpkg-deb --uniform-compression -Znone on
+# purpose. It is the reproducibility recipe's core (requirement 7.2): with
+# no compression step in the build at all, the compressor is removed from the
+# artifact's byte identity - the alternative ("compress with whatever the
+# builder's archive carries") had the two contract distros shipping liblzma
+# 5.8.3 and 5.8.4, which produce different bytes for the same tree, so the
+# deb's sha256 would depend on which distro packed it. dpkg-deb's member
+# ordering and ar headers have been deterministic since 1.18.x, so the
+# uncompressed archive is a function of the tree alone; nothing on the
+# consuming side is affected - every dpkg reads an uncompressed member list
+# the same way, and installation time is unchanged at this package's size.
+uses-no-compression-for-control-tarball
+uses-no-compression-for-data-tarball

@@ -138,8 +138,24 @@ group "3 unit verify" "3-unit-verify.sh"
 group "4 trial-boot start" "4-trial-boot.sh"
 group "5 daemon journal signature" "5-daemon-journal.sh"
 group "6 installed-path check" "6-installed-check.sh"
-group "7 tray -version from PATH" "7-tray-version.sh"
+	group "7 tray -version from PATH" "7-tray-version.sh"
 group "8 tray headless" "8-tray-headless.sh"
+
+# Group 9 runs HERE, not in the sibling: lintian judges the deb FILE against
+# the policy profile - no installed state involved - and this driver IS the
+# distro (same base image, same apt, its own lintian), which is what R5.4's
+# per-distro tags mean: forky's 2.144 and ubuntu's 2.129 each render their own
+# verdict over the one published deb. The committed threshold is --fail-on
+# error: an error-class tag fails the smoke (after the package's own shipped
+# overrides are honored - overrides live inside the deb, lintian reads them
+# from there), while warnings and info print for the record the docs task
+# lists. --display-info widens the record to the info class; --show-overrides
+# keeps what was overridden visible, so the record shows the whole truth.
+if lintian --profile debian --display-info --show-overrides --color never --fail-on error "/deb/$DEBFILE"; then
+	step "9 lintian: PASS"
+else
+	die "9 lintian: FAIL: an above-threshold tag (the lines above name it)"
+fi
 `
 
 // smokeConffileKeepScript is assertion group 1 (the design's conffile
@@ -495,7 +511,7 @@ func smokeContainer(distro Distro, image, version string, deb *dagger.Directory,
 	return dag.Container().
 		From(image).
 		WithExec([]string{"apt-get", "update"}).
-		WithExec([]string{"apt-get", "install", "-y", "--no-install-recommends", aptCaCertificates, aptCurl}).
+		WithExec([]string{"apt-get", "install", "-y", "--no-install-recommends", aptCaCertificates, aptCurl, aptLintian}).
 		WithExec([]string{"sh", "-c",
 			"curl -fsSL -o /tmp/docker.tgz " + dockerCLIURL + " && " +
 				"echo '" + dockerCLISHA256 + "  /tmp/docker.tgz' | sha256sum -c - && " +
