@@ -8,6 +8,13 @@ name: release
 # published as `snitch-linux-amd64` with its checksum. The asset name is pinned (consuming
 # repos match it), and `snitch` is already the Python client's asset; the four original
 # assets keep their names.
+# Since the ci-debs spec: both artifact lanes build through the Dagger module - the existing
+# static pair (`release-build`, byte-parity with the steps above) and the deb pair
+# (`deb-release`, the proof + assembly + smoke composite) - and the publish job needs both
+# artifact sets before it touches a release. The six pinned assets keep their names and
+# their gate (ci-debs Req 6.1, 6.2); the deb and its sha256 join as the 7th and 8th, and
+# the one existence loop covers all eight before any gh call, so the publication is
+# all-or-nothing, never half-way (ci-debs Req 6.3).
 
 on:
   push:
@@ -18,42 +25,63 @@ permissions:
 
 jobs:
   checks:
+    # The same gate as before the feature: workflow_call lint.yml, where the linters
+    # job skips itself on this tag push (ci-debs Req 6.2 - the new phase never joins
+    # the existing assets' gate).
     uses: ./.github/workflows/lint.yml
 
-  release:
+  release-build:
     needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: release-build --version=${{ github.ref_name }} --output=dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: dist
+
+  deb:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: deb-release --version=${{ github.ref_name }} --docker-socket=/var/run/docker.sock --output=dist-deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-release
+          path: dist-deb
+
+  publish:
+    needs: [release-build, deb]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version-file: go.mod
-      - name: static build, version = tag (the BPF object and its Go bindings are committed; no clang needed)
-        run: |
-          set -euo pipefail
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/snitchd ./cmd/snitchd
-          [ "$(dist/snitchd -version)" = "$GITHUB_REF_NAME" ]
-      - name: static build of the tray client, version = tag (asset `snitch-linux-amd64`, not `snitch`, because the Python client already owns that asset name)
-        run: |
-          set -euo pipefail
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/snitch-linux-amd64 ./cmd/snitch
-          [ "$(dist/snitch-linux-amd64 -version)" = "$GITHUB_REF_NAME" ]
-      - name: sha256 (the form `sha256sum -c` reads)
-        run: |
-          set -euo pipefail
-          (cd dist && sha256sum snitchd > snitchd.sha256)
-          cat dist/snitchd.sha256
-          (cd dist && sha256sum snitch-linux-amd64 > snitch-linux-amd64.sha256)
-          cat dist/snitch-linux-amd64.sha256
+          name: release-build
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb-release
+          path: dist-deb
       - name: publish the assets (replace when the release exists, create it otherwise)
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          assets=(dist/snitchd dist/snitchd.sha256 snitch snitch-trial dist/snitch-linux-amd64 dist/snitch-linux-amd64.sha256)
+          assets=(dist/snitchd dist/snitchd.sha256 snitch snitch-trial dist/snitch-linux-amd64 dist/snitch-linux-amd64.sha256 dist-deb/snitch_${GITHUB_REF_NAME#v}_amd64.deb dist-deb/snitch_${GITHUB_REF_NAME#v}_amd64.deb.sha256)
           for f in "${assets[@]}"; do [ -f "$f" ] || { echo "missing asset: $f" >&2; exit 1; }; done
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${assets[@]}" --clobber
