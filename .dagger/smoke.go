@@ -111,6 +111,14 @@ esac
 docker cp "/deb/$DEBFILE" "$S:/deb.deb" || die "stage: the deb never reached the sibling"
 step "stage: $DEBFILE"
 
+# The tray exercise's props: the stand-in the module built (a pipeline tool,
+# never inside any package) and the repo's tray-check harness, staged beside
+# the installed package.
+docker exec "$S" install -d -m 0755 /smoke
+docker cp /smoke/fakedaemon "$S:/smoke/fakedaemon" || die "stage: the stand-in never reached the sibling"
+docker cp /smoke/tray-check.sh "$S:/smoke/tray-check.sh" || die "stage: the harness never reached the sibling"
+docker exec "$S" chmod 0755 /smoke/fakedaemon
+
 # group runs one assertion group's script inside the sibling. The group's
 # script prints its evidence and, on failure, its own FAIL line before its
 # non-zero exit; the driver adds the verdict, so both the detail and the
@@ -131,6 +139,7 @@ group "4 trial-boot start" "4-trial-boot.sh"
 group "5 daemon journal signature" "5-daemon-journal.sh"
 group "6 installed-path check" "6-installed-check.sh"
 group "7 tray -version from PATH" "7-tray-version.sh"
+group "8 tray headless" "8-tray-headless.sh"
 `
 
 // smokeConffileKeepScript is assertion group 1 (the design's conffile
@@ -337,6 +346,31 @@ v=$(snitch -version) || die "snitch -version exited non-zero"
 say "resolved from PATH at $p; answers $v"
 `
 
+// smokeTrayHeadlessScript is assertion group 8 (5.3's tray exercise "as far
+// as a headless container allows"): the INSTALLED tray binary - /usr/bin/snitch
+// the deb just unpacked - against the pipeline-built stand-in, on a private
+// session bus the wrapper owns, driven by the repo's own tray-check harness in
+// its --headless pulse. The tray is a per-user program (at the desktop it is
+// the operator, never root, and the harness refuses root itself), so the
+// sibling runs it as a plain user like the desktop would; the harness's own
+// step lines are the evidence, its exit code the verdict.
+const smokeTrayHeadlessScript = `#!/usr/bin/env bash
+set -uo pipefail
+die() { echo "smoke: $DISTRO: 8 tray headless: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 8 tray headless: $*"; }
+id -u tray >/dev/null 2>&1 || useradd -m tray || die "the tray user could not be created"
+# dbus-run-session brings up a private bus for the harness alone; the installed
+# tray reaches it through the session address, busctl (the systemd package's)
+# through the same, and the stand-in serves its socket in the harness's own
+# temp dir - nothing of this touches the system bus or the host.
+if su - tray -c 'exec dbus-run-session -- bash /smoke/tray-check.sh --bin /usr/bin/snitch --fake /smoke/fakedaemon --headless'; then
+	say "the installed tray registered its item, presented its states, and exited 0 under SIGTERM"
+else
+	rc=$?
+	die "the headless tray exercise exited $rc (the A-numbered step lines above carry the evidence)"
+fi
+`
+
 // Smoke is the deb's in-container proof on one contract distro (R5.3): the
 // same deb the release publishes, installed and driven inside the distro's
 // own userspace, systemd as PID 1 included, every assertion group named in
@@ -385,7 +419,7 @@ func (c *Snitch) Smoke(
 		return fmt.Errorf("smoke: %s: deb: %w", distro, err)
 	}
 	fmt.Printf("smoke: %s: deb\n", distro)
-	return c.smokeDistro(ctx, distro, image, deb, version, dockerSocket)
+	return c.smokeDistro(ctx, distro, image, deb, fakeDaemon(source), source.File("scripts/tray-check.sh"), version, dockerSocket)
 }
 
 // smokeDistro runs one distro's smoke in the driver container: the socket
@@ -398,10 +432,12 @@ func (c *Snitch) smokeDistro(
 	distro Distro,
 	image string,
 	deb *dagger.Directory,
+	fake *dagger.File,
+	trayCheck *dagger.File,
 	version string,
 	dockerSocket *dagger.Socket,
 ) error {
-	ctr := smokeContainer(distro, image, version, deb, dockerSocket)
+	ctr := smokeContainer(distro, image, version, deb, fake, trayCheck, dockerSocket)
 
 	// The socket probe: the daemon behind the argument must answer before any
 	// of the smoke's work runs - a wrong socket is the smoke's infrastructure
@@ -455,7 +491,7 @@ func (c *Snitch) smokeLog(ctx context.Context, ctr *dagger.Container, distro Dis
 // group scripts, and the socket mounts where the docker CLI expects it. The
 // driver runs as root on purpose: it reads no git (no guards run here - Deb's
 // proof already ran), so the runner-uid pattern has nothing to own.
-func smokeContainer(distro Distro, image, version string, deb *dagger.Directory, dockerSocket *dagger.Socket) *dagger.Container {
+func smokeContainer(distro Distro, image, version string, deb *dagger.Directory, fake *dagger.File, trayCheck *dagger.File, dockerSocket *dagger.Socket) *dagger.Container {
 	return dag.Container().
 		From(image).
 		WithExec([]string{"apt-get", "update"}).
@@ -472,6 +508,8 @@ func smokeContainer(distro Distro, image, version string, deb *dagger.Directory,
 		WithEnvVariable("DOCKER_HOST", "unix:///var/run/docker.sock").
 		WithUnixSocket("/var/run/docker.sock", dockerSocket).
 		WithMountedDirectory("/deb", deb).
+		WithMountedFile("/smoke/fakedaemon", fake).
+		WithMountedFile("/smoke/tray-check.sh", trayCheck).
 		WithNewFile("/smoke/run.sh", smokeDriverScript).
 		WithNewFile("/smoke/groups/1-conffile-keep.sh", smokeConffileKeepScript).
 		WithNewFile("/smoke/groups/2-fresh-install.sh", smokeFreshInstallScript).
@@ -479,5 +517,19 @@ func smokeContainer(distro Distro, image, version string, deb *dagger.Directory,
 		WithNewFile("/smoke/groups/4-trial-boot.sh", smokeTrialBootScript).
 		WithNewFile("/smoke/groups/5-daemon-journal.sh", smokeDaemonJournalScript).
 		WithNewFile("/smoke/groups/6-installed-check.sh", smokeInstalledCheckScript).
-		WithNewFile("/smoke/groups/7-tray-version.sh", smokeTrayVersionScript)
+		WithNewFile("/smoke/groups/7-tray-version.sh", smokeTrayVersionScript).
+		WithNewFile("/smoke/groups/8-tray-headless.sh", smokeTrayHeadlessScript)
+}
+
+// fakeDaemon builds the tray exercise's stand-in: the harness's own build
+// line (`go build -o ... ./tools/fakedaemon`, the line tray-check.sh runs at
+// the desktop) in the checks' pinned golang:1.26.8 container, whose Go caches
+// the module already keeps warm. The binary is a pipeline tool and ships
+// nowhere - never in the deb, never exported - it exists so the installed
+// tray has something honest to talk to: the stand-in serves the daemon's API
+// on a private socket and answers the commands the harness types at it.
+func fakeDaemon(source *dagger.Directory) *dagger.File {
+	return releaseBuildContainer(source).
+		WithExec([]string{"go", "build", "-o", "/tmp/fakedaemon", "./tools/fakedaemon"}).
+		File("/tmp/fakedaemon")
 }

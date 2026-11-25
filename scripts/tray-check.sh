@@ -43,12 +43,18 @@
 #       must parse into a plain colon-free destination), the Allow question (the overlay
 #       rule checked and removed), the Block question (the deny rule likewise), stop
 #
-# usage: scripts/tray-check.sh [--daemon] [-s SOCKET] [-a URL] [-b ADDR] [-h]
+# --headless runs phase A's bus-assertion pulse only (ci-debs' in-container smoke, group 8):
+#   the same A-numbered steps, the registration assert read from the item's own bus name
+#   (no watcher on a bare bus), every desktop/operator step a recorded SKIP, never a FAIL,
+#   exit contract unchanged (0 pass, 1 a failed step). It demands --bin and --fake: the
+#   container that runs it has no Go tree and must not strip the desktop's default phase.
+#
+# usage: scripts/tray-check.sh [--daemon] [-s SOCKET] [-a URL] [-b ADDR] [--bin BIN] [--fake BIN] [--headless] [-h]
 set -euo pipefail
 
 usage() {
   cat <<'U'
-usage: scripts/tray-check.sh [--daemon] [-s SOCKET] [-a URL] [-b ADDR] [-h]
+usage: scripts/tray-check.sh [--daemon] [-s SOCKET] [-a URL] [-b ADDR] [--bin BIN] [--fake BIN] [--headless] [-h]
   run as the desktop user, at the desktop, never as root (exit 2)
   phase A (default): the tray on the session bus, driven by the stand-in daemon
   --daemon   phase B: a real snitchd, monitor mode only (refused otherwise); the
@@ -61,27 +67,51 @@ usage: scripts/tray-check.sh [--daemon] [-s SOCKET] [-a URL] [-b ADDR] [-h]
              tap learned for it, so the URL must resolve)
   -b <addr>  phase B's block question: CURLed bare, no name (default 192.0.2.20), so the
              deny rule goes to the address
+  --bin <p>  run this tray binary instead of building one from the tree
+  --fake <p> run this stand-in daemon instead of building one from the tree
+  --headless phase A as far as a headless container allows: only the bus
+             assertions, on a session bus the caller wraps the script in
+             (dbus-run-session); the registration assert is the item's own bus
+             name (no watcher lives on such a bus), and the desktop and operator
+             steps are recorded as SKIP, never FAIL. Needs --bin and --fake:
+             a container has no Go tree to build from. The in-container deb
+             smoke drives this pulse (ci-debs group 8); the desktop's own
+             phase A stays the default and is unchanged.
   -h         this text
 exit 0 every step passed, 1 a step failed, 2 usage or phase B's monitor-mode refusal
 U
 }
 
-daemon=0; sock=/run/snitch/api.sock; allow_url=https://example.org/; block_addr=192.0.2.20
+daemon=0; headless=0; sock=/run/snitch/api.sock; allow_url=https://example.org/; block_addr=192.0.2.20
+bin_arg=""; fake_arg=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --daemon) daemon=1 ;;
     -s) [ $# -ge 2 ] || { echo "-s needs a socket path" >&2; exit 2; }; sock=$2; shift ;;
     -a) [ $# -ge 2 ] || { echo "-a needs a URL" >&2; exit 2; }; allow_url=$2; shift ;;
     -b) [ $# -ge 2 ] || { echo "-b needs an address" >&2; exit 2; }; block_addr=$2; shift ;;
+    --bin) [ $# -ge 2 ] || { echo "--bin needs a binary path" >&2; exit 2; }; bin_arg=$2; shift ;;
+    --fake) [ $# -ge 2 ] || { echo "--fake needs a binary path" >&2; exit 2; }; fake_arg=$2; shift ;;
+    --headless) headless=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
 [ "$(id -u)" -ne 0 ] || { echo "run as the desktop user, not root" >&2; exit 2; }
-for tool in busctl go getconf; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "$tool is needed" >&2; exit 2; }
-done
+if [ "$headless" -eq 1 ] && { [ -z "$bin_arg" ] || [ -z "$fake_arg" ]; }; then
+  echo "--headless needs --bin and --fake: a container has no Go tree to build from" >&2
+  exit 2
+fi
+if [ "$headless" -eq 1 ]; then
+  command -v busctl >/dev/null 2>&1 || { echo "busctl is needed" >&2; exit 2; }
+else
+  # the desktop runs build (go) and measure the idle window (getconf): a headless
+  # container has neither and needs neither (its binaries arrive via --bin/--fake)
+  for tool in busctl go getconf; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "$tool is needed" >&2; exit 2; }
+  done
+fi
 [ "$daemon" -eq 0 ] || command -v python3 >/dev/null 2>&1 \
   || { echo "python3 is needed for phase B (the API socket client)" >&2; exit 2; }
 
@@ -288,8 +318,11 @@ PY
 pyrun() { python3 -I -u -c "$py" "$sock" "$@"; }
 
 # -- phase A --------------------------------------------------------------------
-a_build() { # both binaries from the working tree (never -o snitch in the repo root)
-  go build -o "$BIN" ./cmd/snitch && go build -o "$FAKE" ./tools/fakedaemon
+a_build() { # both binaries from the working tree (never -o snitch in the repo root), or in full
+  # from --bin/--fake (a headless run's caller hands both over; the -version assert runs
+  # either way, so a broken binary fails here before anything starts)
+  if [ -n "$bin_arg" ]; then BIN="$bin_arg"; else go build -o "$BIN" ./cmd/snitch; fi
+  if [ -n "$fake_arg" ]; then FAKE="$fake_arg"; else go build -o "$FAKE" ./tools/fakedaemon; fi
   snitch_ver=$("$BIN" -version)
   [ -n "$snitch_ver" ]
 }
@@ -386,6 +419,8 @@ a_stop() { # SIGTERM: exit 0, and the item's name is released (the panel item di
 }
 item_gone() { ! registered; }
 a_session() { busctl --user status >/dev/null 2>&1; }
+item_owned() { busctl --user status "$ITEM" >/dev/null 2>&1; }   # the item's bus name is up, watcher or none
+item_released() { ! item_owned; }
 a_role() { # A3 is a fact, not a gate: a reader runs everything else, the answers skip
   if role_guess; then
     echo "writer: $operator_file names $me; the questions will offer buttons"
@@ -422,6 +457,44 @@ phase_a() {
   a_screens   # asks the operator for the two screenshots while the tray is still up
   skip "A17 screenshots: Breeze and Breeze Dark (2.7)" "operator task, not a bus assertion: legible icons on a light and a dark panel are eyes' work; the two screenshots are the record"
   must "A18 stop: the tray ends cleanly, exit 0" a_stop
+}
+
+# -- phase A, headless (the ci-debs smoke's group 8) -------------------------------
+# One bus, one tray, one stand-in: the assertions phase A makes against the bus run
+# verbatim (the state views, the view changes, the follow over a stand-in restart,
+# the clean exit), while everything that needs the desktop or the operator (the
+# watcher plasmashell owns, the notification service, the pressed buttons, the idle
+# and screenshot measurements) is a recorded SKIP, never a FAIL and never silently
+# dropped: the record keeps the full phase A step map either way.
+a_stop_headless() { # SIGTERM: exit 0, and the item's own bus name is released (no watcher
+  # to forget it: the release IS the observable on a bare bus)
+  local rc=0
+  tray_stop
+  [ "$tray_rc" = 0 ] || rc=1
+  wait_for 5 0.5 item_released || rc=1
+  [ "$rc" -eq 0 ] || note "tray exit ${tray_rc:-none}; its stderr: $(tail -n 3 "$tmp/tray.err" 2>/dev/null || true)"
+  [ "$rc" -eq 0 ]
+}
+phase_a_headless() {
+  echo "== phase A (headless): the tray against the stand-in, on a private session bus, as $me"
+  must "A1 provided tray: $BIN answers -version" a_build
+  must "A2 session bus: busctl reaches it" a_session
+  step "A3 the role guess (writer or reader, the tray's own)" a_role
+  tray_start -api "$api"
+  must "A4 registration: the item's bus name is owned ($ITEM)" wait_for 30 0.5 item_owned
+  must "A5 gone: NeedsAttention and 'daemon not running'" a_gone
+  must "A6 stand-in up: monitor and Active" a_stand_in
+  step "A7 kill switch set: NeedsAttention and the tooltip" a_kill
+  step "A8 rules error: NeedsAttention and the tooltip" a_error
+  step "A9 enforce kept: Active and the words" a_kept
+  step "A10 enforce trial: Active and the deadline words" a_trial
+  skip "A11 a question is posted: the Notify call" "headless: no notification service on a bare bus and no operator at a desktop to watch the popup"
+  answer_steps   # A12/A13: a smoke container has no operator file, so the reader's skips print, as at a desktop
+  step "A14 stand-in restart: gone, then back and monitor" a_stand_in_restart
+  skip "A15 plasmashell restart (operator): registered again" "headless: no panel to restart; the re-registration path needs the watcher only a desktop has"
+  skip "A16 idle: the CPU record (8.7)" "headless: the ten-minute idle window is the desktop's own measurement, not a bus assertion"
+  skip "A17 screenshots: Breeze and Breeze Dark (2.7)" "headless: no themes to switch and no eyes to judge legibility"
+  must "A18 stop: the tray ends cleanly, exit 0" a_stop_headless
 }
 
 # -- phase B --------------------------------------------------------------------
@@ -515,7 +588,11 @@ b_allow_dest() { # the host of the allow URL, asserted non-empty and colon-free 
 record() {
   echo "== record for research.md"
   echo "date: $(date -Is) on $(hostname), as $me"
-  echo "snitch ${snitch_ver:-(not built this run)} ($(go version | cut -d' ' -f3)) from this tree"
+  if [ -n "$bin_arg" ]; then
+    echo "snitch ${snitch_ver:-(not built this run)} (provided: $BIN)"
+  else
+    echo "snitch ${snitch_ver:-(not built this run)} ($(go version | cut -d' ' -f3)) from this tree"
+  fi
   echo "plasma: $(plasmashell --version 2>/dev/null | head -n 1 || echo unknown)"
   echo "steps: $passed passed, $skipped skipped, $failed failed"
   echo "$cpuline"
@@ -539,5 +616,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ "$daemon" -eq 1 ]; then phase_b; else phase_a; fi
+if [ "$daemon" -eq 1 ]; then phase_b
+elif [ "$headless" -eq 1 ]; then phase_a_headless
+else phase_a; fi
 if [ "$failed" -eq 0 ]; then exit 0; else exit 1; fi
