@@ -118,7 +118,7 @@ change that moves their lines.
     increments, the executable-file reference is released on every path, and the program
     compiles
   - _Requirements: 4.1, 4.3, 4.4, 4.6, 4.7, 9.1_
-- [ ] 4.3 Add the DNS tap's two runtime contracts before the first insert
+- [x] 4.3 Add the DNS tap's two runtime contracts before the first insert
   - Append the two contract counters after the existing eleven without moving any
   - Evaluate name shape and label-offset range after the question name is read and before the
     answer record is reserved; name shape also before a question is stored; a violation lets

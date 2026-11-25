@@ -163,8 +163,15 @@ enum dns_stat {
 	ST_UPDATE_FAIL,     // bpf_map_update_elem errors (trie full ...)
 	ST_QUERIES,         // questions recorded on egress
 	ST_RINGBUF_FULL,    // answer not mirrored (and not compiled)
+	// Runtime contracts, appended: a violation passes the packet, adds no entry, writes no record.
+	ST_C_NAME_SHAPE,    // contract: 1 <= labels <= LABELS_MAX and 0 < wire < NAME_MAX
+	ST_C_DOT_RANGE,     // contract: every dots[k], k < labels, is < NAME_MAX
 	ST_MAX
 };
+
+// The map below has ST_MAX entries; user space reads indices 0..10 by position, so a counter
+// is only ever appended before ST_MAX.
+CONTRACT_CONST(ST_MAX == 13, "dns_stats entries == ST_MAX == 11 fixed counters (0..10) + 2 contracts");
 
 // Set only by root tests through CollectionSpec.Variables, never by the daemon.
 const volatile __u32 test_skip_question = 0;
@@ -358,6 +365,27 @@ static __always_inline __u32 read_qname(struct pkt *p, __u32 off, __u8 *buf, __u
 	return labels;
 }
 
+// The shape read_qname promises for a name it accepted. Checked by the callers before the name
+// reaches a map or the ring buffer (Tap contracts); both hold by construction today.
+static __always_inline int name_shape_ok(__u32 labels, __u32 wire)
+{
+	return labels >= 1 && labels <= LABELS_MAX && wire > 0 && wire < NAME_MAX;
+}
+
+// Every label offset a suffix lookup or the '.' pass may start at is inside the name key.
+// Bounded by LABELS_MAX, stops at labels; outside bpf_loop.
+static __always_inline int dots_in_range(const __u8 *dots, __u32 labels)
+{
+	int ok = 1;
+	for (int k = 0; k < LABELS_MAX; k++) {
+		if ((__u32)k >= labels)
+			break;
+		if (dots[k] >= NAME_MAX)
+			ok = 0;
+	}
+	return ok;
+}
+
 // --- answer walk: one bpf_loop, one step per iteration ---
 struct walk {
 	struct pkt p;
@@ -502,6 +530,11 @@ int dns_answer(struct __sk_buff *skb)
 		bump(ST_NAME_TOO_LONG);
 		return 1;
 	}
+	// Runtime contracts before the first lookup, reservation or insert: a violation passes.
+	if (!CONTRACT(name_shape_ok(w.labels, wire), bump(ST_C_NAME_SHAPE)))
+		return 1;
+	if (!CONTRACT(dots_in_range(w.dots, w.labels), bump(ST_C_DOT_RANGE)))
+		return 1;
 	if (!test_skip_question) {
 		// the answer belongs to a question this socket sent: same cookie, id and name
 		struct q_key qk = { .cookie = bpf_get_socket_cookie(skb), .id = h.id };
@@ -567,7 +600,11 @@ int dns_query(struct __sk_buff *skb)
 	__u8 buf[2 * NAME_MAX] __attribute__((aligned(8))) = {};
 	__u8 dots[LABELS_MAX] = {};
 	__u32 wire = 0;
-	if (!read_qname(&p, l.dns_off + sizeof(h), buf, dots, &wire))
+	__u32 labels = read_qname(&p, l.dns_off + sizeof(h), buf, dots, &wire);
+	if (!labels)
+		return 1;
+	// Runtime contract before the question is stored: a violation passes.
+	if (!CONTRACT(name_shape_ok(labels, wire), bump(ST_C_NAME_SHAPE)))
 		return 1;
 	__builtin_memcpy(v.qname, buf, NAME_MAX);
 	v.ns = bpf_ktime_get_ns();
