@@ -438,6 +438,73 @@ func (c *Snitch) Smoke(
 	return c.smokeDistro(ctx, distro, image, deb, fakeDaemon(source), source.File("scripts/tray-check.sh"), version, dockerSocket)
 }
 
+// DebRelease is the release job's one command (ci-debs task 6.5, R5.5, the
+// design's `dagger call deb-release` dispatch): the whole deb lane in one
+// invocation - the proof, the assembly, the smoke on both contract distros
+// (lintian inside each) - answering with the one artifact set the release
+// publishes: the deb and its bare-filename sha256 sidecar. ONE Deb call
+// produces the deb this invocation regards: its DistroProof gates the source
+// (clean tree, tag on HEAD) and caches, and the same deb directory passes to
+// both distros' smokes, so no invocation can ever mix binaries from two
+// commits or two tags (5.5's single-published-deb rule holds inside the
+// pipeline, not just across it). Not a +check, for the same reason as Deb
+// itself: the answer is the artifact, the seven-check lint contract keeps
+// its shape, and a release asks for this gate by name when it wants it.
+func (c *Snitch) DebRelease(
+	ctx context.Context,
+	// The repository root: the checkout whose guards the proof asserts and
+	// whose packaging inputs the assembly consumes verbatim.
+	// +defaultPath="/"
+	source *dagger.Directory,
+	// The release tag in its `v`-prefixed form (e.g. v0.4.0): ReleaseBuild's
+	// and Deb's contract - a tag on HEAD, no default, because a defaulted one
+	// would defeat the guard behind it.
+	version string,
+	// The host docker daemon's unix socket (e.g. /var/run/docker.sock): the
+	// smokes' siblings are real systemd containers provisioned through the
+	// host daemon, identically in CI and locally.
+	dockerSocket *dagger.Socket,
+) (*dagger.Directory, error) {
+	if version == "" {
+		fmt.Println("deb-release: version: FAIL")
+		return nil, fmt.Errorf("deb-release: version: the release tag is required (e.g. v0.4.0)")
+	}
+	// The one deb this invocation touches: Deb runs the proof inside (both
+	// distros build, the lists agree or the assembly never starts), prints
+	// the whole chain's own step lines, and returns the exact directory the
+	// smokes below exercise and the caller exports.
+	deb, err := c.Deb(ctx, source, version)
+	if err != nil {
+		fmt.Println("deb-release: deb: FAIL")
+		return nil, fmt.Errorf("deb-release: deb: %w", err)
+	}
+	fmt.Println("deb-release: deb")
+	// The tray exercise's props, built once for both smokes (the same cached
+	// build either side would reach for).
+	fake := fakeDaemon(source)
+	trayCheck := source.File("scripts/tray-check.sh")
+	// Both contract distros, the design's diagram order (ubuntu, then
+	// forky). Each smoke prints its own group lines and PASS verdict; the
+	// composite names the distro that failed and publishes nothing - the
+	// caller's --output never runs at all.
+	for _, distro := range []Distro{DistroUbuntu2604, DistroDebianForky} {
+		image, err := distroImage(distro)
+		if err != nil {
+			fmt.Printf("deb-release: smoke %s: FAIL\n", distro)
+			return nil, fmt.Errorf("deb-release: smoke %s: %w", distro, err)
+		}
+		if err := c.smokeDistro(ctx, distro, image, deb, fake, trayCheck, version, dockerSocket); err != nil {
+			fmt.Printf("deb-release: smoke %s: FAIL\n", distro)
+			return nil, fmt.Errorf("deb-release: smoke %s: %w", distro, err)
+		}
+		fmt.Printf("deb-release: smoke %s\n", distro)
+	}
+	fmt.Println("deb-release: PASS")
+	// The deb and its sidecar, unchanged: the same directory Deb answered
+	// with, so the release publishes what the smokes proved.
+	return deb, nil
+}
+
 // smokeDistro runs one distro's smoke in the driver container: the socket
 // probe, then the driver script (sibling boot, staging, the assertion
 // groups), then the smoke log printed verbatim - the pass lines carry the

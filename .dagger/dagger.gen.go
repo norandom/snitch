@@ -287,6 +287,34 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return (*Snitch).Deb(&parent, ctx, source, version)
+		case "DebRelease":
+			var parent Snitch
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var source *dagger.Directory
+			if inputArgs["source"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["source"]), &source)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg source", err))
+				}
+			}
+			var version string
+			if inputArgs["version"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["version"]), &version)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg version", err))
+				}
+			}
+			var dockerSocket *dagger.Socket
+			if inputArgs["dockerSocket"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["dockerSocket"]), &dockerSocket)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg dockerSocket", err))
+				}
+			}
+			return (*Snitch).DebRelease(&parent, ctx, source, version, dockerSocket)
 		case "DistroBuild":
 			var parent Snitch
 			err = json.Unmarshal(parentJSON, &parent)
