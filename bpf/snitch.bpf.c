@@ -299,9 +299,16 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	__u8 proto = (__u8)BPF_CORE_READ(sock, sk, sk_protocol);
 
 	bump(SS_DECISIONS);
+	// Runtime contracts (contract.h): each violation is counted and resolves to an allow
+	// verdict written here; none denies, none returns early (the event and the exe release
+	// below are reached on every path).
 	if (k && *k)
 		verdict = V_ALLOW_KILL;
-	else if (!c || c->heartbeat_ns == 0 || now - c->heartbeat_ns > HEARTBEAT_MAX_NS)
+	else if (!CONTRACT(k != NULL, bump(SC_KILL_SLOT)))
+		verdict = V_ALLOW_STALE;  // contract: kill slot readable; violated -> allow as stale
+	else if (!CONTRACT(c != NULL, bump(SC_CONTROL_SLOT)))
+		verdict = V_ALLOW_STALE;  // contract: control slot readable; violated -> allow as stale
+	else if (c->heartbeat_ns == 0 || now - c->heartbeat_ns > HEARTBEAT_MAX_NS)
 		verdict = V_ALLOW_STALE;
 	else if (family == AF_INET ? local_v4(*(__u32 *)addr) : local_v6(addr))
 		verdict = V_ALLOW_LOCAL;
@@ -310,6 +317,12 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 		if (r) rule = r->id;
 		if (r && r->verdict == 1) verdict = V_ALLOW_RULE;
 		else if (r && r->verdict == 2) verdict = V_DENY_RULE;
+		// contract: a found rule's verdict is 1 or 2, so no rule is left at this point.
+		// Violated -> allow in every mode, the rule id kept in the event.
+		else if (!CONTRACT(r == NULL, bump(SC_RULE_VERDICT))) verdict = V_ALLOW_MONITOR;
+		// contract: mode is monitor (0) or enforce (1). Violated -> treated as monitor.
+		else if (!CONTRACT(c->mode == MODE_MONITOR || c->mode == MODE_ENFORCE, bump(SC_MODE)))
+			verdict = V_ALLOW_MONITOR;
 		else verdict = c->mode == MODE_ENFORCE ? V_DENY_DEFAULT : V_ALLOW_MONITOR;
 	}
 

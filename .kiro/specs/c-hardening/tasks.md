@@ -108,7 +108,7 @@ change that moves their lines.
   - Done when the program compiles and the compiled object carries the counter map with the
     designed number of entries
   - _Requirements: 4.3, 4.5_
-- [ ] 4.2 Add the egress program's four runtime contracts with fail-open outcomes
+- [x] 4.2 Add the egress program's four runtime contracts with fail-open outcomes
   - Kill slot readable, control slot readable, a found rule's verdict is allow or deny, mode
     is monitor or enforce; each counts its own violation and resolves as the design's table
     states, with the allow branch written at the site
