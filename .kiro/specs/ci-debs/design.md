@@ -58,9 +58,9 @@ untouched: the deb ships the existing binaries and unit files at the paths their
   (R2 acceptance); anything beyond zero-findings triage (refactors, features) is out of scope.
 
 ### Allowed Dependencies
-- Dagger engine v0.21.x (GitHub-hosted docker in CI; locally verified over the workstation's podman —
-  rootless podman 5.7.0 boots engine v0.21.12 in practice, while upstream still documents rootful
-  podman/docker as the supported path — both facts recorded in `docs/ci-debs.md`).
+- Dagger engine v0.21.x (GitHub-hosted docker in CI; on the operator workstation the runtime moved
+  mid-implementation from rootless podman 5.7.0 to docker-ce 29.10.1 — the engine was verified working over
+  both; docker-ce is the final, upstream-supported local door).
 - Public container images pinned once in `.dagger/pins.go`: `ubuntu:26.04`, `debian:forky`, `golang:1.26.8`,
   `golangci/golangci-lint` (digest-pinned), `koalaman/shellcheck` (tag-pinned), an uv-providing image
   (tag-pinned), forky apt for `cppcheck=2.22.0-1` + `libbpf-dev` (exact-version pins).

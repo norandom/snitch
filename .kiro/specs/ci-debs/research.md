@@ -293,9 +293,10 @@
   in the runner, asset loop unchanged); composites used instead of workflow gymnastics
 
 ## Risks & Mitigations
-- **Dagger engine vs rootless podman (local door)** — RESOLVED empirically in task 1: engine v0.21.12 boots
-  over rootless podman 5.7.0; residual risk moved to task 6 (privileged/systemd smoke containers under
-  rootless podman get real verification there).
+- **Dagger engine vs rootless podman (local door)** — RESOLVED: engine v0.21.12 was verified over rootless
+  podman 5.7.0 in tasks 1-4; the operator then migrated the workstation to docker-ce 29.10.1 (final,
+  upstream-supported), where all later task runs (5a onward) executed — task 6's smoke recipes use the
+  docker-native privileged flags.
 - **golangci/staticcheck findings on existing code** — triage task with explicit fix-or-configure acceptance (R2.1).
 - **cppcheck triage set (probe-observed)** — same pattern; suppressions file only with written reasons.
 - **VCS stamp parity edge cases** — clean-tree + tag assertions in the build function make mismatches loud.
