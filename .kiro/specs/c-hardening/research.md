@@ -138,6 +138,46 @@ for f in internal/bpf/*; do cmp "$f" "$T.out/${f##*/}"; done   # silent = identi
   `TestDNSProgCorpus` so the script picks it up unchanged. Malformed frames need byte-level
   mutation of well-formed ones, which the builder cannot express.
 
+### Baseline (task 1.2)
+Recorded 2026-11-25 on commit `c93d393`, before any change of this feature (Requirement 9.2).
+The ordinary checks ran against the working tree, which carried three uncommitted files
+outside this feature (`.dagger/deb.go`, `packaging/control`: maintainer-line edits;
+`.kiro/handover.md`). Workstation: no BPF LSM active (`/sys/kernel/security/lsm` lacks
+`bpf`), host `go1.26.10`, Dagger v0.21.12.
+
+| Check | Command | Result |
+|---|---|---|
+| Analyzer | `dagger call cppcheck` | PASS (exit 0, fresh run 1m19s; zero unsuppressed findings is its only pass) |
+| Pipeline `go` check | `dagger call go` (build, vet, vet `root`, vet `live`, test, caps) | PASS (exit 0; served from the engine's cache for this tree) |
+| Format | `gofmt -l .` (host) | PASS (no files listed) |
+| Vet | `go vet ./...`, `-tags root`, `-tags live` (host) | PASS |
+| Build | `go build ./...` (host) | PASS |
+| Tests | `go test -count=1 ./...` (host, fresh) | PASS (15 packages `ok`, no failures) |
+| Caps gate | `scripts/caps.sh` (host) | PASS (`caps: ok (18 packages)`) |
+
+Pending root (run by the operator, not yet recorded here): `sudo scripts/dns-progtest.sh`
+(`TestDNSProgLoads`, `TestDNSProgParser`, `TestDNSProgQuery`); the bounded monitor run
+`go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -duration 10s`;
+`sudo scripts/api-check.sh`.
+
+Reference counters of the tap: the expected `dns.Stats` per `TestDNSProgParser` case, literal
+in `parserCases()` (`internal/dns/prog_root_test.go:23-41`); fields not named are zero
+(`NoQuestion`, `UpdateFail`, `Queries`, `RingbufFull` are zero in every case). Later root
+runs must reproduce these unchanged (design "Testing Strategy", 4.8, 9.2).
+
+| Case | Expected Stats |
+|---|---|
+| A, AAAA, CNAME, compression, IPv6-frame | Seen 1, Parsed 1, Updates 1 |
+| truncated | Seen 1, NotAnswer 1 |
+| wrong-resolver | Seen 1, NotResolver 1 |
+| wrong-port | all zero (not seen) |
+| two-questions | Seen 1, NotAnswer 1 |
+| long-name | Seen 1, NameTooLong 1 |
+| no-domain | Seen 1, Parsed 1 |
+| existing-file-key | Seen 1, Parsed 1, Exists 1 |
+| three-slots | Seen 1, Parsed 1, Updates 3 |
+| `TestDNSProgQuery` (dns_query) | Queries 1 |
+
 ## Architecture Pattern Evaluation
 
 | Option | Description | Strengths | Risks / Limitations | Notes |
