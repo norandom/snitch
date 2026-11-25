@@ -178,6 +178,45 @@ runs must reproduce these unchanged (design "Testing Strategy", 4.8, 9.2).
 | three-slots | Seen 1, Parsed 1, Updates 3 |
 | `TestDNSProgQuery` (dns_query) | Queries 1 |
 
+### Final validation (task 8.3), non-root
+Recorded 2026-11-25 on commit `81ef16f` (clean tree), workstation (no BPF LSM), host Go and
+Dagger as in the baseline. Requirements 2.3, 7.4, 9.1, 9.2, 9.3.
+
+| Check | Command | Result |
+|---|---|---|
+| Pipeline, all checks + fuzz | `dagger call rugged --fuzz-duration 30s` | PASS, 5m15s (first attempt failed after 29 s on a transient TLS handshake timeout pulling `ghcr.io/astral-sh/uv:0.13.9`; retried once). `check` PASS: actionlint, bindings, cppcheck, fmt, golangci, go, ruff, shellcheck (lint-core, lint-all). Bindings: "identical to the regeneration with Debian clang version 21.1.8 (13)". Fuzz: 6 targets (FuzzDecodeEvent, FuzzDecode, FuzzLineReader, FuzzParse x2, FuzzParseOverlay), no failure in 30 s each |
+| Tests incl. all fuzz seeds | `go test -count=1 ./...` | PASS (every package `ok`; the six Fuzz targets run their seeds as ordinary cases, `-run '^Fuzz' -v` shows each `--- PASS`) |
+| Vet | `go vet ./...`, `go vet -tags root ./...` | PASS |
+| Format | `gofmt -l .` | PASS (no files) |
+| Caps gate | `scripts/caps.sh` | PASS (`caps: ok (18 packages)`) |
+| Root test binary | `go test -tags root -c -o /dev/null ./internal/dns/` | PASS (compiles) |
+
+Decision function (9.1), `git diff c1ca575 HEAD -- bpf/snitch.bpf.c`, `decide()` and the two
+LSM hooks; every changed line classified:
+
+| Change | Class |
+|---|---|
+| `bump(SS_ADDR_UNREADABLE)` before the existing `return 0` (braces added) | counter |
+| `bump(SS_NO_EXE)` in a new `else` of `if (exe)` | counter |
+| `bump(SS_DECISIONS)` before the verdict chain | counter |
+| `bump(SS_EVENT_LOST)` in a new `else` of `if (e)` | counter |
+| `else if (!CONTRACT(k != NULL, bump(SC_KILL_SLOT))) verdict = V_ALLOW_STALE` | allow exit (before: an unreadable kill slot fell through to rules and mode, could deny) |
+| `else if (!CONTRACT(c != NULL, bump(SC_CONTROL_SLOT))) verdict = V_ALLOW_STALE`; `!c` dropped from the heartbeat test | allow exit (same verdict as before for `c == NULL`, now counted) |
+| `else if (!CONTRACT(r == NULL, bump(SC_RULE_VERDICT))) verdict = V_ALLOW_MONITOR` | allow exit (before: a rule with verdict not 1/2 fell to the mode, denied in enforce) |
+| `else if (!CONTRACT(mode is 0 or 1, bump(SC_MODE))) verdict = V_ALLOW_MONITOR` | allow exit (same verdict as before for an unknown mode, now counted) |
+| `const` on `k`, `c`, `r`; `(__u8)` on `sk_protocol`; `(__u32)` on `tgid`; `__attribute__((unused))` on `addrlen`/`size`; `-Wunused-parameter` pragma pair around the hooks; comments | annotation, codegen identical (task 2.2) |
+| anything else | none |
+
+No new deny path (V_DENY_RULE and V_DENY_DEFAULT keep their conditions, now additionally
+requiring a readable kill slot and, for the default deny, no found rule); order kill switch ->
+heartbeat -> local -> rules -> mode intact; the `return` statements of `decide()` are the same
+three as at `c1ca575` (unreadable address, foreign family, final verdict), so `bpf_put_file(exe)`
+is reached on every path after the acquire.
+
+Root half pending: `sudo scripts/root-checks.sh --at 81ef16f` on the dev VM (DNS root tests
+incl. corpus, bounded 75 s monitor run, api-check, status counters) and `--at c1ca575` for the
+1.2 baseline.
+
 ## Architecture Pattern Evaluation
 
 | Option | Description | Strengths | Risks / Limitations | Notes |
