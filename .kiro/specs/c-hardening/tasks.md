@@ -151,7 +151,7 @@ change that moves their lines.
     field serializes exactly as before
   - _Boundary: Status wire type_
   - _Requirements: 5.3, 5.7_
-- [ ] 5.3 Read the kernel counters into the wire type
+- [x] 5.3 Read the kernel counters into the wire type
   - Sum the egress program's per-CPU values and name them in index order; decode the tap's
     contract tail; mark a section unavailable with a reason when its map cannot be read or the
     tap is off; report every contract name at zero when nothing was violated
@@ -306,4 +306,8 @@ change that moves their lines.
   reader's `malformed` is still a plain uint64 touched by its one goroutine - make it atomic or
   read it under the lock if a later task serves it in the status. Ring buffer samples carry the
   exact reserved length (cilium v0.22 ringbuf/ring.go), so exact-size decoding rejects no real record.
+- 5.3: the egress name tables are tied to `snitch_stats` MaxEntries in
+  `cmd/snitchd/counters_test.go` (TestEgressNamesMatchMapSize), not in abi_test.go, because the
+  tables are unexported in package main. 5.4 wires `egressCounters` with a closure over
+  `objs.SnitchStats.Lookup` (cilium's Lookup takes `any`); abi_test's sizeMismatch now has a unit.
 

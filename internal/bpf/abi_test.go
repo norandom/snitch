@@ -27,12 +27,13 @@ type mapCase struct {
 	key, value uintptr
 }
 
-// sizeMismatch names the structure so a failure says what drifted, not only two numbers.
-func sizeMismatch(what string, kernel, daemon uintptr) error {
+// sizeMismatch names the structure and the unit (bytes, elements, entries) so a failure says
+// what drifted, not only two numbers.
+func sizeMismatch(what, unit string, kernel, daemon uintptr) error {
 	if kernel == daemon {
 		return nil
 	}
-	return fmt.Errorf("%s: kernel BTF says %d bytes, the daemon's Go view %d", what, kernel, daemon)
+	return fmt.Errorf("%s: kernel BTF says %d %s, the daemon's Go view %d", what, kernel, unit, daemon)
 }
 
 func loadSpecs(t *testing.T) (snitch, dnsSpec *ebpf.CollectionSpec) {
@@ -88,7 +89,7 @@ func TestABIStructSizes(t *testing.T) {
 	}
 	for _, set := range sets {
 		for _, c := range set.cases {
-			if err := sizeMismatch("struct "+c.name, btfStructSize(t, set.spec, c.name), c.daemon); err != nil {
+			if err := sizeMismatch("struct "+c.name, "bytes", btfStructSize(t, set.spec, c.name), c.daemon); err != nil {
 				t.Error(err)
 			}
 		}
@@ -126,8 +127,8 @@ func TestABIMapSizes(t *testing.T) {
 				t.Fatalf("map %s missing", c.name)
 			}
 			for _, err := range []error{
-				sizeMismatch("map "+c.name+" key", uintptr(m.KeySize), c.key),
-				sizeMismatch("map "+c.name+" value", uintptr(m.ValueSize), c.value),
+				sizeMismatch("map "+c.name+" key", "bytes", uintptr(m.KeySize), c.key),
+				sizeMismatch("map "+c.name+" value", "bytes", uintptr(m.ValueSize), c.value),
 			} {
 				if err != nil {
 					t.Error(err)
@@ -143,20 +144,20 @@ func TestABIHandMirrors(t *testing.T) {
 	_, dnsSpec := loadSpecs(t)
 	var rec bpf.DnsDnsAnswerRecord
 	cases := []struct {
-		name         string
+		name, unit   string
 		kernel, hand int
 	}{
-		{"domain_key.name (dns.NameMax)", len(bpf.DnsDomainKey{}.Name), dns.NameMax},
-		{"dns_answer_record.qname (dns.NameMax)", len(rec.Qname), dns.NameMax},
-		{"q_val.qname (dns.NameMax)", len(bpf.DnsQ_val{}.Qname), dns.NameMax},
-		{"domain_val.slot (dns.SlotsMax)", len(bpf.DnsDomainVal{}.Slot), dns.SlotsMax},
-		{"domain_val.slot (rules.NameSlots)", len(bpf.DnsDomainVal{}.Slot), rules.NameSlots},
-		// dns_stats holds the eleven fixed counters, then the two contract counters task 4.3
-		// appended; task 5.3 introduces dns.ContractsCount to replace the literal 2
-		{"dns_stats entries (dns.StatsCount + 2)", int(dnsSpec.Maps["dns_stats"].MaxEntries), dns.StatsCount + 2},
+		{"domain_key.name (dns.NameMax)", "elements", len(bpf.DnsDomainKey{}.Name), dns.NameMax},
+		{"dns_answer_record.qname (dns.NameMax)", "elements", len(rec.Qname), dns.NameMax},
+		{"q_val.qname (dns.NameMax)", "elements", len(bpf.DnsQ_val{}.Qname), dns.NameMax},
+		{"domain_val.slot (dns.SlotsMax)", "elements", len(bpf.DnsDomainVal{}.Slot), dns.SlotsMax},
+		{"domain_val.slot (rules.NameSlots)", "elements", len(bpf.DnsDomainVal{}.Slot), rules.NameSlots},
+		// dns_stats holds the eleven fixed counters, then the contract counters task 4.3 appended
+		{"dns_stats (dns.StatsCount + dns.ContractsCount)", "entries",
+			int(dnsSpec.Maps["dns_stats"].MaxEntries), dns.StatsCount + dns.ContractsCount},
 	}
 	for _, c := range cases {
-		if err := sizeMismatch(c.name, uintptr(c.kernel), uintptr(c.hand)); err != nil {
+		if err := sizeMismatch(c.name, c.unit, uintptr(c.kernel), uintptr(c.hand)); err != nil {
 			t.Error(err)
 		}
 	}
@@ -166,14 +167,14 @@ func TestABIHandMirrors(t *testing.T) {
 func TestABIMismatchNamesStructure(t *testing.T) {
 	_, dnsSpec := loadSpecs(t)
 	kernel := btfStructSize(t, dnsSpec, "domain_slot")
-	err := sizeMismatch("struct domain_slot", kernel, kernel+1)
+	err := sizeMismatch("struct domain_slot", "bytes", kernel, kernel+1)
 	if err == nil {
 		t.Fatal("a wrong size for domain_slot passed")
 	}
 	if !strings.Contains(err.Error(), "domain_slot") {
 		t.Fatalf("mismatch does not name the structure: %v", err)
 	}
-	if sizeMismatch("struct domain_slot", kernel, kernel) != nil {
+	if sizeMismatch("struct domain_slot", "bytes", kernel, kernel) != nil {
 		t.Fatal("equal sizes reported as a mismatch")
 	}
 }

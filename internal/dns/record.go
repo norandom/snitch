@@ -90,3 +90,18 @@ func DecodeStats(values []uint64) (Stats, error) {
 	}
 	return Stats{values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10]}, nil
 }
+
+// Contracts are the tap's runtime-contract counters: the dns_stats entries after the
+// dns_stat counters, in enum order (ST_C_NAME_SHAPE, ST_C_DOT_RANGE). Non-zero is a defect.
+type Contracts struct{ NameShape, DotRange uint64 }
+
+// ContractsCount is the number of contract counters dns_stats holds after StatsCount.
+const ContractsCount = 2
+
+// DecodeContracts takes the dns_stats values from index StatsCount on.
+func DecodeContracts(values []uint64) (Contracts, error) {
+	if len(values) < ContractsCount {
+		return Contracts{}, fmt.Errorf("DNS contracts: need %d counters, got %d", ContractsCount, len(values))
+	}
+	return Contracts{NameShape: values[0], DotRange: values[1]}, nil
+}

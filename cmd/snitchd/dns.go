@@ -177,3 +177,14 @@ func readDNSStats(lookup func(any, any) error) (dns.Stats, error) {
 	}
 	return dns.DecodeStats(counters)
 }
+
+// readDNSContracts reads the contract tail of dns_stats, the entries after the dns_stat counters.
+func readDNSContracts(lookup func(any, any) error) (dns.Contracts, error) {
+	values := make([]uint64, dns.ContractsCount)
+	for i := range values {
+		if err := lookup(uint32(dns.StatsCount+i), &values[i]); err != nil {
+			return dns.Contracts{}, err
+		}
+	}
+	return dns.DecodeContracts(values)
+}
