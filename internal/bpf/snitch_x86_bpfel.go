@@ -82,6 +82,7 @@ const (
 	SnitchMapKill            = "kill"
 	SnitchMapPrograms        = "programs"
 	SnitchMapRules           = "rules"
+	SnitchMapSnitchStats     = "snitch_stats"
 	SnitchProgCountEgress    = "count_egress"
 	SnitchProgSocketConnect  = "socket_connect"
 	SnitchProgSocketSendmsg  = "socket_sendmsg"
@@ -144,12 +145,13 @@ type SnitchProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type SnitchMapSpecs struct {
-	Bytes    *ebpf.MapSpec `ebpf:"bytes"`
-	Control  *ebpf.MapSpec `ebpf:"control"`
-	Events   *ebpf.MapSpec `ebpf:"events"`
-	Kill     *ebpf.MapSpec `ebpf:"kill"`
-	Programs *ebpf.MapSpec `ebpf:"programs"`
-	Rules    *ebpf.MapSpec `ebpf:"rules"`
+	Bytes       *ebpf.MapSpec `ebpf:"bytes"`
+	Control     *ebpf.MapSpec `ebpf:"control"`
+	Events      *ebpf.MapSpec `ebpf:"events"`
+	Kill        *ebpf.MapSpec `ebpf:"kill"`
+	Programs    *ebpf.MapSpec `ebpf:"programs"`
+	Rules       *ebpf.MapSpec `ebpf:"rules"`
+	SnitchStats *ebpf.MapSpec `ebpf:"snitch_stats"`
 }
 
 // SnitchVariableSpecs contains global variables before they are loaded into the kernel.
@@ -184,12 +186,13 @@ func (o *SnitchObjects) Close() error {
 //
 // It can be passed to LoadSnitchObjects or ebpf.CollectionSpec.LoadAndAssign.
 type SnitchMaps struct {
-	Bytes    *ebpf.Map `ebpf:"bytes"`
-	Control  *ebpf.Map `ebpf:"control"`
-	Events   *ebpf.Map `ebpf:"events"`
-	Kill     *ebpf.Map `ebpf:"kill"`
-	Programs *ebpf.Map `ebpf:"programs"`
-	Rules    *ebpf.Map `ebpf:"rules"`
+	Bytes       *ebpf.Map `ebpf:"bytes"`
+	Control     *ebpf.Map `ebpf:"control"`
+	Events      *ebpf.Map `ebpf:"events"`
+	Kill        *ebpf.Map `ebpf:"kill"`
+	Programs    *ebpf.Map `ebpf:"programs"`
+	Rules       *ebpf.Map `ebpf:"rules"`
+	SnitchStats *ebpf.Map `ebpf:"snitch_stats"`
 }
 
 func (m *SnitchMaps) Close() error {
@@ -200,6 +203,7 @@ func (m *SnitchMaps) Close() error {
 		m.Kill,
 		m.Programs,
 		m.Rules,
+		m.SnitchStats,
 	)
 }
 

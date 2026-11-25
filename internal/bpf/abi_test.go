@@ -108,6 +108,7 @@ func TestABIMapSizes(t *testing.T) {
 			{"control", u32, unsafe.Sizeof(bpf.SnitchControlState{})},
 			{"kill", u32, u32},
 			{"bytes", u64, unsafe.Sizeof(bpf.SnitchByteCount{})},
+			{"snitch_stats", u32, u64},
 		}},
 		{dnsSpec, []mapCase{
 			// MapReplacements hands the tap Snitch's trie, so its declared sizes must match
@@ -150,8 +151,9 @@ func TestABIHandMirrors(t *testing.T) {
 		{"q_val.qname (dns.NameMax)", len(bpf.DnsQ_val{}.Qname), dns.NameMax},
 		{"domain_val.slot (dns.SlotsMax)", len(bpf.DnsDomainVal{}.Slot), dns.SlotsMax},
 		{"domain_val.slot (rules.NameSlots)", len(bpf.DnsDomainVal{}.Slot), rules.NameSlots},
-		// task 4.3 appends contract counters to dns_stat: update StatsCount with it
-		{"dns_stats entries (dns.StatsCount)", int(dnsSpec.Maps["dns_stats"].MaxEntries), dns.StatsCount},
+		// dns_stats holds the eleven fixed counters, then the two contract counters task 4.3
+		// appended; task 5.3 introduces dns.ContractsCount to replace the literal 2
+		{"dns_stats entries (dns.StatsCount + 2)", int(dnsSpec.Maps["dns_stats"].MaxEntries), dns.StatsCount + 2},
 	}
 	for _, c := range cases {
 		if err := sizeMismatch(c.name, uintptr(c.kernel), uintptr(c.hand)); err != nil {
