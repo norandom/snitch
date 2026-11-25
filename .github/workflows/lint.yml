@@ -27,6 +27,19 @@ jobs:
           verb: call
           call: ruff
 
+  # The gofmt gate (`gofmt -l .` reports nothing). The go job's check does not run gofmt, and
+  # from ci-debs 7.1 until c-hardening no job dispatched this one, so CI did not enforce
+  # formatting; like the other base checks it runs on every ref, release tags included.
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: "0.21.12"
+          verb: call
+          call: fmt
+
   go:
     runs-on: ubuntu-latest
     steps:
