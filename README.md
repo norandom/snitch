@@ -98,13 +98,16 @@ and the client one-liners; `scripts/api-check.sh`, run as the desktop user, prov
 the running service.
 
 **Release.** A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lint.yml`, the same jobs
-as on every push) and then one static amd64 build with the tag linked in
-(`.github/workflows/release.yml`); a failing check publishes nothing. The assets are `snitchd`,
-`snitchd.sha256` (the form `sha256sum -c` reads), the tray binary `snitch-linux-amd64` and its
-`snitch-linux-amd64.sha256` (see [The tray](#the-tray) below), and the Python client's `snitch`
-and `snitch-trial`. `snitchd -version` prints the tag (`dev` for a plain `go build`), and
-`snitchd status` shows it. The VM repo pins the version and the sha256 of the `snitchd` asset
-(see **Service** above).
+as on every push) and then the release lanes (`.github/workflows/release.yml`): the static
+amd64 builds with the tag linked in, plus the deb. The lanes dispatch into the repo's Dagger
+module, so CI and a local `dagger call` run the same pipeline (see
+[docs/ci-debs.md](docs/ci-debs.md)); a failing check publishes nothing. The assets are
+`snitchd`, `snitchd.sha256` (the form `sha256sum -c` reads), the tray binary
+`snitch-linux-amd64` and its `snitch-linux-amd64.sha256` (see [The tray](#the-tray) below),
+the Python client's `snitch` and `snitch-trial`, and the deb `snitch_<version>_amd64.deb` with
+its `snitch_<version>_amd64.deb.sha256` — eight assets, published in one step.
+`snitchd -version` prints the tag (`dev` for a plain `go build`), and `snitchd status` shows
+it. The VM repo pins the version and the sha256 of the `snitchd` asset (see **Service** above).
 
 `systemd/snitch-trial*.service`, `snitch-trial.timer` and `snitch-watch.service` belong to the
 Little Snitch client below, not to snitchd.
