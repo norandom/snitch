@@ -324,4 +324,14 @@ change that moves their lines.
   entries (a real record from a registered resolver is learned, then the walk stops; inserts
   made during the walk cannot be undone). Fail-safe rule 1 holds. Optional hardening: bound
   reads by `uh.len <= skb->len - off` in parse_l34 (turns the UDP-length entry into a reject).
+- DEVIATION from Req 6.3 (6.3, open for the user): the three `compression-owner-*` pointer
+  entries learn their A record - walk_step ends an owner name at a pointer without following it
+  and never uses the owner name; the learned bytes are a complete A record from a registered
+  resolver. Fail-safe rule 1 holds. Total deviations from Req 6.3: ten (seven from 6.2, three here).
+- FINDING (6.3, outside this feature's boundary, for the user): `read_qname` accepts at most 15
+  labels (its LABELS_MAX = 16 turns need one for the closing zero), but `rules.ParseName` and
+  examples/rules.toml accept 16, so a 16-label domain rule can never be learned (fail-safe: fewer
+  entries). The design table's "16 labels" limit entry became `limits-15-labels-*` plus
+  `names-16-labels` (refused). Fix either side in a follow-up: ParseName refuses > 15, or the
+  loop runs LABELS_MAX + 1 turns (re-check 3.4 relations and the verifier budget).
 

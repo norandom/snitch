@@ -19,7 +19,8 @@ type corpusCase struct {
 	name    string
 	probes  string                          // what it probes, expected outcome (6.6)
 	frame   func(t *testing.T) []byte       // well-formed builder, then mutators
-	slots   []Slot                          // domain slots for github.com: a wrongful learn shows in the trie
+	slots   []Slot                          // domain slots: a wrongful learn shows in the trie
+	domain  string                          // the slots' domain; empty: github.com
 	skipQ   bool                            // false: the question must have been recorded
 	stats   Stats                           // expected counters (6.4)
 	record  *Record                         // nil: no record (6.3)
@@ -68,7 +69,8 @@ func TestCorpusFramesBuild(t *testing.T) {
 }
 
 func corpusCases() []corpusCase {
-	groups := [][]corpusCase{truncationHeaderCases(), truncationDNSCases(), lengthCases(), countCases(), questionCases()}
+	groups := [][]corpusCase{truncationHeaderCases(), truncationDNSCases(), lengthCases(), countCases(), questionCases(),
+		compressionCases(), nameLimitCases(), recordDataCases(), limitCases()}
 	var out []corpusCase
 	for _, g := range groups {
 		out = append(out, g...)
@@ -87,7 +89,11 @@ func checkCorpusCase(t *testing.T, tc corpusCase) {
 	putResolver(t, c, "2001:db8::1")
 	putResolver(t, c, "127.0.0.1") // the fake resolver of an asked entry
 	if len(tc.slots) > 0 {
-		putDomain(t, c, "github.com", tc.slots)
+		domain := tc.domain
+		if domain == "" {
+			domain = "github.com"
+		}
+		putDomain(t, c, domain, tc.slots)
 	}
 	if tc.asked != "" {
 		runCorpusExchange(t, c, tc)
