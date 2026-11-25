@@ -32,7 +32,7 @@ change that moves their lines.
   - Done when the generation fails and every reported warning is at an authored line (the
     fourteen sites research.md lists), none in the kernel type dump or the helper headers
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
-- [ ] 2.2 Clear the warnings and const findings in the egress decision program
+- [x] 2.2 Clear the warnings and const findings in the egress decision program
   - Make each implicit conversion explicit without changing the conversion performed
   - Mark hook parameters the kernel fixes as unused; put a commented diagnostic region around
     the hooks whose context parameter the helper macro declares

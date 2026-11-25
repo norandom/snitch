@@ -215,8 +215,10 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	__u8 verdict;
 	__u32 rule = 0;
 	__u32 zero = 0;
-	__u32 *k = bpf_map_lookup_elem(&kill, &zero);
-	struct control_state *c = bpf_map_lookup_elem(&control, &zero);
+	// The decision only reads the kill switch and the control state: const pointers to the
+	// map values say so.
+	const __u32 *k = bpf_map_lookup_elem(&kill, &zero);
+	const struct control_state *c = bpf_map_lookup_elem(&control, &zero);
 	__u64 now = bpf_ktime_get_ns();
 	// the exe file as a trusted, acquired reference (kfunc): bpf_d_path needs a trusted
 	// pointer, a walk through task->mm->exe_file is untrusted. Released at the end.
@@ -229,7 +231,9 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	}
 	__u32 *pid_p = bpf_map_lookup_elem(&programs, &ek);
 	__u32 program = pid_p ? *pid_p : 0;
-	__u8 proto = BPF_CORE_READ(sock, sk, sk_protocol);
+	// sk_protocol is a 16-bit field holding an IPPROTO_* number below 256: the explicit cast is
+	// the truncation to the 8-bit proto of rule_key and event that the assignment always did.
+	__u8 proto = (__u8)BPF_CORE_READ(sock, sk, sk_protocol);
 
 	if (k && *k)
 		verdict = V_ALLOW_KILL;
@@ -238,7 +242,7 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	else if (family == AF_INET ? local_v4(*(__u32 *)addr) : local_v6(addr))
 		verdict = V_ALLOW_LOCAL;
 	else {
-		struct rule_val *r = lookup(program, family, proto, dport, addr);
+		const struct rule_val *r = lookup(program, family, proto, dport, addr);
 		if (r) rule = r->id;
 		if (r && r->verdict == 1) verdict = V_ALLOW_RULE;
 		else if (r && r->verdict == 2) verdict = V_DENY_RULE;
@@ -248,7 +252,8 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	struct event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (e) {
 		e->pid = bpf_get_current_pid_tgid() >> 32;
-		e->ppid = BPF_CORE_READ(t, real_parent, tgid);
+		// tgid is a pid_t (int) and never negative: the cast keeps the bits, as before.
+		e->ppid = (__u32)BPF_CORE_READ(t, real_parent, tgid);
 		e->exe_ino = ek.ino;
 		e->exe_dev = ek.dev;
 		e->program = program;
@@ -276,21 +281,29 @@ static __always_inline int decide(struct socket *sock, struct sockaddr *address,
 	return (verdict == V_DENY_RULE || verdict == V_DENY_DEFAULT) ? -EPERM : 0;
 }
 
+// BPF_PROG declares the ctx parameter of the inner function it generates, and these hooks read
+// their arguments through the macro, never through ctx: -Wunused-parameter does not apply to it.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 SEC("lsm/socket_connect")
-int BPF_PROG(socket_connect, struct socket *sock, struct sockaddr *address, int addrlen)
+int BPF_PROG(socket_connect, struct socket *sock, struct sockaddr *address,
+	     int addrlen __attribute__((unused)) /* fixed by the hook signature, not needed */)
 {
 	return decide(sock, address, 0);
 }
 
 // Unconnected UDP (sendto with an address): the connect hook never sees it.
 SEC("lsm/socket_sendmsg")
-int BPF_PROG(socket_sendmsg, struct socket *sock, struct msghdr *msg, int size)
+int BPF_PROG(socket_sendmsg, struct socket *sock, struct msghdr *msg,
+	     int size __attribute__((unused)) /* fixed by the hook signature, not needed */)
 {
 	struct sockaddr *name = BPF_CORE_READ(msg, msg_name);
 	if (!name)
 		return 0;  // connected socket: decided at connect()
 	return decide(sock, name, 1);
 }
+// End of the ctx region opened above socket_connect.
+#pragma clang diagnostic pop
 
 // Byte counting on egress, attached to the cgroup2 root. It only counts: every path returns 1
 // (pass). The verdict belongs to the LSM hooks above; a failure to attach this program leaves
