@@ -40,7 +40,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 13.9, 14.6_
 
 - [ ] 2. Leaf packages
-- [ ] 2.1 (P) Text that may be drawn: the safe type and the sanitiser
+- [x] 2.1 (P) Text that may be drawn: the safe type and the sanitiser
   - A string type that only this package produces; the sanitiser replaces every control
     character, escape, C1 control, direction-changing and invisible formatting character and
     invalid UTF-8 with a visible dot, so one input is one line; a constructor for this
