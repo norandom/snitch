@@ -1,77 +1,76 @@
-# Handover — c-hardening implemented, ci-debs follow-ups open (2026-11-26)
+# Handover — c-hardening validated on the VM, one baseline run open (2026-11-26)
 
-Status (2026-11-25, evening): everything is pushed; `main` = `origin/main`. The first live
-runs are green: lint.yml (fmt, go, shellcheck, ruff, actionlint, linters incl. the bindings
-check) and codeql.yml (go and c-cpp traced, python via the pre-scan copy, 0 open alerts). The
-repository's CodeQL *default setup* was switched off (user decision) because it blocked
-codeql.yml's uploads; its `actions` lane is no longer scanned. Still pending: the c-hardening
-baseline run (below) and the deb lane's first CI run, which happens on the first `v*` tag.
+State: everything is pushed, `main` = `origin/main`, working tree clean. CI on `f149560` is
+green (lint.yml: fmt, go, shellcheck, ruff, actionlint, linters incl. the bindings check;
+codeql.yml: go, c-cpp, python). CodeQL *default setup* is off (user decision 2026-11-25: it
+blocked codeql.yml's uploads; the `actions` lane is no longer scanned).
 
-## Decisions on record (2026-11-25)
+## Next steps, in order
 
-- **The compiler may run in CI as an observer**; artifacts never come from it. Landed as the
-  bindings check and written into `.kiro/steering/tech.md` ("The compiler as observer").
-- **deb dependencies: Suggests-only for KDE, one package** (no `snitch-tray` split). Topic (b).
+1. **c-hardening task 1.2 (baseline record)**: on the dev VM (Debian forky, kernel
+   7.2.6+deb14, bpf LSM active), in the snitch checkout as your user:
 
-## Dependabot (partly fixed 2026-11-25)
+   ```sh
+   git pull
+   stat -c %a /tmp                              # must be 1777; the script refuses otherwise
+   sudo scripts/root-checks.sh --at c1ca575     # the pre-change starting point
+   ```
 
-All alerts were in `.dagger/go.mod` (the CI pipeline module, never shipped). Fixed: grpc
-(1.79.3 -> 1.83.2, all high) and `golang.org/x/net` (0.60.0); commits `3ef4f14`, `f15d84b`.
-Open: 8 otel alerts (4 medium, 4 low: otel/sdk, otel/trace, otlp exporters). They need otel
-1.45+ with otel/log 1.47, but engine v0.21.12 (the newest release) rewrites the module's
-`replace` lines to otel/log v0.16.0, and otel 1.47 with log v0.16 does not compile - so any
-Dependabot PR bumping otel (#1 closed, #2 open) fails every lint job. Wait for a Dagger
-release that drops those replaces (its `main` still has them), or dismiss the 8 as
-"tolerable risk: telemetry exporters of the CI-only pipeline module".
+   Paste the output into the session. Record it in `.kiro/specs/c-hardening/tasks.md`
+   (Implementation Notes), tick 1.2, groups 1 and 8, and run `/kiro-validate-impl c-hardening`.
+   The parser expectations (`internal/dns/prog_root_test.go`) are unchanged since c1ca575, so
+   the baseline should pass `TestDNSProgParser` with the same counters. The c1ca575 tree has no
+   corpus and no `counters` assertions; that is expected.
+2. **Dependabot PR #3** (otel 1.44 -> 1.47 in `.dagger/`, opened 2026-11-25 18:13) fails
+   every lint job, like #1 and #2 before it. Close it, and either dismiss the 8 otel alerts
+   (4 medium, 4 low) as "tolerable risk: telemetry exporters of the CI-only pipeline module" or
+   wait for a Dagger release. Reason: engine v0.21.12 (the newest; Dagger's `main` too)
+   rewrites `.dagger/go.mod`'s `replace` lines to otel/log v0.16.0, and otel 1.47 with log
+   v0.16 does not compile. A `dependabot.yml` ignore for `go.opentelemetry.io/*` in
+   `/.dagger` would stop the reopening. User decision.
+3. **Open decisions**: `-buildmode=pie` for the two Go binaries (static non-PIE today; small
+   gain, changes the release shas); pinning `actionlint` (unpinned via `actionlint-py`).
+4. **First `v*` tag**: the deb lane's first CI run happens there (see the runbook below).
 
+## Done in c-hardening (spec `.kiro/specs/c-hardening/`, record `docs/c-hardening.md`)
 
-## c-hardening: root gates passed 2026-11-26; baseline run open
+Root gates passed 2026-11-26: `sudo scripts/root-checks.sh --at 8300add` on the VM, rc=0:
+both programs load (dns_query 9420, dns_answer 62785 verified instructions), 58/58 corpus
+entries (three short-L3 entries refused by the test run with EINVAL, accepted as `mayRefuse`),
+parser/query/socket-join tests, a 75 s monitor run ending on its own, api-check 0 failed steps,
+`counters` present with every contract counter 0, monitor mode throughout. Closed: 2.4, 3.5,
+4.4, 5.4, 6.1–6.3, 8.3, 9.1 (everything except 1.2 and the group headers 1 and 8).
 
-`sudo scripts/root-checks.sh --at 8300add` on the VM: rc=0 (58/58 corpus, parser tests
-unchanged and passing, 75 s monitor run, api-check 0 failed, all contract counters 0). Tasks
-2.4, 3.5, 4.4, 5.4, 6.1-6.3, 8.3, 9.1 closed. The first run (`f990624`) had found two defects,
-fixed in `8300add` (stale truncation expectations after 9.1; `-api` in `/tmp` chmodded `/tmp`
-to 0755, now refused). Open: task 1.2, the baseline record:
+The first VM run (`--at f990624`) failed and found two defects, fixed in `8300add`:
 
-```sh
-sudo scripts/root-checks.sh --at c1ca575
-```
+- Six truncation entries predated 9.1's UDP-length check (a cut frame keeps the full UDP
+  length and is rejected before `ST_SEEN`). DNS-header cuts now expect nothing counted; the
+  question/record cuts shrink the UDP length (`cutDatagram`) so they still reach the parsers.
+- `snitchd -api <path>` chmods the socket's directory to 0755; the script used `/tmp`, so the
+  run turned the VM's `/tmp` into 0755 (fixed on the VM with `chmod 1777 /tmp`). The daemon now
+  refuses a sticky or world-writable directory (`api off:`, mode untouched;
+  `TestApiListenerRefusesSharedDir`, `examples/api.md`); `scripts/root-checks.sh` uses
+  `/run/snitch-check/` and refuses to start when `/tmp` is not 1777. The deployed service is
+  unaffected (`/run/snitch`, `RuntimeDirectory`).
 
-then `/kiro-validate-impl c-hardening`.
+Decisions on record (2026-11-25):
 
-## c-hardening: decided 2026-11-25 (task group 9)
+- **The compiler may run in CI as an observer**; artifacts never come from it (the bindings
+  check; `.kiro/steering/tech.md`, "The compiler as observer").
+- **deb dependencies: Suggests-only for KDE, one package** (no `snitch-tray` split):
+  `packaging/control` has `Recommends: bpftool, default-dbus-session-bus | dbus-session-bus`,
+  `Suggests: plasma-workspace, breeze-icon-theme`, no `Depends`; ci-debs R4.5 amended.
+- **Req 6.3** amended: the tap rejects a UDP length beyond the packet (9.1); the nine
+  remaining one-field exceptions are listed in `docs/c-hardening.md` "Known limits".
+- **15 labels** max for rule names (9.2), **gofmt** job in lint.yml (9.3), fuzz leftovers
+  (9.4). Still optional: the `internal/dns` reader's `malformed` counter is a plain uint64
+  (make it atomic if it is ever served).
+- **CodeQL**: c-cpp traced (`build-mode: manual`, an observation compile with the runner's
+  clang and libbpf, no `-Werror`, output to `/dev/null`), python via the pre-scan copy
+  `snitch-client.py`; 0 open code-scanning alerts.
 
-- **Req 6.3**: the tap now rejects a UDP length larger than the packet (task 9.1, root run
-  pending); Req 6.3 is amended to name the nine remaining exceptions (`docs/c-hardening.md`
-  "Known limits").
-- **15 labels**: rule names are limited to 15 labels (task 9.2, done).
-- **gofmt in CI**: a `fmt` job in lint.yml (task 9.3, done).
-- **Fuzz leftovers**: survivor check and boundary seeds in the rules fuzzer, exact-length
-  `DecodeContracts` (task 9.4, done). Still optional: the `internal/dns` reader's `malformed`
-  counter is a plain uint64 (atomic if ever served).
-
-## Topic (a) leftovers: PIE (ci-debs follow-up)
-
-1. Done 2026-11-25: CodeQL c-cpp is traced (`build-mode: manual`, an observation compile with
-   the runner's clang and libbpf 1.3, flags without `-Werror`, output to `/dev/null`) and the
-   python lane extracts the client through the pre-scan copy `snitch-client.py`. Extraction
-   only proves on the first live run after push.
-2. Undecided: `-buildmode=pie` for the two Go binaries (static non-PIE today); small gain,
-   changes the release shas.
-
-## Topic (b): deb dependencies (done 2026-11-25)
-
-`packaging/control`: `Recommends: bpftool, default-dbus-session-bus | dbus-session-bus`,
-`Suggests: plasma-workspace, breeze-icon-theme`, no `Depends`; names checked with `apt-cache`
-in forky and 26.04; R4.5 amended; `docs/ci-debs.md` updated. The deb's sha256 changed. The
-maintainer line was corrected earlier (`9c3f5e0`).
-
-## Pending verification (happens only after push)
-
-- First live `lint.yml` run: the four dispatch jobs plus the tag-skipped `linters` job, now
-  with the `bindings` dispatch (cache-cold on runners: apt from snapshot.debian.org + regen).
-- First live `codeql.yml` run: go and c-cpp traced, python through the pre-scan copy.
-- The deb lane's first CI run (~2.5–3 min warm, both distro smokes included).
+Dependabot: grpc (1.79.3 -> 1.83.2, all high) and `golang.org/x/net` 0.60.0 fixed in
+`.dagger/go.mod` (`3ef4f14`, `f15d84b`); only the 8 otel alerts above remain.
 
 ## Release-day runbook
 
@@ -79,26 +78,27 @@ Release note for the next tag (c-hardening 9.2): rule names now have at most 15 
 16-label name in `/etc/snitch/rules.toml` makes snitchd refuse to start (fail-open: nothing
 attached); in the overlay `local.toml` it makes the whole overlay skipped at startup. Before
 upgrading, run `snitchd check -rules /etc/snitch/rules.toml` and check `local.toml`. (The VM's
-deployed rules have their domain rules commented out; no current exposure.)
+deployed rules have their domain rules commented out; no current exposure.) Also note: an
+`-api` path inside a shared directory such as `/tmp` is now refused.
 
 Before tagging: `dagger call rugged --fuzz-duration 30s`, then
 `sudo scripts/root-checks.sh --at <commit to tag>` on the dev VM. Push a `vX.Y.Z` tag →
 `release.yml`: `checks` (lint.yml via workflow_call; linters, incl. the bindings check,
 self-skip on tags) → `release-build` ∥ `deb` lanes → `publish` (eight-file existence loop,
 then the unchanged `gh` pattern; `contents: write` only there). SOURCE_DATE_EPOCH = the tag
-commit's committer time. After publish: the VM repo deliberately re-pins `snitchd`'s sha256
-and may add the deb pin; unit copies in the VM repo are marked copies of this repo's.
+commit's committer time. The deb lane's first CI run (~2.5–3 min warm, both distro smokes)
+happens here. After publish: the VM repo deliberately re-pins `snitchd`'s sha256 and may add
+the deb pin; unit copies in the VM repo are marked copies of this repo's.
 
-## Small leftovers (deliberate)
+## Working notes
 
-- Stray literal tab in `.dagger/smoke.go:141` inside the smoke driver script — cosmetic;
-  tidy in the first commit after a push.
-- `.dagger/go.mod` toolchain floor is Go 1.27.4 (SDK-set, one step above the app's 1.26.8);
-  first module `go vet` in a fresh container needs `GOTOOLCHAIN=auto` to download it.
-- `actionlint` runs unpinned via `actionlint-py` (resolves v1.7.12 at run time); pinning it
-  is a deliberate future decision.
-- The workstation runtime is docker-ce 29.10.1; the module's smoke needs the
-  `--docker-socket` endpoint (path may differ elsewhere; `docs/ci-debs.md` records it).
-  `scripts/bindings-regen.sh --docker` uses the same daemon, no sudo.
-- Workstation toolchain: clang 21.1.8 but libbpf-dev 1.6.3, so host `go generate` fails
-  `snitch.bpf.c`; regenerate with `scripts/bindings-regen.sh --docker --write`.
+- Root checks are batched: the agent has no sudo; the user runs `scripts/root-checks.sh` and
+  pastes the output. The workstation has no BPF LSM (DNS root tests run there, LSM checks only
+  on the VM).
+- Workstation: clang 21.1.8 but libbpf-dev 1.6.3, so host `go generate` fails `snitch.bpf.c`;
+  regenerate with `scripts/bindings-regen.sh --docker --write` (docker-ce 29.10.1, no sudo).
+  `shellcheck` is not on the host PATH: `dagger call lint-all` runs it (~3 min).
+- `.dagger/go.mod` toolchain floor is Go 1.27.4 (SDK-set); a fresh container's first module
+  `go vet` needs `GOTOOLCHAIN=auto`.
+- The module's smoke needs the `--docker-socket` endpoint (`docs/ci-debs.md`).
+- Cosmetic: a stray literal tab in `.dagger/smoke.go:141` inside the smoke driver script.
