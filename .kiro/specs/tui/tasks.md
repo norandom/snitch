@@ -378,7 +378,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 2.2, 3.3_
   - _Requirements: 9.7, 9.8, 9.9, 9.10, 9.11, 13.8_
 
-- [ ] 6.3 `default deny`, `default deny --keep`, `default allow`
+- [x] 6.3 `default deny`, `default deny --keep`, `default allow`
   - `deny` asks for a trial of the configured duration; the daemon's question is printed,
     typed-ahead input is discarded, 0.6 s pass, and only a typed `y` at a terminal continues
     (without a terminal: nothing is started, exit 1); `--keep` asks to keep; `allow` asks to
