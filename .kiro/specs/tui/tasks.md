@@ -178,7 +178,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/table/cover.go, cover_test.go_
   - _Requirements: 2.5, 5.11_
 
-- [ ] 4.4 What `x` stands for
+- [x] 4.4 What `x` stands for
   - One function from a row to either the requests to send or a refusal text, by the plan
     table of the design: address, host and `IP Addresses`, program (two rules, one per
     address family, with the note that the local network stays reachable), the unblock of own
