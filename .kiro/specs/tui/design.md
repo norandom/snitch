@@ -454,8 +454,8 @@ type View struct{ Open map[RowID]bool; Sort Sort; Search string }
 func Rows(s Store, r Rules, v View) []Row
 
 type Rules struct{ Views []api.RuleView; Programs []api.ProgramView; Overlay string }
-type Covering struct{ Rule api.RuleView; Own bool; By Level; Found bool }
-func Cover(r Rules, k Key, at Level) Covering
+type Covering struct{ Rule api.RuleView; Own, Overlay bool; By Level; Found bool }
+func Cover(r Rules, k Key, name string, at Level) Covering
 
 type Plan struct{ Requests []api.Request; Refusal clean.Safe; Unblock bool; Note clean.Safe }
 func MakePlan(row Row, s Store, r Rules, now time.Time) Plan
