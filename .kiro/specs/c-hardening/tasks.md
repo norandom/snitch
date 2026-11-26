@@ -7,7 +7,7 @@ task of each group that changes the kernel sources (2.4, 3.5, 4.4), and again wh
 task changes them; line-bound analyzer suppressions are re-anchored in the same
 change that moves their lines.
 
-- [ ] 1. Foundation: a reproducible starting point
+- [x] 1. Foundation: a reproducible starting point
 - [x] 1.1 Establish the regeneration environment and prove it reproduces the committed bindings
   - Provide an environment with the compiler version the design names, the strip tool and the
     kernel helper headers, either on the host or as the container procedure measured in
@@ -16,7 +16,7 @@ change that moves their lines.
   - Done when the regenerated objects and generated types are byte-identical to the committed
     ones and the exact procedure is written down for the later documentation task
   - _Requirements: 7.5_
-- [ ] 1.2 Record the passing baseline of the existing checks before any change
+- [x] 1.2 Record the passing baseline of the existing checks before any change
   - Run the analyzer check, the ordinary test suite, the root test script (needs root), a
     bounded monitor-mode run and the API check (needs root)
   - Done when each result is recorded as pass, with the tap's counters from the parser tests
@@ -264,7 +264,7 @@ change that moves their lines.
   - _Depends: 7.2, 6.6_
   - _Requirements: 7.1, 7.7, 8.4, 8.6, 9.2_
 
-- [ ] 8. Records and final validation
+- [x] 8. Records and final validation
 - [x] 8.1 Write the feature documentation and bring the affected documents up to date
   - The contract approach at its three levels; how to regenerate so the bindings check
     passes; the command that runs each fuzz test for a chosen duration
@@ -405,5 +405,11 @@ change that moves their lines.
   truncation entries predated 9.1's UDP-length check, and `-api` in `/tmp` made snitchd chmod
   `/tmp` to 0755 (the daemon now refuses a shared directory; the script uses
   `/run/snitch-check`).
-- 1.2 stays open until the baseline run `sudo scripts/root-checks.sh --at c1ca575` is recorded.
+- 1.2 closed 2026-11-26: baseline run `sudo scripts/root-checks.sh --at c1ca575` on the dev VM
+  (kernel 7.2.6+deb14, bpf LSM active), rc=0. Both programs load (dns_query 9046, dns_answer
+  46315 verified instructions); TestDNSProgParser / TestDNSProgQuery / TestDNSProgSocketJoin all
+  PASS with the committed expectations (the file is unchanged since c1ca575, so the counters are
+  the baseline reference); the c1ca575 tree has no corpus and no `counters` assertions, as expected;
+  the 75 s monitor run ended on its own and api-check reported 0 failed steps. With this, every
+  task in the plan is [x], including the group headers 1 and 8.
 

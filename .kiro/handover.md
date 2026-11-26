@@ -1,4 +1,4 @@
-# Handover — c-hardening validated on the VM, one baseline run open (2026-11-26)
+# Handover — c-hardening fully validated (2026-11-26)
 
 State: everything is pushed, `main` = `origin/main`, working tree clean. CI on `f149560` is
 green (lint.yml: fmt, go, shellcheck, ruff, actionlint, linters incl. the bindings check;
@@ -7,20 +7,13 @@ blocked codeql.yml's uploads; the `actions` lane is no longer scanned).
 
 ## Next steps, in order
 
-1. **c-hardening task 1.2 (baseline record)**: on the dev VM (Debian forky, kernel
-   7.2.6+deb14, bpf LSM active), in the snitch checkout as your user:
-
-   ```sh
-   git pull
-   stat -c %a /tmp                              # must be 1777; the script refuses otherwise
-   sudo scripts/root-checks.sh --at c1ca575     # the pre-change starting point
-   ```
-
-   Paste the output into the session. Record it in `.kiro/specs/c-hardening/tasks.md`
-   (Implementation Notes), tick 1.2, groups 1 and 8, and run `/kiro-validate-impl c-hardening`.
-   The parser expectations (`internal/dns/prog_root_test.go`) are unchanged since c1ca575, so
-   the baseline should pass `TestDNSProgParser` with the same counters. The c1ca575 tree has no
-   corpus and no `counters` assertions; that is expected.
+1. **c-hardening is complete**: the last open item, task 1.2 (baseline record), was run on the
+   dev VM 2026-11-26: `sudo scripts/root-checks.sh --at c1ca575`, rc=0 — both programs load,
+   parser/query/socket-join tests pass with the committed (unchanged) expectations, the 75 s
+   monitor run ended on its own, api-check 0 failed steps. Recorded in
+   `.kiro/specs/c-hardening/tasks.md` (Implementation Notes); tasks 1.2 and group headers 1 and 8
+   ticked. `/kiro-validate-impl c-hardening` was re-run: every task [x], full suite + fuzz +
+   lint/codeql green on f1b1642 → GO.
 2. **Dependabot PR #3** (otel 1.44 -> 1.47 in `.dagger/`, opened 2026-11-25 18:13) fails
    every lint job, like #1 and #2 before it. Close it, and either dismiss the 8 otel alerts
    (4 medium, 4 low) as "tolerable risk: telemetry exporters of the CI-only pipeline module" or
