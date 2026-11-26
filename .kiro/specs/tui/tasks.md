@@ -80,7 +80,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/conf/conf.go, conf_test.go_
   - _Requirements: 3.1, 6.5, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7_
 
-- [ ] 2.4 (P) The log file, opened safely
+- [x] 2.4 (P) The log file, opened safely
   - Creates the directory for the user only and the file for the user only; never follows a
     symbolic link; refuses a file or directory that belongs to someone else; narrows an
     existing wider mode; returns the last five lines, sanitised; appends one line with the
