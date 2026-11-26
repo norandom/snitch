@@ -116,7 +116,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/client/client.go, session.go, msg.go, their new tests_
   - _Requirements: 1.9, 10.3, 10.4_
 
-- [ ] 3.2 Whose socket it is, and the daemon's own question
+- [x] 3.2 Whose socket it is, and the daemon's own question
   - An optional delegate reports the uid of the socket's other end; the connection message
     carries it (unknown when no delegate is set)
   - An answer is marked as a question when the daemon's error text ends in `[y/N]`, next to

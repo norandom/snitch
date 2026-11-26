@@ -25,13 +25,25 @@ const (
 )
 
 // refusal is the daemon's text for a write by a reader (examples/api.md "Authorization").
-const refusal = "write requires the operator"
+// question is the suffix of the daemon's own question (examples/api.md).
+const (
+	refusal  = "write requires the operator"
+	question = "[y/N]"
+)
+
+// IsQuestion reports whether a daemon error text is the daemon's own confirmation question.
+func IsQuestion(errText string) bool {
+	return strings.HasSuffix(errText, question)
+}
 
 // Msg is what the client tells the tray's loop.
 type Msg interface{ isMsg() }
 
 // Up says the session is subscribed; its first status follows as Facts.
-type Up struct{}
+type Up struct {
+	PeerUID   uint32
+	PeerKnown bool
+}
 
 // Down says the session is lost: Reason is NotRunning or NotAnswering.
 type Down struct{ Reason string }
@@ -52,14 +64,16 @@ type SummaryLine struct{ Entries []api.Entry }
 type Dropped struct{ Count int }
 
 // Answered is the one answer to a Send: Text on success, otherwise Err (the daemon's error
-// or a local reason). Role is true when Err is the daemon's operator refusal. Reply holds
-// the decoded daemon reply when Config.Table is true, and is nil otherwise.
+// or a local reason). Role is true when Err is the daemon's operator refusal. Question is
+// true when Err ends in "[y/N]". Reply holds the decoded daemon reply when Config.Table is
+// true, and is nil otherwise.
 type Answered struct {
-	Token uint64
-	Text  string
-	Err   string
-	Role  bool
-	Reply *api.Reply
+	Token    uint64
+	Text     string
+	Err      string
+	Role     bool
+	Question bool
+	Reply    *api.Reply
 }
 
 func (Up) isMsg()          {}
@@ -71,10 +85,15 @@ func (SummaryLine) isMsg() {}
 func (Dropped) isMsg()     {}
 func (Answered) isMsg()    {}
 
-// failed is the Answered for an error text; the refusal suffix is the one daemon text the
-// tray interprets (a revalidation trigger of the design).
+// failed is the Answered for an error text; the refusal and question suffixes are the only
+// two daemon texts the client inspects.
 func failed(token uint64, err string) Answered {
-	return Answered{Token: token, Err: err, Role: strings.HasSuffix(err, refusal)}
+	return Answered{
+		Token:    token,
+		Err:      err,
+		Role:     strings.HasSuffix(err, refusal),
+		Question: IsQuestion(err),
+	}
 }
 
 // handle turns one daemon line into messages; it returns a reason when the line ends the
@@ -129,7 +148,7 @@ func (s *session) reply(b []byte, id int) {
 	case id == s.sub:
 		s.sub, s.up = 0, true
 		s.cfg.Log("daemon: up")
-		s.cfg.Sink(Up{})
+		s.cfg.Sink(Up{PeerUID: s.peerUID, PeerKnown: s.peerKnown})
 	case id == s.status:
 		s.status = 0
 		if r.Status == nil {

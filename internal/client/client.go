@@ -31,6 +31,7 @@ type Config struct {
 	BackoffMin time.Duration                                            // 1 s: the first wait before a retry
 	BackoffMax time.Duration                                            // 30 s: the longest wait
 	Table      bool                                                     // subscribe with summary, allow snapshot and attach Reply
+	Peer       func(net.Conn) (uid uint32, ok bool)                     // nil: peer uid not checked
 }
 
 // call is one request handed in by Send with the caller's token.

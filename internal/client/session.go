@@ -40,22 +40,24 @@ type pending struct {
 }
 
 type session struct {
-	cfg    Config
-	c      *Client
-	conn   net.Conn
-	lines  chan line
-	done   chan struct{}
-	wg     sync.WaitGroup
-	id     int             // the last wire id used
-	up     bool            // the subscription was answered
-	sub    int             // the subscribe's id until it is answered, then 0
-	status int             // the status request in flight, 0 when none
-	due    time.Time       // when an unanswered subscribe or status means not answering
-	sentAt time.Time       // when the last status was sent
-	poll   time.Time       // when the next poll is due
-	want   bool            // a status is wanted (poll, state line, dropped)
-	calls  map[int]pending // the callers' requests by wire id
-	noisy  bool            // the first line not understood was logged
+	cfg       Config
+	c         *Client
+	conn      net.Conn
+	lines     chan line
+	done      chan struct{}
+	wg        sync.WaitGroup
+	id        int             // the last wire id used
+	up        bool            // the subscription was answered
+	sub       int             // the subscribe's id until it is answered, then 0
+	status    int             // the status request in flight, 0 when none
+	due       time.Time       // when an unanswered subscribe or status means not answering
+	sentAt    time.Time       // when the last status was sent
+	poll      time.Time       // when the next poll is due
+	want      bool            // a status is wanted (poll, state line, dropped)
+	calls     map[int]pending // the callers' requests by wire id
+	noisy     bool            // the first line not understood was logged
+	peerUID   uint32
+	peerKnown bool
 }
 
 // session dials and runs one session; it reports why it ended and whether it was up.
@@ -66,8 +68,14 @@ func (c *Client) session(ctx context.Context) (reason string, up bool) {
 	if err != nil {
 		return NotRunning, false
 	}
+	var peerUID uint32
+	var peerKnown bool
+	if c.cfg.Peer != nil {
+		peerUID, peerKnown = c.cfg.Peer(conn)
+	}
 	s := &session{cfg: c.cfg, c: c, conn: conn, lines: make(chan line),
-		done: make(chan struct{}), calls: map[int]pending{}}
+		done: make(chan struct{}), calls: map[int]pending{},
+		peerUID: peerUID, peerKnown: peerKnown}
 	s.wg.Go(s.read)
 	reason = s.run(ctx)
 	s.close(ctx)
