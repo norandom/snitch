@@ -156,7 +156,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 2.2_
   - _Requirements: 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 4.2 Order and search
+- [x] 4.2 Order and search
   - Activity order within every level, frozen between re-sorts, rows that appeared since on
     top; name order without regard to case; a search that keeps the matching rows and their
     parents, matching the path (program, host, address) without regard to case
