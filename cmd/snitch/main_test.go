@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"path/filepath"
 	"strings"
@@ -64,12 +65,64 @@ func TestVersionViolationExits70WithTheStack(t *testing.T) {
 
 func TestUsageErrorsExitTwo(t *testing.T) {
 	cases := [][]string{
-		nil, {"nonsense"}, {"-bogus"}, {"-version", "extra"}, {"Tray"}, {""},
+		{"nonsense"}, {"-bogus"}, {"-version", "extra"}, {"Tray"}, {""},
 	}
 	for _, args := range cases {
 		code, out, errOut := run(args...)
 		if code != exitUsage || out != "" || !strings.Contains(errOut, "usage: snitch") {
 			t.Fatalf("%q: want exit 2, no stdout, the usage line; got %d, %q, %q", args, code, out, errOut)
+		}
+	}
+}
+
+func TestUsageNamesAllVerbs(t *testing.T) {
+	code, out, errOut := run("unknown-verb")
+	if code != exitUsage || out != "" {
+		t.Fatalf("want exit 2 and no stdout, got %d, %q", code, out)
+	}
+	for _, want := range []string{"usage: snitch", "egress", "status", "default", "tray", "-version"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("usage output %q missing %q", errOut, want)
+		}
+	}
+}
+
+func TestDispatchNoArgAndStubVerbs(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"overview", nil, "not built yet"},
+		{"egress", []string{"egress"}, "not built yet"},
+		{"status", []string{"status"}, "not built yet"},
+		{"default", []string{"default"}, "not built yet"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, out, errOut := run(tc.args...)
+			if code != exitFail || out != "" || !strings.Contains(errOut, tc.want) {
+				t.Fatalf("%q: want exit 1, no stdout, %q; got %d, %q, %q", tc.args, tc.want, code, out, errOut)
+			}
+			if strings.Count(errOut, "\n") != 1 {
+				t.Fatalf("%q: want one stderr line, got %q", tc.args, errOut)
+			}
+		})
+	}
+}
+
+func TestHardenFailureExitsOne(t *testing.T) {
+	orig := setNonDumpable
+	setNonDumpable = func() error { return errors.New("prctl refused") }
+	t.Cleanup(func() { setNonDumpable = orig })
+
+	for _, args := range [][]string{nil, {"-version"}, {"tray"}, {"status"}} {
+		code, out, errOut := run(args...)
+		if code != exitFail || out != "" {
+			t.Fatalf("%q: want exit 1 and no stdout, got %d, %q", args, code, out)
+		}
+		if strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "prctl refused") {
+			t.Fatalf("%q: want one stderr line with error, got %q", args, errOut)
 		}
 	}
 }

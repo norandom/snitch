@@ -407,7 +407,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 13.9_
 
 - [ ] 7. Integration: the binary
-- [ ] 7.1 Hardening first, then the verbs
+- [x] 7.1 Hardening first, then the verbs
   - The process makes itself non-dumpable before anything else, for every verb including the
     tray; a failure is one line and exit 1
   - No argument now means the overview; `egress`, `status` and `default` are verbs; an
