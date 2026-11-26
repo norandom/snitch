@@ -34,21 +34,18 @@ const (
 
 // Row is one visible line of the connection tree with aggregated counts and sanitised text.
 type Row struct {
-	ID      RowID
-	Parent  RowID
-	Level   Level
-	Depth   int
-	Title   clean.Safe
-	Open    bool
-	HasKids bool
-	Last    time.Time
-	Sent    uint64
-	Rate    float64
-	Allow   uint64
-	Deny    uint64
-	Verdict clean.Safe
-	Blocked bool
-	Keys    []Key
+	ID, Parent    RowID
+	Level         Level
+	Depth         int
+	Title         clean.Safe
+	Open, HasKids bool
+	Last          time.Time
+	Sent          uint64
+	Rate          float64
+	Allow, Deny   uint64
+	Verdict       clean.Safe
+	Blocked       bool
+	Keys          []Key
 }
 
 // Sort configures row ordering within each level.
@@ -78,46 +75,93 @@ type leaf struct {
 }
 
 type progGroup struct {
-	who     string
-	isPath  bool
-	all     []leaf
-	hosts   map[string][]leaf
-	unnamed []leaf
+	who          string
+	isPath       bool
+	all, unnamed []leaf
+	hosts        map[string][]leaf
 }
 
-type summary struct {
-	last    time.Time
-	sent    uint64
-	rate    float64
-	allow   uint64
-	deny    uint64
-	verdict clean.Safe
-	keys    []Key
-}
-
-// Rows returns the visible rows of s in tree order for v.
-func Rows(s Store, _ Rules, v View) []Row {
+// Rows returns the visible rows of s in tree order for v, sorted at each level, filtered by
+// v.Search, and marked Blocked where an effective deny rule covers the row.
+func Rows(s Store, r Rules, v View) []Row {
 	if s.Len() == 0 {
 		return nil
 	}
 	progs, bucket := groupEntries(s)
-	tops := topRows(progs, bucket, v.Open)
+	searching := v.Search != ""
+	tops := sortRows(topRows(progs, bucket, v.Open), v.Sort)
 	out := make([]Row, 0, len(tops))
 	for _, top := range tops {
+		top.Blocked = rowBlocked(top, s, r)
+		if searching && top.HasKids {
+			top.Open = true
+		}
 		out = append(out, top)
 		if top.Level != Program || !top.Open {
 			continue
 		}
-		pg := progs[top.Keys[0].Who]
-		mids, midLeaves := midRows(pg, top.ID, v.Open)
-		for _, mid := range mids {
-			out = append(out, mid)
-			if mid.Open {
-				out = append(out, leafRows(midLeaves[mid.ID], mid.ID)...)
-			}
+		out = appendChildren(out, progs[top.Keys[0].Who], top.ID, s, r, v)
+	}
+	if searching {
+		return Filter(out, v.Search)
+	}
+	return out
+}
+
+func appendChildren(out []Row, pg *progGroup, parent RowID, s Store, r Rules, v View) []Row {
+	searching := v.Search != ""
+	mids, midLeaves := midRows(pg, parent, v.Open)
+	for _, mid := range sortRows(mids, v.Sort) {
+		mid.Blocked = rowBlocked(mid, s, r)
+		if searching && mid.HasKids {
+			mid.Open = true
+		}
+		out = append(out, mid)
+		if !mid.Open {
+			continue
+		}
+		for _, lf := range sortRows(leafRows(midLeaves[mid.ID], mid.ID), v.Sort) {
+			lf.Blocked = rowBlocked(lf, s, r)
+			out = append(out, lf)
 		}
 	}
 	return out
+}
+
+func rowBlocked(row Row, s Store, r Rules) bool {
+	if len(r.Views) == 0 || len(row.Keys) == 0 || row.Level == Bucket {
+		return false
+	}
+	if row.Level == Program {
+		return progBlocked(row.Keys, r)
+	}
+	for _, k := range row.Keys {
+		e, _ := s.Get(k)
+		if !isBlocked(r, k, e.Name, Address) {
+			return false
+		}
+	}
+	return true
+}
+
+func progBlocked(keys []Key, r Rules) bool {
+	who := keys[0].Who
+	has4, has6 := rowFamilies(keys)
+	if !has4 && !has6 {
+		return isBlocked(r, Key{Who: who}, "", Program)
+	}
+	return (!has4 || isBlocked(r, Key{Who: who, Addr: "0.0.0.0"}, "", Program)) &&
+		(!has6 || isBlocked(r, Key{Who: who, Addr: "::"}, "", Program))
+}
+
+func isBlocked(r Rules, k Key, name string, at Level) bool {
+	if at == Address {
+		if addr, ok := parseKeyAddr(k.Addr); ok && ask.Local(addr) {
+			return false
+		}
+	}
+	cov := Cover(r, k, name, at)
+	return cov.Found && cov.Rule.Verdict == "deny"
 }
 
 func groupEntries(s Store) (map[string]*progGroup, []leaf) {
@@ -131,11 +175,7 @@ func groupEntries(s Store) (map[string]*progGroup, []leaf) {
 		}
 		pg := progs[k.Who]
 		if pg == nil {
-			pg = &progGroup{
-				who:    k.Who,
-				isPath: e.Program == ask.Unknown && e.Path != "",
-				hosts:  make(map[string][]leaf),
-			}
+			pg = &progGroup{who: k.Who, isPath: e.Program == ask.Unknown && e.Path != "", hosts: make(map[string][]leaf)}
 			progs[k.Who] = pg
 		}
 		pg.all = append(pg.all, lf)
@@ -189,34 +229,26 @@ func leafRows(leaves []leaf, parent RowID) []Row {
 }
 
 func makeRow(id, parent RowID, lvl Level, depth int, title clean.Safe, open, hasKids bool, leaves []leaf) Row {
-	sum := aggregate(leaves)
-	return Row{
-		ID: id, Parent: parent, Level: lvl, Depth: depth, Title: title,
-		Open: open && hasKids, HasKids: hasKids, Last: sum.last,
-		Sent: sum.sent, Rate: sum.rate, Allow: sum.allow, Deny: sum.deny,
-		Verdict: sum.verdict, Keys: sum.keys,
-	}
-}
-
-func aggregate(leaves []leaf) summary {
 	sorted := slices.Clone(leaves)
 	slices.SortFunc(sorted, compareLeaf)
-	var out summary
-	out.keys = make([]Key, len(sorted))
+	r := Row{
+		ID: id, Parent: parent, Level: lvl, Depth: depth, Title: title,
+		Open: open && hasKids, HasKids: hasKids, Keys: make([]Key, len(sorted)),
+	}
 	for i, lf := range sorted {
-		out.keys[i] = lf.key
-		out.sent += lf.entry.BytesSent
-		out.rate += lf.entry.Rate
-		out.allow += lf.entry.AllowCount
-		out.deny += lf.entry.DenyCount
-		if lf.last.After(out.last) {
-			out.last = lf.last
+		r.Keys[i] = lf.key
+		r.Sent += lf.entry.BytesSent
+		r.Rate += lf.entry.Rate
+		r.Allow += lf.entry.AllowCount
+		r.Deny += lf.entry.DenyCount
+		if lf.last.After(r.Last) {
+			r.Last = lf.last
 		}
-		if out.verdict == "" && lf.entry.Verdict != "" {
-			out.verdict = clean.Text(lf.entry.Verdict)
+		if r.Verdict == "" && lf.entry.Verdict != "" {
+			r.Verdict = clean.Text(lf.entry.Verdict)
 		}
 	}
-	return out
+	return r
 }
 
 func isBucket(e api.Entry) bool {
@@ -224,13 +256,7 @@ func isBucket(e api.Entry) bool {
 }
 
 func parseLastSeen(s string) time.Time {
-	if s == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return time.Time{}
-	}
+	t, _ := time.Parse(time.RFC3339Nano, s)
 	return t
 }
 
@@ -262,26 +288,10 @@ func tupleID(prefix string, parts ...string) RowID {
 }
 
 func compareLeaf(a, b leaf) int {
-	if !a.last.Equal(b.last) {
-		if a.last.After(b.last) {
-			return -1
-		}
-		return 1
-	}
-	return cmp.Or(
-		cmp.Compare(a.key.Who, b.key.Who),
-		cmp.Compare(a.key.Addr, b.key.Addr),
-		cmp.Compare(a.key.Proto, b.key.Proto),
-		cmp.Compare(a.key.Port, b.key.Port),
-	)
+	return cmp.Or(b.last.Compare(a.last), cmp.Compare(a.key.Who, b.key.Who),
+		cmp.Compare(a.key.Addr, b.key.Addr), cmp.Compare(a.key.Proto, b.key.Proto), cmp.Compare(a.key.Port, b.key.Port))
 }
 
 func compareRow(a, b Row) int {
-	if !a.Last.Equal(b.Last) {
-		if a.Last.After(b.Last) {
-			return -1
-		}
-		return 1
-	}
-	return cmp.Compare(a.ID, b.ID)
+	return cmp.Or(b.Last.Compare(a.Last), cmp.Compare(a.ID, b.ID))
 }

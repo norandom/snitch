@@ -141,7 +141,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/client/clienttest/*.go_
   - _Requirements: 15.2_
 
-- [ ] 4. The connection table as data
+- [x] 4. The connection table as data
 - [x] 4.1 Entries as a tree of rows
   - A store of the daemon's entries by their key, replaced by a snapshot and updated by a
     summary; rows on three levels (program, host, address with port and protocol), addresses
@@ -203,7 +203,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/table/egress.go, egress_test.go_
   - _Requirements: 4.3, 4.4, 4.5_
 
-- [ ] 4.6 Rows carry order, search and block markers
+- [x] 4.6 Rows carry order, search and block markers
   - The row builder applies the chosen order and the search to every level and sets each
     row's block marker from the covering rules: an address row by its own or an enclosing
     rule, a host or `IP Addresses` row when all its addresses are blocked, a program row by a
