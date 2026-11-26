@@ -1,0 +1,24 @@
+ snitch | last 1h | 1 program | sort: activity 10s | mode: monitor | /run/snitch/snitch.sock
+      connection                       last    sent    ok/denied  verdict
+ [ ]  > /home/user/bin/tool             now      1K          1/0  allow-monitor
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ path      /home/user/bin/tool
+ program   unknown  /home/user/bin/tool  [undeclared]
+ remote    -  addr 1.1.1.1  port 443  tcp
+ traffic   sent 1K  rate 0B/s  last allowed now  last denied -
+ mode      monitor
+ rule      (none)
+
+────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+ ↑↓:move →:open ←:close x:block t:win s/S:sort /:search e:graph T/K/E/U q:quit

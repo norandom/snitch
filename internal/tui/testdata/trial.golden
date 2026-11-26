@@ -1,0 +1,24 @@
+ snitch | last 1h | 1 program | sort: activity 10s | mode: enforce (trial until 12:10, 9m30s left) | /run/snitch/snitch.sock
+      connection                       last    sent    ok/denied  verdict
+ [ ]  > curl                            30s      4K         12/0  allow-rule
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ path      curl
+ program   curl  /usr/bin/curl
+ remote    api.example.com  addr 1.1.1.1  port 443  tcp
+ traffic   sent 4K  rate 512B/s  last allowed 30s  last denied -
+ mode      enforce (trial until 12:10, 9m30s left)
+ rule      (none)
+
+────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+ ↑↓:move →:open ←:close x:block t:win s/S:sort /:search e:graph T/K/E/U q:quit

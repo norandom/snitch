@@ -310,7 +310,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/tui/feed.go (the event and state branches), log_test.go_
   - _Requirements: 7.1, 7.3, 7.4, 7.5_
 
-- [ ] 5.7 Drawing the overview
+- [x] 5.7 Drawing the overview
   - The header (window, number of programs, sort mode, mode with a running trial's deadline
     and remaining time, the socket path, the search text, the stale and foreign marks, and
     that everything is allowed with the reason while the kill switch is set or the heartbeat

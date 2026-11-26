@@ -83,8 +83,5 @@ func renderGraph(m Model, now time.Time) Screen {
 
 // renderOverview is filled by 5.7.
 func renderOverview(m Model, now time.Time) Screen {
-	return Screen{
-		Title: appTitle,
-		Lines: []Line{{{Text: clean.Const("overview"), Style: Head}}},
-	}
+	return drawOverview(m, now)
 }

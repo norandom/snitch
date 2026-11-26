@@ -8,6 +8,7 @@ package tui
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/norandom/snitch/internal/clean"
@@ -17,25 +18,29 @@ import (
 
 // Update applies msg to m at now and returns the updated Model and any outbound effects.
 func Update(m Model, msg any, now time.Time) (Model, []Effect) {
+	var next Model
+	var fx []Effect
 	switch v := msg.(type) {
 	case client.Msg:
-		return updateClient(m, v, now)
+		next, fx = updateClient(m, v, now)
 	case Key:
-		return onKey(m, v, now)
+		next, fx = onKey(m, v, now)
 	case Paste:
-		return onPaste(m, v), nil
+		next = onPaste(m, v)
 	case Resize:
-		return onResize(m, v), nil
+		next = onResize(m, v)
 	case Tick:
-		return onTick(m, now)
+		next, fx = onTick(m, now)
 	case LogFailed:
-		return onLogFailed(m, v), nil
+		next = onLogFailed(m, v)
 	case Inspected:
-		return onInspected(m, v), nil
+		next = onInspected(m, v)
+		return next, nil
 	default:
 		contract.Require(false, fmt.Sprintf("tui.Update: unknown message %T", msg))
 		return m, nil
 	}
+	return emitInspectIfNeeded(next, fx)
 }
 
 func updateClient(m Model, msg client.Msg, now time.Time) (Model, []Effect) {
@@ -76,5 +81,15 @@ func onResize(m Model, r Resize) Model {
 	return m
 }
 
-// Named message stub filled by task 5.7.
-func onInspected(m Model, _ Inspected) Model { return m }
+func onInspected(m Model, in Inspected) Model {
+	if cur, ok := m.inspected[in.Path]; in.Path == "" || (ok && cur == in.Loose) {
+		return m
+	}
+	next := maps.Clone(m.inspected)
+	if next == nil {
+		next = make(map[string]bool, 1)
+	}
+	next[in.Path] = in.Loose
+	m.inspected = next
+	return m
+}
