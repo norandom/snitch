@@ -346,7 +346,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 4.1, 4.2, 4.6, 4.7, 4.8, 4.9, 4.10_
 
 - [ ] 6. The terminal adapter and the one-shot verbs
-- [ ] 6.1 Bubble Tea around the model
+- [x] 6.1 Bubble Tea around the model
   - A job that runs the program on the alternate screen without mouse and cursor, with a
     constant window title; key presses, pastes and sizes become the model's messages (paste
     markers are dropped); one command waits on the inbox, drains what is waiting into one
