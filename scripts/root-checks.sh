@@ -32,6 +32,10 @@ done
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 2; }
 user=${SUDO_USER:-}
 [ -n "$user" ] && [ "$user" != root ] || { echo "run via sudo from your own user"; exit 2; }
+case "$(stat -c %a /tmp)" in
+  1777) ;;
+  *) echo "/tmp is mode $(stat -c %a /tmp), not 1777; restore it first: sudo chmod 1777 /tmp"; exit 2 ;;
+esac
 if [ -n "$at" ]; then
   wt=$(sudo -u "$user" mktemp -d /tmp/root-checks.XXXXXX)
   sudo -u "$user" git -C "$repo" worktree add -q --detach "$wt" "$at" || { echo "no such revision: $at"; exit 2; }
@@ -42,7 +46,9 @@ if [ -n "$at" ]; then
 fi
 cd "$repo" || exit 2
 bin=$(sudo -u "$user" mktemp /tmp/snitchd-ch.XXXXXX)
-sock=/tmp/snitchd-ch.sock
+# The socket's own directory: snitchd sets it to 0755 (and refuses a shared one like /tmp).
+sockdir=/run/snitch-check
+sock=$sockdir/api.sock
 status_file=/tmp/snitchd-ch.status
 rc=0
 
@@ -78,7 +84,8 @@ restore() {
     *) [ -e "$kill_map" ] && bpftool map update pinned "$kill_map" key 0 0 0 0 value 0 0 0 0 ;;
   esac
   [ "$was_active" = yes ] && systemctl start snitchd.service
-  rm -f "$sock"
+  rm -rf "$sockdir"
+  rm -f "$bin"
   [ -n "${wt:-}" ] && sudo -u "$user" git -C "$repo_main" worktree remove --force "$wt"
 }
 trap restore EXIT INT TERM

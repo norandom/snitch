@@ -297,6 +297,12 @@ newer kernels refuse such a frame in `BPF_PROG_TEST_RUN` with EINVAL before the 
 Either outcome is accepted, and nothing may be counted, learned or mirrored in either case.
 `truncation-ipv4-ihl-beyond-frame` is the network-header case that always reaches the tap.
 
+A cut frame keeps the UDP length of the whole datagram, which the tap rejects as a length
+beyond the packet before anything is counted (task 9.1). The cuts that probe the question and
+the records therefore also shrink the UDP length to what the frame holds (`cutDatagram`), so
+they still reach the name and record parsers; the two DNS-header cuts count nothing either way
+(an honest length there is below the 20-byte minimum).
+
 ### Known limits
 
 The corpus records what the tap does, including where that falls short of "a malformed

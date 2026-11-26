@@ -14,7 +14,9 @@ daemon never wraps and never pretty-prints.
 * Socket: `/run/snitch/api.sock`, mode 0666 in a 0755 directory (the unit's
   `RuntimeDirectoryMode=0755`; the status file next to it stays 0600). `-api <path>` moves it,
   `-api ""` turns the API off; the daemon runs without it when the socket cannot be created
-  (one `api off:` line in the journal, the kernel side is unaffected).
+  (one `api off:` line in the journal, the kernel side is unaffected). The socket's directory
+  is set to 0755, so it must be a directory of its own: a shared one (sticky or
+  world-writable, like `/tmp`) is refused with `api off:` and left unchanged.
 * This VM's `nc` is netcat-traditional and has no `-U`, so the check script and these notes use
   python3. The snippet sends one request line (argument 1) and prints every line the daemon
   sends for N seconds (argument 2): a `status` round trip, or a subscription you watch.

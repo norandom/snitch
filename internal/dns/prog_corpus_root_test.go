@@ -149,11 +149,19 @@ func cutAt(base func(*testing.T) []byte, n int) func(*testing.T) []byte {
 	return func(t *testing.T) []byte { return truncateAt(t, base(t), n) }
 }
 
-// cutBeforeEnd drops the last k bytes of the base frame.
-func cutBeforeEnd(base func(*testing.T) []byte, k int) func(*testing.T) []byte {
+// cutDatagram cuts an IPv4 frame to n bytes and sets the UDP length to the bytes left after the
+// IPv4 header: a short but honest datagram, which parse_l34 lets through to the DNS parser.
+func cutDatagram(base func(*testing.T) []byte, n int) func(*testing.T) []byte {
 	return func(t *testing.T) []byte {
-		f := base(t)
-		return truncateAt(t, f, len(f)-k)
+		f := truncateAt(t, base(t), n)
+		return setU16At(t, f, udp4LenOff, uint16(n-ethLen-ip4Len))
+	}
+}
+
+// cutDatagramBeforeEnd is cutDatagram at k bytes before the base frame's end.
+func cutDatagramBeforeEnd(base func(*testing.T) []byte, k int) func(*testing.T) []byte {
+	return func(t *testing.T) []byte {
+		return cutDatagram(base, len(base(t))-k)(t)
 	}
 }
 
@@ -191,28 +199,32 @@ func truncationHeaderCases() []corpusCase {
 	}
 }
 
-// Cuts after the UDP header: the datagram is seen (ST_SEEN) from a registered resolver.
-//   - inside the DNS header: the header load fails, dns_answer returns with no further counter;
+// Cuts after the UDP header. A cut keeps the UDP length the whole datagram had, which parse_l34
+// (bpf/dns.bpf.c) rejects as a length beyond the packet before ST_SEEN (c-hardening 9.1), so
+// the cuts that probe the parser further in also shrink the UDP length to what the frame holds
+// (cutDatagram):
+//   - inside the DNS header: the honest UDP length is below 8+12, rejected before ST_SEEN either
+//     way, so nothing is counted;
 //   - inside the question name: read_qname's label or name load fails, it returns 0 and
 //     dns_answer counts ST_NAME_TOO_LONG;
 //   - inside qtype/qclass, a record header or record data: the question name reads whole, the
 //     walk starts and walk_step stops on the failed load (err 1, 4 or 5) before any address
 //     is stored, so ST_PARSED counts, rec->n stays 0 and the record is discarded.
 func truncationDNSCases() []corpusCase {
-	seen, parsed := Stats{Seen: 1}, Stats{Seen: 1, Parsed: 1}
+	parsed := Stats{Seen: 1, Parsed: 1}
 	return []corpusCase{
-		{name: "truncation-dns-header-ipv4", frame: cutAt(v4Answer, dns4Off+dnsHdrLen/2), slots: corpusSlots, skipQ: true, stats: seen,
-			probes: "IPv4 frame ends inside the DNS header: passes, seen only, nothing learned"},
-		{name: "truncation-dns-header-ipv6", frame: cutAt(v6Answer, dns6Off+dnsHdrLen/2), slots: corpusSlots, skipQ: true, stats: seen,
-			probes: "IPv6 frame ends inside the DNS header: passes, seen only, nothing learned"},
-		{name: "truncation-question-name", frame: cutAt(v4Answer, dns4Off+dnsHdrLen+5), slots: corpusSlots, skipQ: true,
+		{name: "truncation-dns-header-ipv4", frame: cutAt(v4Answer, dns4Off+dnsHdrLen/2), slots: corpusSlots, skipQ: true,
+			probes: "IPv4 frame ends inside the DNS header: passes, nothing counted (UDP length rejected), nothing learned"},
+		{name: "truncation-dns-header-ipv6", frame: cutAt(v6Answer, dns6Off+dnsHdrLen/2), slots: corpusSlots, skipQ: true,
+			probes: "IPv6 frame ends inside the DNS header: passes, nothing counted (UDP length rejected), nothing learned"},
+		{name: "truncation-question-name", frame: cutDatagram(v4Answer, dns4Off+dnsHdrLen+5), slots: corpusSlots, skipQ: true,
 			stats:  Stats{Seen: 1, NameTooLong: 1},
 			probes: "frame ends inside the question name: passes, counted as name too long, nothing learned"},
-		{name: "truncation-question-type", frame: cutAt(v4Answer, dns4Off+dnsHdrLen+qnameWire+1), slots: corpusSlots, skipQ: true, stats: parsed,
+		{name: "truncation-question-type", frame: cutDatagram(v4Answer, dns4Off+dnsHdrLen+qnameWire+1), slots: corpusSlots, skipQ: true, stats: parsed,
 			probes: "frame ends inside qtype/qclass: passes, parsed with no record walked, nothing learned, no record"},
-		{name: "truncation-record-header", frame: cutBeforeEnd(v4Answer, 4+5), slots: corpusSlots, skipQ: true, stats: parsed,
+		{name: "truncation-record-header", frame: cutDatagramBeforeEnd(v4Answer, 4+5), slots: corpusSlots, skipQ: true, stats: parsed,
 			probes: "frame ends inside the answer's fixed header: passes, parsed, no address, nothing learned, no record"},
-		{name: "truncation-record-data", frame: cutBeforeEnd(v4Answer, 2), slots: corpusSlots, skipQ: true, stats: parsed,
+		{name: "truncation-record-data", frame: cutDatagramBeforeEnd(v4Answer, 2), slots: corpusSlots, skipQ: true, stats: parsed,
 			probes: "frame ends inside the A record's address: passes, parsed, no address, nothing learned, no record"},
 	}
 }

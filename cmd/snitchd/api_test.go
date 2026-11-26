@@ -165,6 +165,31 @@ func TestApiListenerShape(t *testing.T) {
 	}
 }
 
+// A shared directory (sticky or world-writable, like /tmp) is refused with one line and keeps
+// its mode: the daemon never takes write access away from other users.
+func TestApiListenerRefusesSharedDir(t *testing.T) {
+	for _, mode := range []os.FileMode{os.ModeSticky | 0o777, 0o777, os.ModeSticky | 0o755} {
+		dir := filepath.Join(t.TempDir(), "shared")
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, mode); err != nil {
+			t.Fatal(err)
+		}
+		var logs []string
+		if _, ok := listenAPI(filepath.Join(dir, "api.sock"), func(m string) { logs = append(logs, m) }); ok {
+			t.Fatalf("%o: listened in a shared directory", mode)
+		}
+		if len(logs) != 1 || !strings.Contains(logs[0], "shared directory") {
+			t.Fatalf("%o: logs %q", mode, logs)
+		}
+		st, err := os.Stat(dir)
+		if err != nil || st.Mode()&(os.ModePerm|os.ModeSticky) != mode {
+			t.Fatalf("%o: dir now %v %v", mode, st.Mode(), err)
+		}
+	}
+}
+
 // The hooks themselves: setMode and publish call their delegates (nil-safe, see the other tests).
 func TestApiHooksFire(t *testing.T) {
 	var calls []string

@@ -1,4 +1,4 @@
-# Handover — c-hardening implemented, ci-debs follow-ups open (2026-11-25)
+# Handover — c-hardening implemented, ci-debs follow-ups open (2026-11-26)
 
 Status (2026-11-25, evening): everything is pushed; `main` = `origin/main`. The first live
 runs are green: lint.yml (fmt, go, shellcheck, ruff, actionlint, linters incl. the bindings
@@ -25,17 +25,31 @@ release that drops those replaces (its `main` still has them), or dismiss the 8 
 "tolerable risk: telemetry exporters of the CI-only pipeline module".
 
 
-## c-hardening: root gates not yet run
+## c-hardening: root gates — first VM run 2026-11-26 failed, fixed, rerun pending
 
-Run on the dev VM (BPF LSM active), as your user through sudo, and paste the output:
+First run on the VM (`--at f990624`, kernel 7.2.6, bpf LSM active): load, parser, query and
+socket-join tests passed; 52 of 58 corpus entries passed; the bounded monitor run ended on its
+own (exit 0) with every `counters` value at zero. Two defects, both fixed in the next commit:
+
+1. Six truncation entries expected `Seen: 1`, but a cut frame keeps the whole datagram's UDP
+   length, which task 9.1's check now rejects before `ST_SEEN`. The DNS-header cuts now expect
+   nothing counted; the question/record cuts shrink the UDP length (`cutDatagram`) so they
+   still reach the parsers. The tap itself was right.
+2. `snitchd -api` chmods the socket's directory to 0755; the script put the socket in `/tmp`,
+   so the run took `/tmp` from 1777 to 0755 (`mktemp` as the user then failed, api-check
+   could not run). The daemon now refuses a shared directory (sticky or world-writable) with
+   `api off:` and leaves it alone; the script uses `/run/snitch-check/` and refuses to start
+   when `/tmp` is not 1777. The deployed service is unaffected (`/run/snitch`, its own dir).
+
+On the VM, once: `sudo chmod 1777 /tmp`, `git worktree prune`, remove
+`/tmp/root-checks.*` and `/tmp/snitchd-ch.*`. Then rerun:
 
 ```sh
-sudo scripts/root-checks.sh --at <HEAD>
+sudo scripts/root-checks.sh --at origin/main
 ```
 
-It proves 1.2, 2.4, 3.5, 4.4, 5.4, 6.1–6.3 and the root half of 8.3 (DNS root tests with the
-58-frame corpus, a 75 s bounded monitor run, `scripts/api-check.sh` incl. the `counters`
-object at zero). Those tasks stay `[ ]` until the output proves them. Never enforce mode.
+It proves 1.2, 2.4, 3.5, 4.4, 5.4, 6.1–6.3 and the root half of 8.3. Those tasks stay `[ ]`
+until a passing output. Never enforce mode.
 
 ## c-hardening: decided 2026-11-25 (task group 9)
 

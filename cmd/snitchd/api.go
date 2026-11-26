@@ -159,6 +159,16 @@ func listenUnix(path string) (*net.UnixListener, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
+	// The socket gets a directory of its own, set to 0755. A shared directory (sticky or
+	// world-writable, like /tmp) is refused, never changed: chmod 0755 there would take
+	// every other user's write access away.
+	st, err := os.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if st.Mode()&(os.ModeSticky|0o002) != 0 {
+		return nil, fmt.Errorf("%s is a shared directory; give the socket a directory of its own", dir)
+	}
 	if err := os.Chmod(dir, 0o755); err != nil {
 		return nil, err
 	}
