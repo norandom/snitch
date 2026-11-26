@@ -214,7 +214,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 3.4, 3.9, 5.11_
 
 - [ ] 5. The UI state machine (pure, no terminal)
-- [ ] 5.1 The model, the key table and the guards
+- [x] 5.1 The model, the key table and the guards
   - The model as a value with every field the design lists, the inbound messages and outbound
     effects of the design, the screen as lines of styled spans of safe text; one named stub
     per key and per message, which the later tasks of this group fill, and a render function
