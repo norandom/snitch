@@ -1,29 +1,38 @@
-# Handover — c-hardening fully validated (2026-11-26)
+# Handover — v1.0.0 shipped (2026-11-26)
 
-State: everything is pushed, `main` = `origin/main`, working tree clean. CI on `f149560` is
-green (lint.yml: fmt, go, shellcheck, ruff, actionlint, linters incl. the bindings check;
-codeql.yml: go, c-cpp, python). CodeQL *default setup* is off (user decision 2026-11-25: it
-blocked codeql.yml's uploads; the `actions` lane is no longer scanned).
+State: everything is pushed, `main` = `origin/main` at 9b58507, working tree clean. CI green
+on 9b58507 (lint + codeql). Tag `v1.0.0` released 2026-11-26 09:21Z: release run 45789808716 all
+jobs green, including the deb lane's first-ever CI run; 8 assets published (snitchd,
+snitch-linux-amd64, snitch, snitch-trial, two sha256, the deb + sha256). Release binaries are
+`-buildmode=pie` (still static). c-hardening validated GO (all tasks [x] incl. the c1ca575
+baseline run; root gates passed at 8300add on the dev VM).
 
 ## Next steps, in order
 
-1. **c-hardening is complete**: the last open item, task 1.2 (baseline record), was run on the
-   dev VM 2026-11-26: `sudo scripts/root-checks.sh --at c1ca575`, rc=0 — both programs load,
-   parser/query/socket-join tests pass with the committed (unchanged) expectations, the 75 s
-   monitor run ended on its own, api-check 0 failed steps. Recorded in
-   `.kiro/specs/c-hardening/tasks.md` (Implementation Notes); tasks 1.2 and group headers 1 and 8
-   ticked. `/kiro-validate-impl c-hardening` was re-run: every task [x], full suite + fuzz +
-   lint/codeql green on f1b1642 → GO.
-2. **Dependabot PR #3** (otel 1.44 -> 1.47 in `.dagger/`, opened 2026-11-25 18:13) fails
-   every lint job, like #1 and #2 before it. Close it, and either dismiss the 8 otel alerts
-   (4 medium, 4 low) as "tolerable risk: telemetry exporters of the CI-only pipeline module" or
-   wait for a Dagger release. Reason: engine v0.21.12 (the newest; Dagger's `main` too)
-   rewrites `.dagger/go.mod`'s `replace` lines to otel/log v0.16.0, and otel 1.47 with log
-   v0.16 does not compile. A `dependabot.yml` ignore for `go.opentelemetry.io/*` in
-   `/.dagger` would stop the reopening. User decision.
-3. **Open decisions**: `-buildmode=pie` for the two Go binaries (static non-PIE today; small
-   gain, changes the release shas); pinning `actionlint` (unpinned via `actionlint-py`).
-4. **First `v*` tag**: the deb lane's first CI run happens there (see the runbook below).
+1. **Next spec item: `tui`** (`.kiro/specs/tui/brief.md`, roadmap item unchecked). The operator
+   UI is still the Python client (`snitch` asset, Textual) talking to Little Snitch's
+   `ws://127.0.0.1:3031/stream`; Little Snitch was retired on the VM 2026-10-11, so there the
+   Python client has no backend. Port: a bubbletea TUI in `cmd/snitch`, key for key like the
+   Python client (overview, egress graph, one-key block/allow via overlay rules, trial verbs,
+   `snitch status` for waybar), fed by snitchd's `snapshot`/`summary` API. Dependencies done:
+   kde-tray (client package), popups-trace. At parity the Python client, its units and its
+   lint job leave the repo. Start with `/kiro-spec-requirements tui` (or quick mode), then
+   design, then tasks.
+2. **Packaging wart to fix with the tui port**: the deb ships the Go tray binary as
+   `/usr/bin/snitch`, colliding with the Python client's asset name (release.yml header
+   documents it). When the Go TUI lands, ship the tray under its own name (e.g.
+   `/usr/bin/snitch-tray`) so `/usr/bin/snitch` is the TUI again; until then the Python
+   client is installed at `~/.local/bin/snitch` (ahead of /usr/bin in PATH) on this host.
+3. **VM repo re-pin**: the hyperland worker VM repo may re-pin `snitchd`'s version+sha256 and
+   add the deb pin per the runbook below.
+4. **Watch**: `TestEmitNeverBlocks` (internal/api) flaked once on a loaded CI runner (5 ms vs
+   the 1 ms bound); green on rerun. If it recurs, widen the bound or retry — not a code fix.
+5. **Dependabot**: PR #3 closed, all 8 otel alerts in `.dagger/go.mod` dismissed as tolerable
+   risk (CI-only module; engine v0.21.12 pins otel/log v0.16.0 via its replace rewrite).
+   0 open alerts. A `dependabot.yml` ignore for `go.opentelemetry.io/*` in `/.dagger` would
+   stop future reopening if desired.
+6. **Open decisions (optional)**: none blocking. Agentic layer-7 features (per-agent
+   policies, auto-baselining, popup triage) build on the tui port — roadmap.
 
 ## Done in c-hardening (spec `.kiro/specs/c-hardening/`, record `docs/c-hardening.md`)
 
