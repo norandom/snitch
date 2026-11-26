@@ -267,7 +267,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 4.6_
   - _Requirements: 1.6, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.5, 3.6, 3.7, 3.10, 3.11_
 
-- [ ] 5.4 Block, unblock and the protection
+- [x] 5.4 Block, unblock and the protection
   - `x` and space turn the cursor's row into the plan and send its requests; a refusal of the
     plan is shown as a notice and nothing is sent; a batch reports when its last answer is in
     (how many succeeded, the first refusal's text); the daemon's text is shown as it is,

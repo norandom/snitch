@@ -90,6 +90,7 @@ func onKey(m Model, k Key, now time.Time) (Model, []Effect) {
 	at := keyTime(k, now)
 	burst := isBurst(m, at)
 	m.lastKeyAt = at
+	m = disarmOtherKey(m, k)
 	if m.tooSmall() {
 		if k.Name == "q" {
 			return onQuit(m, k, now)
@@ -195,8 +196,14 @@ func onQuit(m Model, _ Key, _ time.Time) (Model, []Effect) {
 	return m, []Effect{Quit{}}
 }
 
-// Named key stubs filled by tasks 5.4, 5.5, and 5.8.
-func onBlock(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
+func disarmOtherKey(m Model, k Key) Model {
+	if m.tooSmall() || m.confirm != nil || m.search != nil || (k.Name != "x" && k.Name != "space") {
+		m.armed = ""
+	}
+	return m
+}
+
+// Named key stubs filled by tasks 5.5 and 5.8.
 func onGraph(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
 func onTrial(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
 func onKeep(m Model, _ Key, _ time.Time) (Model, []Effect)          { return m, nil }

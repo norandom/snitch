@@ -106,7 +106,7 @@ func onDropped(m Model, _ client.Dropped, now time.Time) (Model, []Effect) {
 	return m, []Effect{e}
 }
 
-func onAnswered(m Model, a client.Answered, _ time.Time) (Model, []Effect) {
+func onAnswered(m Model, a client.Answered, now time.Time) (Model, []Effect) {
 	p, ok := m.pending[a.Token]
 	if !ok {
 		return m, nil
@@ -115,6 +115,8 @@ func onAnswered(m Model, a client.Answered, _ time.Time) (Model, []Effect) {
 	switch p.kind {
 	case purposeRules, purposePrograms, purposeSnapshot:
 		return applyTableReply(m, p, a), nil
+	case purposeBatch:
+		return onBatchAnswer(m, p, a, now)
 	}
 	return m, nil
 }

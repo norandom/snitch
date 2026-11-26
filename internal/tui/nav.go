@@ -52,7 +52,7 @@ func rebuildRows(m Model, now time.Time) Model {
 	m.builtAt = now
 	m.rebuilds++
 	if len(m.rows) == 0 {
-		m.cursor, m.top = "", 0
+		m.cursor, m.top, m.armed = "", 0, ""
 		return m
 	}
 	idx := rowIndex(m.rows, prevID)

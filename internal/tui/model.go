@@ -81,7 +81,9 @@ type batch struct {
 	total    int
 	done     int
 	ok       int
+	unblock  bool
 	firstErr clean.Safe
+	lastText clean.Safe
 	logLines []clean.Safe
 	note     clean.Safe
 }
