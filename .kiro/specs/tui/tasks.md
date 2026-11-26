@@ -284,7 +284,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 4.4, 4.6_
   - _Requirements: 5.10, 5.13, 5.14, 6.1, 6.2, 6.3, 6.4, 7.2, 12.5_
 
-- [ ] 5.5 The trial keys and the confirmation
+- [x] 5.5 The trial keys and the confirmation
   - `T` asks with the configured duration and the local time the trial would end, stating
     that connections no rule allows are denied until then; `K` asks, stating that enforce then
     stays beyond the deadline and across reboots; only `y` after 0.6 s proceeds, any other

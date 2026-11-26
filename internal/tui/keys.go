@@ -203,11 +203,5 @@ func disarmOtherKey(m Model, k Key) Model {
 	return m
 }
 
-// Named key stubs filled by tasks 5.5 and 5.8.
-func onGraph(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
-func onTrial(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
-func onKeep(m Model, _ Key, _ time.Time) (Model, []Effect)          { return m, nil }
-func onEnd(m Model, _ Key, _ time.Time) (Model, []Effect)           { return m, nil }
-func onUnkeep(m Model, _ Key, _ time.Time) (Model, []Effect)        { return m, nil }
-func onConfirmYes(m Model, _ Key, _ time.Time) (Model, []Effect)    { return m, nil }
-func onConfirmCancel(m Model, _ Key, _ time.Time) (Model, []Effect) { return m, nil }
+// Named key stub filled by task 5.8.
+func onGraph(m Model, _ Key, _ time.Time) (Model, []Effect) { return m, nil }

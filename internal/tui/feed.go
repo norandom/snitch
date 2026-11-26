@@ -117,6 +117,8 @@ func onAnswered(m Model, a client.Answered, now time.Time) (Model, []Effect) {
 		return applyTableReply(m, p, a), nil
 	case purposeBatch:
 		return onBatchAnswer(m, p, a, now)
+	case purposeTrial, purposeKeep, purposeEnd, purposeUnkeep:
+		return onTrialAnswer(m, p, a, now), nil
 	}
 	return m, nil
 }
