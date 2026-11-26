@@ -82,9 +82,9 @@ func asks(verdict string, scope Scope) (blocked, ok bool) {
 	return false, false
 }
 
-// local reports whether an address is on the local network of fail-safe 2. An IPv4-mapped
+// Local reports whether an address is on the local network of fail-safe 2. An IPv4-mapped
 // IPv6 address is judged by its IPv4 form; the zone of a link-local address is ignored.
-func local(addr netip.Addr) bool {
+func Local(addr netip.Addr) bool {
 	addr = addr.Unmap().WithZone("")
 	for _, p := range localPrefixes {
 		if p.Contains(addr) {
@@ -92,6 +92,11 @@ func local(addr netip.Addr) bool {
 		}
 	}
 	return false
+}
+
+// local keeps existing package callers working via Local.
+func local(addr netip.Addr) bool {
+	return Local(addr)
 }
 
 // keyOf is the dedupe key of an event.

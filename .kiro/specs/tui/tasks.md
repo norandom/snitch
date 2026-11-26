@@ -39,7 +39,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: go.mod, go.sum, internal/term/doc.go, cmd/snitch/imports_test.go_
   - _Requirements: 13.9, 14.6_
 
-- [ ] 2. Leaf packages
+- [x] 2. Leaf packages
 - [x] 2.1 (P) Text that may be drawn: the safe type and the sanitiser
   - A string type that only this package produces; the sanitiser replaces every control
     character, escape, C1 control, direction-changing and invisible formatting character and
@@ -93,7 +93,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 2.1_
   - _Requirements: 7.1, 7.5, 13.4, 13.10_
 
-- [ ] 2.5 (P) One exported list of the local network
+- [x] 2.5 (P) One exported list of the local network
   - The question policy's local-network check becomes callable from other packages, with the
     same prefixes and the same handling of IPv4-mapped addresses and zones; its existing
     caller keeps its behaviour

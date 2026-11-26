@@ -120,3 +120,33 @@ func TestKeyForms(t *testing.T) {
 		t.Fatal("same name, different key")
 	}
 }
+
+func TestLocal(t *testing.T) {
+	locals := []string{
+		"10.0.0.0", "10.255.255.255", "172.16.0.0", "172.31.255.255",
+		"192.168.0.0", "192.168.255.255", "169.254.0.0", "169.254.255.255",
+		"127.0.0.0", "127.255.255.255", "fc00::", "fdff::1",
+		"fe80::", "fe80::1%eth0", "febf::1", "::1", "::1%lo",
+		"::ffff:10.0.0.1", "::ffff:172.16.0.1", "::ffff:192.168.1.1",
+		"::ffff:169.254.1.1", "::ffff:127.0.0.1",
+	}
+	remote := []string{
+		"9.255.255.255", "11.0.0.0", "172.15.255.255", "172.32.0.0",
+		"192.167.255.255", "192.169.0.0", "169.253.255.255", "169.255.0.0",
+		"126.255.255.255", "128.0.0.0", "fbff::1", "fe00::", "fe7f::1", "fec0::",
+		"::", "::2", "2001:db8::1", "::ffff:8.8.8.8", "::ffff:172.32.0.1",
+	}
+	for _, s := range locals {
+		if !Local(netip.MustParseAddr(s)) {
+			t.Fatalf("%s: Local = false, want true", s)
+		}
+	}
+	for _, s := range remote {
+		if Local(netip.MustParseAddr(s)) {
+			t.Fatalf("%s: Local = true, want false", s)
+		}
+	}
+	if Local(netip.Addr{}) {
+		t.Fatal("zero Addr: Local = true, want false")
+	}
+}
