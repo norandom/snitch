@@ -203,5 +203,6 @@ func disarmOtherKey(m Model, k Key) Model {
 	return m
 }
 
-// Named key stub filled by task 5.8.
-func onGraph(m Model, _ Key, _ time.Time) (Model, []Effect) { return m, nil }
+func onGraph(m Model, _ Key, now time.Time) (Model, []Effect) {
+	return toggleGraph(m, now), nil
+}

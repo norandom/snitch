@@ -1,0 +1,21 @@
+ snitch | last 1h | 2 programs | sort: activity 10s | mode: monitor | /run/snitch/snitch.sock
+ EGRESS  last 1h   15K sent by 2 programs   bars: log scale
+ totals: connections active in last 1h, bytes counted since first seen
+
+ curl               14K ████████   640B/s ┳▶ api.example.com         6K █████▌
+                                          ┣▶ cdn.example.com         3K ███▍
+                                          ┣▶ 9.9.9.9                 2K ██▏
+                                          ┣▶ metrics.example.com     1K ▍
+                                          ┣▶ auth.example.com      800B ▍
+                                          ┗▶ + 2 more              768B ▍
+
+ dig                 1K ▍                 ━▶ 8.8.8.8                 1K ▍
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-11-26 11:59:00  BLOCKED curl > 1.1.1.1:443 tcp
+
+
+
+
+
+ ↑↓:move →:open ←:close x:block t:win s/S:sort /:search e:graph T/K/E/U q:quit

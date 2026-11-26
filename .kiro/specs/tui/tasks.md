@@ -213,7 +213,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/table/tree.go, tree_test.go_
   - _Requirements: 3.4, 3.9, 5.11_
 
-- [ ] 5. The UI state machine (pure, no terminal)
+- [x] 5. The UI state machine (pure, no terminal)
 - [x] 5.1 The model, the key table and the guards
   - The model as a value with every field the design lists, the inbound messages and outbound
     effects of the design, the screen as lines of styled spans of safe text; one named stub
@@ -332,7 +332,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
     its emit hook in the shared files_
   - _Requirements: 1.1, 1.4, 1.7, 1.8, 2.5, 3.11, 13.5, 13.7_
 
-- [ ] 5.8 The egress graph
+- [x] 5.8 The egress graph
   - `e` shows the graph in place of the table and the detail pane and `e` again brings them
     back; the model can start in the graph; while shown it is recomputed every 2 s; the
     window keys, the trial keys and quit work there, the table keys do not

@@ -145,6 +145,10 @@ type Model struct {
 	rankedAt    time.Time
 	builtAt     time.Time
 	rebuilds    int
+	flows       []table.Flow
+	flowsAll    int
+	flowsBytes  uint64
+	flowsAt     time.Time
 	snapAt      time.Time
 	lastKeyAt   time.Time
 	size        termSize

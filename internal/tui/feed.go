@@ -234,6 +234,7 @@ func applyTableReply(m Model, p purpose, a client.Answered) Model {
 			m.store = m.store.Replace(a.Reply.Entries)
 			m.dirty = true
 			m.stale = false
+			m.flowsAt = time.Time{}
 		}
 	}
 	return m
@@ -245,6 +246,7 @@ func onTick(m Model, now time.Time) (Model, []Effect) {
 	}
 	m = rerankIfDue(m, now)
 	m = rebuildIfDue(m, now)
+	m = refreshGraphIfDue(m, now)
 	if !m.up {
 		return m, nil
 	}

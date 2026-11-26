@@ -73,12 +73,8 @@ func renderTooSmall(m Model) Screen {
 	}
 }
 
-// renderGraph is filled by 5.8.
 func renderGraph(m Model, now time.Time) Screen {
-	return Screen{
-		Title: appTitle,
-		Lines: []Line{{{Text: clean.Const("egress"), Style: Head}}},
-	}
+	return drawGraph(m, now)
 }
 
 // renderOverview is filled by 5.7.
