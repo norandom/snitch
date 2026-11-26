@@ -93,17 +93,14 @@ func TestDispatchNoArgAndStubVerbs(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"status", []string{"status"}, "not built yet"},
-		{"default", []string{"default"}, "not built yet"},
+		{"status bad flag", []string{"status", "-bogus"}, "usage: snitch status"},
+		{"default no arg", []string{"default"}, "usage: snitch default"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			code, out, errOut := run(tc.args...)
-			if code != exitFail || out != "" || !strings.Contains(errOut, tc.want) {
-				t.Fatalf("%q: want exit 1, no stdout, %q; got %d, %q, %q", tc.args, tc.want, code, out, errOut)
-			}
-			if strings.Count(errOut, "\n") != 1 {
-				t.Fatalf("%q: want one stderr line, got %q", tc.args, errOut)
+			if code != exitUsage || out != "" || !strings.Contains(errOut, tc.want) {
+				t.Fatalf("%q: want exit 2, no stdout, %q; got %d, %q, %q", tc.args, tc.want, code, out, errOut)
 			}
 		})
 	}

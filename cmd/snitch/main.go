@@ -72,9 +72,9 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 	case "egress":
 		return runEgress(args[1:], os.Stdin, stdout, stderr)
 	case "status":
-		return runStatus(stderr)
+		return runStatus(args[1:], stdout, stderr)
 	case "default":
-		return runDefault(stderr)
+		return runDefault(args[1:], os.Stdin, stdout, stderr)
 	case "tray":
 		return runTray(args[1:], stderr)
 	}
@@ -89,12 +89,4 @@ func isOverviewFlag(arg string) bool {
 		return true
 	}
 	return false
-}
-
-func runStatus(stderr io.Writer) int  { return notBuiltYet(stderr, "status") }
-func runDefault(stderr io.Writer) int { return notBuiltYet(stderr, "default") }
-
-func notBuiltYet(stderr io.Writer, verb string) int {
-	_, _ = fmt.Fprintf(stderr, "snitch: %s: not built yet\n", verb)
-	return exitFail
 }

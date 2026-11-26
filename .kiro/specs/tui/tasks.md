@@ -406,7 +406,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 2.3, 2.4, 4.4, 5.8, 6.1, 6.3_
   - _Requirements: 13.9_
 
-- [ ] 7. Integration: the binary
+- [x] 7. Integration: the binary
 - [x] 7.1 Hardening first, then the verbs
   - The process makes itself non-dumpable before anything else, for every verb including the
     tray; a failure is one line and exit 1
@@ -442,7 +442,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 6.1, 5.8, 2.3, 2.4_
   - _Requirements: 1.1, 1.11, 4.2, 10.5, 11.3, 12.1, 13.5_
 
-- [ ] 7.3 `status` and `default` wired
+- [x] 7.3 `status` and `default` wired
   - `snitch status [-api PATH]` prints one JSON line and exits 0 in every case, within one
     second also when nothing answers; `snitch default deny|allow [--keep] [-api PATH]` with
     the exit codes of 6.3; only `default` reads the config file (`status` needs no key from
