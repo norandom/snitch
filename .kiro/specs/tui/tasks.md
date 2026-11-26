@@ -249,7 +249,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 3.1, 3.2, 4.1_
   - _Requirements: 1.9, 5.12, 10.1, 10.2, 10.3, 10.4, 13.8_
 
-- [ ] 5.3 Moving, opening, windows, order and search
+- [x] 5.3 Moving, opening, windows, order and search
   - Cursor by row identity (it stays on its row across refreshes and takes the nearest row
     when its own is gone); up, down, page, home, end; open on enter, right, `l`; close or go
     to the parent on left, `h`; every program closed at start

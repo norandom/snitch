@@ -195,17 +195,8 @@ func onQuit(m Model, _ Key, _ time.Time) (Model, []Effect) {
 	return m, []Effect{Quit{}}
 }
 
-// Named key stubs filled by tasks 5.3, 5.4, 5.5, and 5.8.
-func onMove(m Model, _ Key, _ time.Time) (Model, []Effect)          { return m, nil }
-func onOpen(m Model, _ Key, _ time.Time) (Model, []Effect)          { return m, nil }
-func onClose(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
+// Named key stubs filled by tasks 5.4, 5.5, and 5.8.
 func onBlock(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
-func onWindow(m Model, _ Key, _ time.Time) (Model, []Effect)        { return m, nil }
-func onSort(m Model, _ Key, _ time.Time) (Model, []Effect)          { return m, nil }
-func onSearchOpen(m Model, _ Key, _ time.Time) (Model, []Effect)    { return m, nil }
-func onSearchClear(m Model, _ Key, _ time.Time) (Model, []Effect)   { return m, nil }
-func onSearchApply(m Model, _ Key, _ time.Time) (Model, []Effect)   { return m, nil }
-func onSearchText(m Model, _ Key, _ time.Time) (Model, []Effect)    { return m, nil }
 func onGraph(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
 func onTrial(m Model, _ Key, _ time.Time) (Model, []Effect)         { return m, nil }
 func onKeep(m Model, _ Key, _ time.Time) (Model, []Effect)          { return m, nil }

@@ -144,6 +144,8 @@ func onTick(m Model, now time.Time) (Model, []Effect) {
 	if !m.staleBeatAt.IsZero() && now.Sub(m.staleBeatAt) >= staleBeatWindow {
 		m.staleBeatAt = time.Time{}
 	}
+	m = rerankIfDue(m, now)
+	m = rebuildIfDue(m, now)
 	if !m.up {
 		return m, nil
 	}

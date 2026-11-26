@@ -141,6 +141,8 @@ type Model struct {
 	denied      map[string]time.Time
 	inspected   map[string]bool
 	rankedAt    time.Time
+	builtAt     time.Time
+	rebuilds    int
 	snapAt      time.Time
 	lastKeyAt   time.Time
 	size        termSize
