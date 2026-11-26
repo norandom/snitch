@@ -86,6 +86,7 @@ Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not 
 
 - [x] kde-tray -- `snitch tray`: StatusNotifierItem icon and status menu, KDE notifications with Allow and Block for undecided or denied connections; creates `cmd/snitch` and the API client package. Dependencies: none
 - [ ] popups-trace -- kernel-side process trace on events, `snitch watch` and `snitch ask` (the terminal question, with the trace), the trace in the tray's notifications. Dependencies: kde-tray
+- [ ] write-gate -- mandatory (see `.kiro/specs/tui/requirements.md`, Mandatory Follow-up): the daemon authorises writes by uid alone, so any program of the operator's account can send them itself; loosening writes (allow rule, deny removal) and `trial` / `keep` must need more than the uid, tightening writes and the way back stay easy. Before popups-trace is implemented. No brief yet. Dependencies: daemon-api
 - [ ] tui -- the bubbletea TUI, key for key like the Python client (overview, egress graph, rule edits, trial verbs), then the Python client retires. Dependencies: kde-tray, popups-trace
 
 ## Later phases (no briefs yet)
