@@ -25,7 +25,7 @@ files. In group 5 the files `model.go`, `update.go`, `keys.go` and `screen.go` a
 task 5.1 creates them with every model field of the design and one stub per key and per
 message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strictly in order.
 
-- [ ] 1. Foundation: the terminal library in the module, confined to one package
+- [x] 1. Foundation: the terminal library in the module, confined to one package
   - Add Bubble Tea v2.1.3 and Lip Gloss v2.1.1 to the module (needs network once); a first
     file of the adapter package imports them so the requirement stays after tidying, with a
     package comment stating that no other package may import the library
