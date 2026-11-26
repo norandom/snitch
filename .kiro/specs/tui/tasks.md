@@ -54,7 +54,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/clean/safe.go, safe_test.go_
   - _Requirements: 13.3, 13.4_
 
-- [ ] 2.2 Names, paths and cutting
+- [x] 2.2 Names, paths and cutting
   - A destination name with characters outside ASCII is shown in its punycode form by an
     encoder of this package (RFC 3492, no new dependency), checked against the RFC's sample
     strings; nothing is resolved or compared with it
