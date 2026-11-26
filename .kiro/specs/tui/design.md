@@ -683,7 +683,7 @@ type Dropped struct{ Count int }               // only with Table
 type Answered struct {
     Token uint64; Text, Err string; Role bool
     Question bool      // Err ends in "[y/N]": the daemon's own question (second exception)
-    Reply    api.Reply // the whole reply, for rules, programs, snapshot
+    Reply    *api.Reply // the whole reply (when Table is true on a reply; nil on error/loss or Table false), pointer keeps Answered comparable
 }
 ```
 - With `Table` unset the subscribe line, the refused request types and the message set are

@@ -584,3 +584,6 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: README.md, CLAUDE.md, .kiro/steering/*.md, .kiro/handover.md, docs/ci-debs.md,
     docs/rugged.md_
   - _Requirements: 13.13, 14.5_
+
+## Implementation Notes
+- Task 3.1: `client.Answered.Reply` is `*api.Reply` (nil on error/loss or when `Table` is false; freshly decoded `&r` on daemon reply when `Table` is true) so `Answered` remains comparable for existing tray tests (`session_test.go:272`).
