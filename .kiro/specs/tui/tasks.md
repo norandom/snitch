@@ -67,7 +67,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/clean/name.go, cut.go, name_test.go, cut_test.go_
   - _Requirements: 13.5, 13.6, 13.7_
 
-- [ ] 2.3 (P) The config file
+- [x] 2.3 (P) The config file
   - Defaults when the file is missing; the keys `periods`, `since`, `protect`, `resort`,
     `trial`; the popup keys and unknown keys are ignored; `hypr-rdp` and `sshd` are always
     protected and the file can only add
