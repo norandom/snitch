@@ -103,7 +103,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 5.8, 12.4_
 
 - [ ] 3. The client feeds a table (additive, opt-in)
-- [ ] 3.1 (P) Summaries, snapshots and whole replies for a caller that asks
+- [x] 3.1 (P) Summaries, snapshots and whole replies for a caller that asks
   - A switch in the client's configuration, off by default: on, the subscription includes
     summaries, a summary arrives as its own message, a `dropped` line arrives as its own
     message (the status refresh stays), and `snapshot` may be sent; every answer carries the

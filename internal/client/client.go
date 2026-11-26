@@ -30,6 +30,7 @@ type Config struct {
 	AnswerWait time.Duration                                            // 10 s: a request unanswered after it has no answer
 	BackoffMin time.Duration                                            // 1 s: the first wait before a retry
 	BackoffMax time.Duration                                            // 30 s: the longest wait
+	Table      bool                                                     // subscribe with summary, allow snapshot and attach Reply
 }
 
 // call is one request handed in by Send with the caller's token.
@@ -62,10 +63,10 @@ func New(cfg Config) *Client {
 // Send queues one request for the current session; it never blocks, so the loop that owns
 // Sink may call it. Exactly one Answered with the same token follows while the job runs: the
 // reply's text, the daemon's error, or a local reason when there is no session or no answer.
-// The wire id is the client's; snapshot and the subscription verbs are not requests a caller
-// may make (the session owns the subscription and never asks for a snapshot).
+// The wire id is the client's; subscribe and unsubscribe are owned by the session, and
+// snapshot is allowed only when Config.Table is set.
 func (c *Client) Send(token uint64, req api.Request) {
-	contract.Require(req.Type != "" && req.Type != "snapshot" && req.Type != "subscribe" &&
+	contract.Require(req.Type != "" && (c.cfg.Table || req.Type != "snapshot") && req.Type != "subscribe" &&
 		req.Type != "unsubscribe", "client: Send takes a request with one answer, not "+req.Type)
 	c.mu.Lock()
 	c.queue = append(c.queue, call{token: token, req: req})

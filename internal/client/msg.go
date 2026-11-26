@@ -45,21 +45,31 @@ type StateLine struct{ State api.State }
 // EventLine is an event line from the subscription.
 type EventLine struct{ Event api.Event }
 
+// SummaryLine is a summary line from the subscription (only when Config.Table is true).
+type SummaryLine struct{ Entries []api.Entry }
+
+// Dropped is a dropped count line from the subscription (only when Config.Table is true).
+type Dropped struct{ Count int }
+
 // Answered is the one answer to a Send: Text on success, otherwise Err (the daemon's error
-// or a local reason). Role is true when Err is the daemon's operator refusal.
+// or a local reason). Role is true when Err is the daemon's operator refusal. Reply holds
+// the decoded daemon reply when Config.Table is true, and is nil otherwise.
 type Answered struct {
 	Token uint64
 	Text  string
 	Err   string
 	Role  bool
+	Reply *api.Reply
 }
 
-func (Up) isMsg()        {}
-func (Down) isMsg()      {}
-func (Facts) isMsg()     {}
-func (StateLine) isMsg() {}
-func (EventLine) isMsg() {}
-func (Answered) isMsg()  {}
+func (Up) isMsg()          {}
+func (Down) isMsg()        {}
+func (Facts) isMsg()       {}
+func (StateLine) isMsg()   {}
+func (EventLine) isMsg()   {}
+func (SummaryLine) isMsg() {}
+func (Dropped) isMsg()     {}
+func (Answered) isMsg()    {}
 
 // failed is the Answered for an error text; the refusal suffix is the one daemon text the
 // tray interprets (a revalidation trigger of the design).
@@ -89,7 +99,13 @@ func (s *session) handle(b []byte) string {
 		s.state(b)
 	case "dropped": // the daemon lost lines for us: what we hold may be stale
 		s.want = true
-	case "summary": // not subscribed to; harmless
+		if s.cfg.Table {
+			s.dropped(b)
+		}
+	case "summary":
+		if s.cfg.Table {
+			s.summary(b)
+		}
 	default:
 		s.ignored("unknown type " + strconv.Quote(env.Type))
 	}
@@ -124,7 +140,11 @@ func (s *session) reply(b []byte, id int) {
 	default:
 		if p, ok := s.calls[id]; ok {
 			delete(s.calls, id)
-			s.cfg.Sink(Answered{Token: p.token, Text: r.Text})
+			var reply *api.Reply
+			if s.cfg.Table {
+				reply = &r
+			}
+			s.cfg.Sink(Answered{Token: p.token, Text: r.Text, Reply: reply})
 		}
 	}
 }
@@ -166,5 +186,21 @@ func (s *session) state(b []byte) {
 	if s.decode(b, &st) && s.up {
 		s.cfg.Sink(StateLine{State: st})
 		s.want = true
+	}
+}
+
+// summary passes a summary line on while the session is up.
+func (s *session) summary(b []byte) {
+	var sm api.Summary
+	if s.decode(b, &sm) && s.up {
+		s.cfg.Sink(SummaryLine{Entries: sm.Entries})
+	}
+}
+
+// dropped passes a dropped line's count on while the session is up.
+func (s *session) dropped(b []byte) {
+	var d api.Dropped
+	if s.decode(b, &d) && s.up {
+		s.cfg.Sink(Dropped{Count: d.Count})
 	}
 }

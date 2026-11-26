@@ -24,7 +24,7 @@ import (
 
 // subscribe is written literally: api.Request cannot marshal a false option, and the
 // daemon's default for summary is true.
-const subscribe = `{"type":"subscribe","id":%d,"events":true,"local":false,"summary":false}` + "\n"
+const subscribe = `{"type":"subscribe","id":%d,"events":true,"local":false,"summary":%t}` + "\n"
 
 // line is what the reader hands over: a line, or the error that ended (or, for an over-long
 // line, interrupted) the stream.
@@ -108,7 +108,7 @@ func (s *session) close(ctx context.Context) {
 func (s *session) run(ctx context.Context) string {
 	now := s.cfg.Now()
 	s.id, s.sub, s.poll = 1, 1, now.Add(s.cfg.Poll)
-	if s.write([]byte(fmt.Sprintf(subscribe, s.id))) != nil || s.ask(now) != nil {
+	if s.write([]byte(fmt.Sprintf(subscribe, s.id, s.cfg.Table))) != nil || s.ask(now) != nil {
 		return NotRunning
 	}
 	wake := time.NewTimer(0) // the first tick sends what was handed in during the dial
