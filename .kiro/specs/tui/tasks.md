@@ -364,7 +364,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 1, 5.8_
   - _Requirements: 1.1, 2.6, 13.2, 13.3, 13.5_
 
-- [ ] 6.2 (P) One request, one reply, and the status-bar line
+- [x] 6.2 (P) One request, one reply, and the status-bar line
   - A one-shot exchange with the daemon under a deadline: dial, check whose socket it is,
     send, read the replies
   - The status line from the daemon's status and the one-hour snapshot: class `allow`,
