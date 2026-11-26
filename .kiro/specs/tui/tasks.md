@@ -422,7 +422,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: cmd/snitch/main.go, harden.go, main_test.go, harden_test.go_
   - _Requirements: 1.12, 12.6, 13.11_
 
-- [ ] 7.2 The overview and `egress` wired
+- [x] 7.2 The overview and `egress` wired
   - Flags `-api` and `--since`; the config file (exit 2 with its error); standard input and
     output must be terminals (one line, exit 1) because the library would otherwise read the
     controlling terminal behind a pipe; the log is opened (a refusal becomes the pane's one

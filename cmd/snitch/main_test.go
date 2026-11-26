@@ -93,8 +93,6 @@ func TestDispatchNoArgAndStubVerbs(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"overview", nil, "not built yet"},
-		{"egress", []string{"egress"}, "not built yet"},
 		{"status", []string{"status"}, "not built yet"},
 		{"default", []string{"default"}, "not built yet"},
 	}

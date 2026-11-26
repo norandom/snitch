@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/norandom/snitch/internal/contract"
 )
@@ -57,8 +58,8 @@ func runMain(args []string, stdout, stderr io.Writer) (code int) {
 // alone prints the build; `egress`, `status`, `default`, and `tray` select their verbs.
 // Everything else is a usage error.
 func dispatch(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		return runOverview(stderr)
+	if len(args) == 0 || isOverviewFlag(args[0]) {
+		return runOverview(args, os.Stdin, stdout, stderr)
 	}
 	switch args[0] {
 	case "-version", "--version":
@@ -69,7 +70,7 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		printVersion(stdout, version)
 		return 0
 	case "egress":
-		return runEgress(stderr)
+		return runEgress(args[1:], os.Stdin, stdout, stderr)
 	case "status":
 		return runStatus(stderr)
 	case "default":
@@ -81,10 +82,17 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 	return exitUsage
 }
 
-func runOverview(stderr io.Writer) int { return notBuiltYet(stderr, "overview") }
-func runEgress(stderr io.Writer) int   { return notBuiltYet(stderr, "egress") }
-func runStatus(stderr io.Writer) int   { return notBuiltYet(stderr, "status") }
-func runDefault(stderr io.Writer) int  { return notBuiltYet(stderr, "default") }
+func isOverviewFlag(arg string) bool {
+	name, _, _ := strings.Cut(arg, "=")
+	switch name {
+	case "-api", "--api", "-since", "--since":
+		return true
+	}
+	return false
+}
+
+func runStatus(stderr io.Writer) int  { return notBuiltYet(stderr, "status") }
+func runDefault(stderr io.Writer) int { return notBuiltYet(stderr, "default") }
 
 func notBuiltYet(stderr io.Writer, verb string) int {
 	_, _ = fmt.Fprintf(stderr, "snitch: %s: not built yet\n", verb)
