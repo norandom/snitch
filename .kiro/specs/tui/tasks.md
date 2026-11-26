@@ -138,7 +138,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
     daemon's behaviour is confirmed on the VM in 8.7
   - Done when: `go test ./internal/client/clienttest` is green with one test per verb and the
     tray's tests that use the stand-in are green unchanged
-  - _Boundary: internal/client/clienttest/standin.go, commands.go, their tests_
+  - _Boundary: internal/client/clienttest/*.go_
   - _Requirements: 15.2_
 
 - [ ] 4. The connection table as data
@@ -587,3 +587,4 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
 
 ## Implementation Notes
 - Task 3.1: `client.Answered.Reply` is `*api.Reply` (nil on error/loss or when `Table` is false; freshly decoded `&r` on daemon reply when `Table` is true) so `Answered` remains comparable for existing tray tests (`session_test.go:272`).
+- Task 3.3: `_Boundary:_` covers `internal/client/clienttest/*.go` so new helper/test files keep every file <= 300 lines under `scripts/caps.sh`; `standin_test.go:168` updates from `"keep: not available in the stand-in"` to `"keep: refused by the stand-in"` now that `trial`/`keep`/`unkeep`/`end` are implemented (all tray tests in `internal/tray`, `internal/sni`, `cmd/snitch` stay untouched).
