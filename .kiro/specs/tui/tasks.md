@@ -455,7 +455,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 9.5, 9.6, 9.7, 9.11_
 
 - [ ] 8. Validation
-- [ ] 8.1 The whole client side against the stand-in
+- [x] 8.1 The whole client side against the stand-in
   - Model, client and stand-in together, without a terminal: start and first snapshot; a
     summary changes a row within one tick and the cursor stays; block and unblock on an
     address, a host and a program row with the stand-in's recorded edits compared and the
