@@ -194,7 +194,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 2.5_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 12.4_
 
-- [ ] 4.5 The egress flows
+- [x] 4.5 The egress flows
   - The ten programs with the most bytes sent, each with up to five destinations and the rest
     summed as `+ n more`; a destination by name when known, else by address; the logarithmic
     scale from 1 KiB to the largest flow; a bar in eighths of a cell
