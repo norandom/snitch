@@ -165,7 +165,7 @@ func TestRefusedRuleEditsAndTrialVerbs(t *testing.T) {
 	if l.Type != "error" || l.Error != "rule.add: refused by the stand-in" || len(s.Edits()) != 0 {
 		t.Fatalf("refusal: %+v edits %v", l, s.Edits())
 	}
-	if l := dial(t, s).ask(`{"type":"keep","id":4}`); l.Error != "keep: not available in the stand-in" {
+	if l := dial(t, s).ask(`{"type":"keep","id":4}`); l.Error != "keep: refused by the stand-in" {
 		t.Fatalf("keep: %+v", l)
 	}
 }

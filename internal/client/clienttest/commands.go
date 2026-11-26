@@ -100,13 +100,16 @@ var commands = map[string]command{
 	"refuse":   onOff((*StandIn).Refuse),
 	"error":    cmdError,
 	"event":    cmdEvent,
+	"summary":  noArgs((*StandIn).FlushSummary),
+	"drop":     cmdDrop,
+	"rules":    cmdRules,
 	"quit":     func(*StandIn, []string) error { return ErrQuit },
 }
 
 // Do runs one command line: `mode monitor|enforce`, `trial 10m`, `end`, `keep`, `unkeep`,
 // `kill on|off`, `error TEXT|none`, `learning on|off`,
-// `event PROGRAM PATH ADDR[=NAME] PORT PROTO VERDICT`, `refuse on|off`, `quit` (ErrQuit).
-// A blank line does nothing.
+// `event PROGRAM PATH ADDR[=NAME] PORT PROTO VERDICT`, `summary`, `drop [COUNT]`,
+// `rules none|reset`, `refuse on|off`, `quit` (ErrQuit). A blank line does nothing.
 func (s *StandIn) Do(line string) error {
 	f := strings.Fields(line)
 	if len(f) == 0 {
@@ -169,6 +172,35 @@ func cmdError(s *StandIn, args []string) error {
 		text = ""
 	}
 	s.setRulesError(text)
+	return nil
+}
+
+func cmdDrop(s *StandIn, args []string) error {
+	if len(args) > 1 {
+		return errors.New("want drop [COUNT]")
+	}
+	n := 1
+	if len(args) == 1 {
+		v, err := strconv.Atoi(args[0])
+		if err != nil || v <= 0 {
+			return fmt.Errorf("drop %q: want a positive integer", args[0])
+		}
+		n = v
+	}
+	s.Drop(n)
+	return nil
+}
+
+func cmdRules(s *StandIn, args []string) error {
+	if len(args) != 1 || (args[0] != "none" && args[0] != "reset") {
+		return errors.New("want rules none or rules reset")
+	}
+	if args[0] == "none" {
+		s.ClearRules()
+		return nil
+	}
+	s.initRules(false)
+	s.announce(s.Facts(), reasonReloaded, true)
 	return nil
 }
 

@@ -102,7 +102,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/ask/question.go, question_test.go_
   - _Requirements: 5.8, 12.4_
 
-- [ ] 3. The client feeds a table (additive, opt-in)
+- [x] 3. The client feeds a table (additive, opt-in)
 - [x] 3.1 (P) Summaries, snapshots and whole replies for a caller that asks
   - A switch in the client's configuration, off by default: on, the subscription includes
     summaries, a summary arrives as its own message, a `dropped` line arrives as its own
@@ -128,7 +128,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/client/client.go, session.go, msg.go, their new tests_
   - _Requirements: 8.3, 13.8_
 
-- [ ] 3.3 The stand-in daemon answers what the TUI asks
+- [x] 3.3 The stand-in daemon answers what the TUI asks
   - The test stand-in answers `trial`, `keep`, `unkeep`, `end` with the documented texts and
     state lines, asks the no-rules question when it has no rules, emits summaries for changed
     entries, serves `rules`, `programs` and `snapshot` from its in-memory facts, applies
