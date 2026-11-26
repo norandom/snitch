@@ -142,7 +142,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 15.2_
 
 - [ ] 4. The connection table as data
-- [ ] 4.1 Entries as a tree of rows
+- [x] 4.1 Entries as a tree of rows
   - A store of the daemon's entries by their key, replaced by a snapshot and updated by a
     summary; rows on three levels (program, host, address with port and protocol), addresses
     without a name under one `IP Addresses` row, the unattributed bytes as one `unknown` row
