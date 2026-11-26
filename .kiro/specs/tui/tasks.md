@@ -345,7 +345,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 4.5_
   - _Requirements: 4.1, 4.2, 4.6, 4.7, 4.8, 4.9, 4.10_
 
-- [ ] 6. The terminal adapter and the one-shot verbs
+- [x] 6. The terminal adapter and the one-shot verbs
 - [x] 6.1 Bubble Tea around the model
   - A job that runs the program on the alternate screen without mouse and cursor, with a
     constant window title; key presses, pastes and sizes become the model's messages (paste
@@ -391,7 +391,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 3.2_
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 13.1_
 
-- [ ] 6.4 The request and network pins cover the new packages
+- [x] 6.4 The request and network pins cover the new packages
   - The pin test scans the seven new packages too; the allowed request types become per
     package: the tray's packages keep their three, the TUI core and the one-shot verbs may
     also name `snapshot`, `rules`, `programs`, `rule.remove`, `trial`, `keep`, `unkeep`,
@@ -589,4 +589,4 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
 - Task 3.1: `client.Answered.Reply` is `*api.Reply` (nil on error/loss or when `Table` is false; freshly decoded `&r` on daemon reply when `Table` is true) so `Answered` remains comparable for existing tray tests (`session_test.go:272`).
 - Task 3.3: `_Boundary:_` covers `internal/client/clienttest/*.go` so new helper/test files keep every file <= 300 lines under `scripts/caps.sh`; `standin_test.go:168` updates from `"keep: not available in the stand-in"` to `"keep: refused by the stand-in"` now that `trial`/`keep`/`unkeep`/`end` are implemented (all tray tests in `internal/tray`, `internal/sni`, `cmd/snitch` stay untouched).
 - Task 4.3: `table.Covering` is `{Rule api.RuleView; Own, Overlay bool; By Level; Found bool}` and `Cover(r Rules, k Key, name string, at Level) Covering`. `Overlay` is `Rule.Source != "" && r.Overlay != "" && Rule.Source == r.Overlay`. `By` is `Program` for `any`-program or `/0`+`any`+port 0 rules, `Address` for program-specific exact `/32` or `/128` + exact proto + exact port, `Group` when `at == Group` and CIDR rule, else `Host`. `Own` is true for program-specific rules matching `at`'s level (`at == Program` -> program-wide; `at == Address` -> exact addr+proto+port; `at == Host/Group` -> `By == at`), including deployed-file rules with the exact own key.
-- Task 6.4: `cmd/snitch/pins_test.go` uses narrow documented line exceptions matching `onSendGuardLine`: `onConfTagLine` for `conf.go`'s `toml:"trial"` struct tag, and `onCoverProtoLine` for `table/cover.go`'s `isTCPOrUDP` protocol comparison (with `"net"` import banned in `internal/table`); `cmd/snitch` also allows read-only `"snapshot"` for Task 7.3's `status` call.
+- Task 6.4: `cmd/snitch/pins_test.go` uses narrow documented line exceptions matching `onSendGuardLine`: `onConfTagLine` for `conf.go`'s `toml:"trial"` struct tag, and `onCoverProtoLine` for `table/cover.go`'s `isTCPOrUDP` protocol comparison (with `"net"` import banned in `internal/table/cover.go`); `cmd/snitch` also allows read-only `"snapshot"` for Task 7.3's `status` call, and pin test names include `Pins` (`TestConstraintPins...`).

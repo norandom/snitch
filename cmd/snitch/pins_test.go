@@ -1,16 +1,9 @@
-// pins_test.go: the wire pins of 8.1 and 8.5 over the SOURCE of the tray's five
-// packages (cmd/snitch, internal/client, internal/ask, internal/tray, internal/sni),
-// the same set the import pin guards by dependency. Two things are pinned. First,
-// the only request types that appear as literals in those packages' non-test
-// sources are status, the connection's subscribe line and rule.add of an answer:
-// a trial verb, the kill switch, rule.remove or a snapshot can then neither be
-// written nor be asked for without failing this test (6.12: nothing but rule.add
-// is ever written). Second, the binary opens no listener and dials no network but
-// the daemon's unix socket: an address typed into a dialer would be a network
-// leak of what the daemon said (8.5). The scan is over source lines, not imports,
-// because a unix client needs the net package (the 1.1 note); the test helpers
-// clienttest and snitest and the dev tool fakedaemon script the full API by
-// design and stay outside the scan for both pins.
+// pins_test.go: wire, network, and runtime-isolation pins (8.1, 8.5, 13.9) over the
+// non-test sources of all twelve packages that link into the snitch binary.
+// Request literals follow a per-package allowlist (learned/unsubscribe stay forbidden
+// everywhere except client.Send's refusal); no package opens a listener, dials anything
+// except the daemon's unix socket, or names protocol literals; the seven new packages
+// name no mkfifo/Mkfifo or XDG_RUNTIME_DIR. Helpers clienttest, snitest, fakedaemon stay outside.
 package main
 
 import (
@@ -21,23 +14,68 @@ import (
 	"testing"
 )
 
-// pinPkgs are the packages that link into the snitch binary; their own source
-// files (never their test helpers' subpackages) are what the pins read.
 var pinPkgs = []string{
 	module + "/cmd/snitch",
 	module + "/internal/client",
 	module + "/internal/ask",
 	module + "/internal/tray",
 	module + "/internal/sni",
+	module + "/internal/clean",
+	module + "/internal/conf",
+	module + "/internal/logfile",
+	module + "/internal/table",
+	module + "/internal/tui",
+	module + "/internal/term",
+	module + "/internal/verbs",
 }
 
-// pinFile is one scannable source file: its name within the package and its lines.
+var newPinPkgs = map[string]bool{
+	module + "/internal/clean":   true,
+	module + "/internal/conf":    true,
+	module + "/internal/logfile": true,
+	module + "/internal/table":   true,
+	module + "/internal/tui":     true,
+	module + "/internal/term":    true,
+	module + "/internal/verbs":   true,
+}
+
+func reqSet(reqs ...string) map[string]bool {
+	m := make(map[string]bool, len(reqs))
+	for _, r := range reqs {
+		m[r] = true
+	}
+	return m
+}
+
+var (
+	trayReqs  = reqSet("status", "subscribe", "rule.add")
+	cmdReqs   = reqSet("status", "subscribe", "rule.add", "snapshot")
+	tableReqs = reqSet("rule.add", "rule.remove")
+	tuiReqs   = reqSet("status", "subscribe", "rule.add", "snapshot", "rules", "programs",
+		"rule.remove", "trial", "keep", "unkeep", "end")
+	noReqs = reqSet()
+)
+
+var allowedRequests = map[string]map[string]bool{
+	module + "/cmd/snitch":       cmdReqs,
+	module + "/internal/client":  trayReqs,
+	module + "/internal/ask":     trayReqs,
+	module + "/internal/tray":    trayReqs,
+	module + "/internal/sni":     trayReqs,
+	module + "/internal/table":   tableReqs,
+	module + "/internal/tui":     tuiReqs,
+	module + "/internal/verbs":   tuiReqs,
+	module + "/internal/clean":   noReqs,
+	module + "/internal/conf":    noReqs,
+	module + "/internal/logfile": noReqs,
+	module + "/internal/term":    noReqs,
+}
+
 type pinFile struct {
 	pkg, name string
 	lines     []string
 }
 
-// pinDirs asks go list for each package's directory.
 func pinDirs(t *testing.T) []string {
 	t.Helper()
 	out, err := exec.Command("go", append([]string{"list", "-f", "{{.Dir}}"}, pinPkgs...)...).Output()
@@ -47,11 +85,27 @@ func pinDirs(t *testing.T) []string {
 	return strings.Fields(string(out))
 }
 
-// pinSources reads every non-test .go file of the pinned packages. Only the
-// package's own directory is read, so subpackages (clienttest, snitest) that
-// a later dependency might add stay outside the scan, and so do test files.
-// The pin would pass for nothing without at least one file per package; that
-// is checked after reading, like the import pin checks for the module's paths.
+func readPkgSources(t *testing.T, pkg, dir string) []pinFile {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	var files []pinFile
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		files = append(files, pinFile{pkg: pkg, name: e.Name(), lines: strings.Split(string(b), "\n")})
+	}
+	return files
+}
+
+// pinSources reads every non-test .go file of the pinned packages, requiring at least one per package.
 func pinSources(t *testing.T) []pinFile {
 	t.Helper()
 	dirs := pinDirs(t)
@@ -60,35 +114,16 @@ func pinSources(t *testing.T) []pinFile {
 	}
 	var files []pinFile
 	for i, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatalf("read %s: %v", dir, err)
+		pkgFiles := readPkgSources(t, pinPkgs[i], dir)
+		if len(pkgFiles) == 0 {
+			t.Fatalf("%s has no non-test .go files: the scan read nothing", pinPkgs[i])
 		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") ||
-				strings.HasSuffix(e.Name(), "_test.go") {
-				continue
-			}
-			b, err := os.ReadFile(filepath.Join(dir, e.Name()))
-			if err != nil {
-				t.Fatalf("read %s: %v", e.Name(), err)
-			}
-			files = append(files, pinFile{pkg: pinPkgs[i], name: e.Name(),
-				lines: strings.Split(string(b), "\n")})
-		}
-	}
-	if len(files) < len(pinPkgs) {
-		t.Fatalf("only %d source files for %d packages: the scan read nothing important", len(files), len(pinPkgs))
+		files = append(files, pkgFiles...)
 	}
 	return files
 }
 
-// onSendGuardLine is the one exception the request pin allows: the client's
-// Send precondition refuses requests with no single answer (snapshot, subscribe,
-// unsubscribe) by naming them, which is the ban itself, not a request the tray
-// can send. The Require spans two source lines in internal/client's client.go;
-// a request literal there and on its continuation is a refused mention at
-// most.
+// onSendGuardLine allows client.Send's contract.Require precondition to name refused request types.
 func onSendGuardLine(f pinFile, i int) bool {
 	if f.pkg != module+"/internal/client" || f.name != "client.go" {
 		return false
@@ -97,83 +132,152 @@ func onSendGuardLine(f pinFile, i int) bool {
 		(i > 0 && strings.Contains(f.lines[i-1], "contract.Require"))
 }
 
-// TestRequestsPinnedToStatusSubscribeAdd is 6.12 and 8.1 as a source pin. The
-// daemon knows thirteen request types (examples/api.md "Requests"); the tray's
-// packages may speak three on their own — status each poll, the subscribe line
-// once per connection, rule.add on an answer's click — and mention the
-// answerless ones only inside Send's refusal.
-func TestConstraintRequestLiteralsAreStatusSubscribeAddOnly(t *testing.T) {
-	alwaysFine := map[string]bool{"status": true, "subscribe": true, "rule.add": true}
-	guardOnly := map[string]bool{"snapshot": true, "unsubscribe": true}
+// onConfTagLine allows internal/conf/conf.go's `toml:"trial"` tag when no other "trial" appears on that line.
+func onConfTagLine(f pinFile, line string) bool {
+	if f.pkg != module+"/internal/conf" || f.name != "conf.go" {
+		return false
+	}
+	const tag = "`toml:\"trial\"`"
+	return strings.Contains(line, tag) && !strings.Contains(strings.ReplaceAll(line, tag, ""), `"trial"`)
+}
+
+// onCoverProtoLine allows internal/table/cover.go's isTCPOrUDP helper; cover.go is pinned to never import "net".
+func onCoverProtoLine(f pinFile, line string) bool {
+	return f.pkg == module+"/internal/table" && f.name == "cover.go" &&
+		strings.HasPrefix(strings.TrimSpace(line), "func isTCPOrUDP(")
+}
+
+func allowRequestMention(f pinFile, i int, typ string) bool {
+	if allowedRequests[f.pkg][typ] {
+		return true
+	}
+	if (typ == "snapshot" || typ == "unsubscribe") && onSendGuardLine(f, i) {
+		return true
+	}
+	return typ == "trial" && onConfTagLine(f, f.lines[i])
+}
+
+// TestConstraintPinsRequestLiterals enforces the per-package request-type allowlist.
+func TestConstraintPinsRequestLiterals(t *testing.T) {
 	for _, f := range pinSources(t) {
+		if _, ok := allowedRequests[f.pkg]; !ok {
+			t.Fatalf("package %s has no request allowlist entry", f.pkg)
+		}
 		for i, line := range f.lines {
 			for _, typ := range daemonRequests {
-				if alwaysFine[typ] || !strings.Contains(line, `"`+typ+`"`) {
-					continue
+				if strings.Contains(line, `"`+typ+`"`) && !allowRequestMention(f, i, typ) {
+					t.Fatalf("%s/%s:%d mentions forbidden request type %q", f.pkg, f.name, i+1, typ)
 				}
-				if guardOnly[typ] && onSendGuardLine(f, i) {
-					continue
-				}
-				t.Fatalf("%s/%s:%d mentions the request type %q the tray may not send", f.pkg, f.name, i+1, typ)
 			}
 		}
 	}
 }
 
-// TestTheThreeLegalRequestsExist pins the pin itself: each of the three legal
-// literals must exist in the sources, in the package that owns it, or the scan
-// above would pass on an empty world.
-func TestConstraintLegalRequestLiteralsExist(t *testing.T) {
-	want := map[string]int{
-		module + "/internal/client": 2, // the subscribe line and status
-		module + "/internal/ask":    1, // rule.add
+func lineContains(lines []string, sub string) bool {
+	for _, l := range lines {
+		if strings.Contains(l, sub) {
+			return true
+		}
 	}
-	found := map[string]int{}
+	return false
+}
+
+// TestConstraintPinsLegalRequestLiteralsExist pins the pin itself against an empty scan.
+func TestConstraintPinsLegalRequestLiteralsExist(t *testing.T) {
+	want := map[string][]string{
+		module + "/internal/client": {`"status"`, `"type":"subscribe"`},
+		module + "/internal/ask":    {`"rule.add"`},
+		module + "/internal/table":  {`"rule.add"`, `"rule.remove"`},
+		module + "/internal/tui":    {`"snapshot"`, `"rules"`, `"programs"`, `"trial"`, `"keep"`, `"unkeep"`, `"end"`},
+		module + "/internal/verbs":  {`"trial"`, `"keep"`, `"end"`},
+	}
+	seen := map[string]map[string]bool{}
 	for _, f := range pinSources(t) {
-		for _, line := range f.lines {
-			for _, lit := range []string{`"status"`, `"type":"subscribe"`, `"rule.add"`} {
-				if strings.Contains(line, lit) {
-					found[f.pkg]++
+		for _, lit := range want[f.pkg] {
+			if lineContains(f.lines, lit) {
+				if seen[f.pkg] == nil {
+					seen[f.pkg] = map[string]bool{}
 				}
+				seen[f.pkg][lit] = true
 			}
 		}
 	}
-	for pkg, n := range want {
-		if found[pkg] < n {
-			t.Fatalf("%s carries %d of the three legal request literals, want at least %d", pkg, found[pkg], n)
+	for pkg, lits := range want {
+		for _, lit := range lits {
+			if !seen[pkg][lit] {
+				t.Fatalf("%s is missing expected legal request literal %s", pkg, lit)
+			}
 		}
 	}
 }
 
-// daemonRequests are the thirteen request types the daemon knows
-// (examples/api.md "Requests"); the pin below decides per type where the tray's
-// sources may mention them.
 var daemonRequests = []string{"status", "rules", "programs", "learned", "snapshot",
 	"subscribe", "unsubscribe", "trial", "keep", "unkeep", "end", "rule.add", "rule.remove"}
 
-// bannedNet are the package-level listener and dialer functions and network
-// literals the binary's packages may not name: what 8.5 allows is one delegate
-// dial of the daemon's unix socket, wired in cmd/snitch's tray.go.
 var bannedNet = []string{"net.Listen", "net.Dial(", "net.DialContext(", "net.DialTCP",
 	"net.DialUDP", "net.ListenTCP", "net.ListenUDP", `"tcp"`, `"udp"`, `"tcp4"`,
 	`"tcp6"`, `"udp4"`, `"udp6"`}
 
-// TestNetworkIsTheDaemonsSocketOnly is 8.5 as a source pin: no listener and no
-// dial of any network but unix anywhere in the binary's packages, and every
-// DialContext call names the unix driver on its own line. A net.Dialer method
-// like dialUnix passes the pin; a package-level net.Dial or any tcp/udp word
-// fails it.
-func TestConstraintDialOnlyTheDaemonsUnixSocket(t *testing.T) {
+func isNetImport(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return trimmed == `"net"` || strings.HasSuffix(trimmed, ` "net"`)
+}
+
+func checkBannedNetLine(t *testing.T, f pinFile, i int, line string) {
+	t.Helper()
+	for _, word := range bannedNet {
+		if strings.Contains(line, word) && !((word == `"tcp"` || word == `"udp"`) && onCoverProtoLine(f, line)) {
+			t.Fatalf("%s/%s:%d names %q, which opens a network the binary must not have", f.pkg, f.name, i+1, word)
+		}
+	}
+	if strings.Contains(line, ".DialContext(") && !strings.Contains(line, `"unix"`) {
+		t.Fatalf("%s/%s:%d dials without naming the unix network", f.pkg, f.name, i+1)
+	}
+}
+
+// TestConstraintPinsDialOnlyDaemonsUnixSocket enforces 8.5 and 13.9: no listener,
+// no non-unix dialer, no protocol literals, and no "net" import in internal/table/cover.go.
+func TestConstraintPinsDialOnlyDaemonsUnixSocket(t *testing.T) {
 	for _, f := range pinSources(t) {
+		isCover := f.pkg == module+"/internal/table" && f.name == "cover.go"
 		for i, line := range f.lines {
-			for _, word := range bannedNet {
+			if isCover && isNetImport(line) {
+				t.Fatalf("%s/%s:%d imports \"net\", which cover.go must not do", f.pkg, f.name, i+1)
+			}
+			checkBannedNetLine(t, f, i, line)
+		}
+	}
+}
+
+var bannedNewPkg = []string{"mkfifo", "Mkfifo", "XDG_RUNTIME_DIR"}
+
+// TestConstraintPinsNewPackageBans enforces 13.9's named-pipe and runtime-dir bans across the seven new packages.
+func TestConstraintPinsNewPackageBans(t *testing.T) {
+	for _, f := range pinSources(t) {
+		if !newPinPkgs[f.pkg] {
+			continue
+		}
+		for i, line := range f.lines {
+			for _, word := range bannedNewPkg {
 				if strings.Contains(line, word) {
-					t.Fatalf("%s/%s:%d names %q, which opens a network the tray must not have", f.pkg, f.name, i+1, word)
+					t.Fatalf("%s/%s:%d names %q, which the new packages must not use", f.pkg, f.name, i+1, word)
 				}
 			}
-			if strings.Contains(line, ".DialContext(") && !strings.Contains(line, `"unix"`) {
-				t.Fatalf("%s/%s:%d dials without naming the unix network", f.pkg, f.name, i+1)
-			}
 		}
+	}
+}
+
+func TestConstraintPinsGuardHelpers(t *testing.T) {
+	confFile := pinFile{pkg: module + "/internal/conf", name: "conf.go"}
+	if !onConfTagLine(confFile, "\tTrial *string `toml:\"trial\"`") ||
+		onConfTagLine(confFile, "\tTrial *string `toml:\"trial\"` // \"trial\"") ||
+		onConfTagLine(pinFile{pkg: module + "/internal/conf", name: "other.go"}, "\tTrial *string `toml:\"trial\"`") {
+		t.Fatal("onConfTagLine guard failed")
+	}
+	coverFile := pinFile{pkg: module + "/internal/table", name: "cover.go"}
+	if !onCoverProtoLine(coverFile, `func isTCPOrUDP(p string) bool { return p == "tcp" || p == "udp" }`) ||
+		onCoverProtoLine(coverFile, `return p == "tcp"`) ||
+		onCoverProtoLine(pinFile{pkg: module + "/internal/table", name: "tree.go"}, `func isTCPOrUDP(p string) bool {}`) {
+		t.Fatal("onCoverProtoLine guard failed")
 	}
 }
