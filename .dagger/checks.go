@@ -145,12 +145,10 @@ func (c *Snitch) Ruff(
 }
 
 // Actionlint is the workflow's actionlint step: the workflow linter in
-// the same uvx packaging the workflow uses (`uvx --from actionlint-py
-// actionlint -color` over .github/workflows, from the repo root).
-// actionlint-py carries no version in the workflow and parity wins over
-// inventing a pin the workflow does not have; the pinned uv image is
-// what freezes this environment between runs, the choice pins.go records
-// beside the spec.
+// the same uvx packaging the workflow uses (`uvx --from actionlint-py==...
+// actionlint -color` over .github/workflows, from the repo root). The
+// version pin lives in pins.go (actionlintUvxSpec) and is the same string
+// the workflow's dispatch runs, so the two cannot drift.
 // +check
 func (c *Snitch) Actionlint(
 	ctx context.Context,

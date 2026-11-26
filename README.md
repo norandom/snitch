@@ -1,21 +1,39 @@
 # snitch
 
-[Little Snitch for Linux](https://obdev.at/littlesnitch-linux) in the terminal: every connection
-as process › host › address, block or unblock with one key, an egress graph of who sends how
-much to where, and popups for connections nobody has decided on yet, with a trace of the process
-behind them.
+A firewall you can see: every connection your machine makes, as process › host › address, with
+one key to block it, a graph of who sends how much to where, and popups when something nobody
+has decided on tries to connect.
 
-It talks to the Little Snitch daemon over the same WebSocket its web UI uses
-(`ws://127.0.0.1:3031/stream`), so everything it does is an ordinary Little Snitch rule: listed,
-editable and deletable in the web UI. It started as part of a
-[Hyprland thin client over RDP](https://github.com/norandom/hyperland-forky-worker-vm), where it
-runs with deny by default.
+Two pieces:
 
-## snitchd: the Go rewrite (in progress)
+- **`snitchd`** (this repo, Go): the daemon. It decides at `connect()` in the kernel (BPF LSM),
+  keyed by the program and the destination, from rules in a file. Monitor mode reports and
+  denies by rule only; deny-by-default runs as a bounded trial you can keep. It also learns
+  DNS names from the host's own plain-UDP answers, so a rule can say `to = "github.com"`
+  instead of a list of IPs. The kernel programs carry runtime contracts that fail open and
+  count their violations, and the daemon serves those counters in `status` (a non-zero
+  contract counter means a bug, report it). See [docs/c-hardening.md](docs/c-hardening.md).
+- **the client** (the `snitch` script at the repo root): the terminal UI, the tray item, and
+  the alert popups. It started against
+  [Little Snitch for Linux](https://obdev.at/littlesnitch-linux) over its WebSocket
+  (`ws://127.0.0.1:3031/stream`), so every rule it writes is an ordinary Little Snitch rule,
+  editable in the web UI; the snitchd-backed TUI and tray below are the Go rewrite.
+
+**Agentic layer 7 filter.** snitch is built to be the network guardrail for AI agents running on
+a machine: an agent's `curl` or `git` shows up as its own row, gets its own rules, and in
+enforce mode a connection nobody allowed is blocked with a popup naming the process chain
+behind it. That agentic featureset is work in progress: today the shipped piece is a thin
+client over a VM (see the
+[Hyprland thin client over RDP](https://github.com/norandom/hyperland-forky-worker-vm)), where
+it runs with deny by default, and the rule engine, trial flow, and DNS learning described
+below are what an agent host builds on. More agentic features (per-agent policies, automatic
+baselining, popup triage) are planned on top of this.
+
+## snitchd: the Go rewrite
 
 `snitchd` replaces Little Snitch's daemon: it decides at `connect()` in the kernel (BPF LSM),
-keyed by the program's executable and the destination. Phase 1 is in: rules from a file,
-learning mode, bounded enforce. The TUI below still talks to Little Snitch until parity.
+keyed by the program's executable and the destination. Rules from a file, learning mode,
+bounded enforce. The TUI below still talks to Little Snitch until parity.
 
 ```sh
 go build -o /tmp/snitchd ./cmd/snitchd
@@ -97,11 +115,15 @@ precedence. `examples/api.md` is the schema, with one example per message type, 
 and the client one-liners; `scripts/api-check.sh`, run as the desktop user, proves it against
 the running service.
 
-**Release.** A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lint.yml`, the same jobs
-as on every push) and then the release lanes (`.github/workflows/release.yml`): the static
-amd64 builds with the tag linked in, plus the deb. The lanes dispatch into the repo's Dagger
-module, so CI and a local `dagger call` run the same pipeline (see
-[docs/ci-debs.md](docs/ci-debs.md)); a failing check publishes nothing. The assets are
+**Release.** Before tagging, run the two-door suite ([docs/rugged.md](docs/rugged.md)):
+`dagger call rugged --fuzz-duration 30s` (every lint check incl. the bindings check, then a
+fuzz run of every target), then `sudo scripts/root-checks.sh --at <commit>` on a host with
+the `bpf` LSM, which loads the kernel programs and runs the hostile-input corpus and a
+bounded monitor run. A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lint.yml`, the
+same jobs as on every push) and then the release lanes (`.github/workflows/release.yml`): the
+static amd64 builds (position-independent, `-buildmode=pie`) with the tag linked in, plus the
+deb. The lanes dispatch into the repo's Dagger module, so CI and a local `dagger call` run
+the same pipeline (see [docs/ci-debs.md](docs/ci-debs.md)); a failing check publishes nothing. The assets are
 `snitchd`, `snitchd.sha256` (the form `sha256sum -c` reads), the tray binary
 `snitch-linux-amd64` and its `snitch-linux-amd64.sha256` (see [The tray](#the-tray) below),
 the Python client's `snitch` and `snitch-trial`, and the deb `snitch_<version>_amd64.deb` with

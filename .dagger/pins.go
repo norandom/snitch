@@ -189,11 +189,10 @@ const (
 	// (the extension-less Python client at the repo root is the target).
 	ruffVersion = "0.16.10"
 
-	// actionlint today: `uvx --from actionlint-py actionlint -color` — the
-	// workflow runs it without a version on the package, and parity wins
-	// over inventing a pin the workflow does not have; the uv image above
-	// is what freezes the environment between runs.
-	actionlintUvxSpec = "actionlint-py"
+	// actionlint: `uvx --from actionlint-py==1.7.12.25 actionlint -color`
+	// (pinned 2026-11-26 for the v1 release: the newest actionlint-py on
+	// PyPI, wrapping actionlint 1.7.12; bump deliberately, like ruffVersion).
+	actionlintUvxSpec = "actionlint-py==1.7.12.25"
 
 	// gocyclo today: `go run github.com/fzpp/gocyclo/cmd/gocyclo@v0.6.0
 	// -over 10` inside scripts/caps.sh (house caps: cyclomatic <= 10).

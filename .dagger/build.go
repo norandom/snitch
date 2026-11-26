@@ -95,19 +95,21 @@ func (c *Snitch) ReleaseBuild(
 	// the same command, and no shell to quote a version string into); the
 	// -ldflags value is the one argument the workflow's shell hands go
 	// after its quote stripping; -buildvcs stays at its default on
-	// purpose - the stamp is part of the published bytes. Each step
-	// prints as it completes so the log reads like the job's.
+	// purpose - the stamp is part of the published bytes. -buildmode=pie
+	// (decided 2026-11-26 for the v1 release) makes the static binaries
+	// position-independent; still CGO_ENABLED=0, so still static. Each
+	// step prints as it completes so the log reads like the job's.
 	ldflags := "-s -w -X main.version=" + version
 	builds := []struct {
 		step string
 		args []string
 	}{
 		{"build snitchd", []string{
-			"go", "build", "-trimpath", "-ldflags", ldflags,
+			"go", "build", "-buildmode=pie", "-trimpath", "-ldflags", ldflags,
 			"-o", "dist/snitchd", "./cmd/snitchd",
 		}},
 		{"build snitch", []string{
-			"go", "build", "-trimpath", "-ldflags", ldflags,
+			"go", "build", "-buildmode=pie", "-trimpath", "-ldflags", ldflags,
 			"-o", "dist/snitch-linux-amd64", "./cmd/snitch",
 		}},
 	}
@@ -420,17 +422,19 @@ func (c *Snitch) DistroBuild(
 		WithEnvVariable("CGO_ENABLED", "0").
 		WithEnvVariable("GOOS", "linux").
 		WithEnvVariable("GOARCH", "amd64")
+	// -buildmode=pie as in the release build, so the cross-distro byte
+	// comparison covers the flag too.
 	ldflags := "-s -w -X main.version=" + version
 	builds := []struct {
 		step string
 		args []string
 	}{
 		{"build snitchd", []string{
-			"go", "build", "-trimpath", "-ldflags", ldflags,
+			"go", "build", "-buildmode=pie", "-trimpath", "-ldflags", ldflags,
 			"-o", "dist/snitchd", "./cmd/snitchd",
 		}},
 		{"build snitch", []string{
-			"go", "build", "-trimpath", "-ldflags", ldflags,
+			"go", "build", "-buildmode=pie", "-trimpath", "-ldflags", ldflags,
 			"-o", "dist/snitch-linux-amd64", "./cmd/snitch",
 		}},
 	}
