@@ -8,10 +8,13 @@ package tui
 
 import (
 	"maps"
+	"net"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/norandom/snitch/internal/api"
+	"github.com/norandom/snitch/internal/ask"
 	"github.com/norandom/snitch/internal/clean"
 	"github.com/norandom/snitch/internal/client"
 )
@@ -19,6 +22,7 @@ import (
 const (
 	resnapshotEvery = 30 * time.Second
 	staleBeatWindow = 15 * time.Second
+	deniedLogWindow = 10 * time.Second
 )
 
 func onUp(m Model, u client.Up, now time.Time) (Model, []Effect) {
@@ -59,7 +63,8 @@ func onFacts(m Model, f client.Facts, _ time.Time) (Model, []Effect) {
 	return m, nil
 }
 
-func onStateLine(m Model, sl client.StateLine, _ time.Time) (Model, []Effect) {
+func onStateLine(m Model, sl client.StateLine, now time.Time) (Model, []Effect) {
+	prevMode, prevKept := currentModeKept(m)
 	s := sl.State
 	m.state = &s
 	if m.status != nil {
@@ -67,10 +72,17 @@ func onStateLine(m Model, sl client.StateLine, _ time.Time) (Model, []Effect) {
 		st.Mode, st.Trial, st.Kept = s.Mode, s.Trial, s.Kept
 		m.status = &st
 	}
-	if !s.RulesChanged {
-		return m, nil
-	}
 	var fx []Effect
+	if !s.RulesChanged && s.Mode != "" && (s.Mode != prevMode || s.Kept != prevKept) {
+		var eff Effect
+		m, eff = recordLogLine(m, modeLogLine(s), now)
+		if eff != nil {
+			fx = append(fx, eff)
+		}
+	}
+	if !s.RulesChanged {
+		return m, fx
+	}
 	var e Effect
 	m, e = sendReq(m, purpose{kind: purposeRules}, api.Request{Type: "rules"})
 	fx = append(fx, e)
@@ -79,14 +91,97 @@ func onStateLine(m Model, sl client.StateLine, _ time.Time) (Model, []Effect) {
 	return m, fx
 }
 
+func currentModeKept(m Model) (string, bool) {
+	if m.state != nil {
+		return m.state.Mode, m.state.Kept
+	}
+	if m.status != nil {
+		return m.status.Mode, m.status.Kept
+	}
+	return "", false
+}
+
+func modeLogLine(s api.State) clean.Safe {
+	reason := s.Reason
+	if reason == "" {
+		reason = s.Mode
+	}
+	return clean.Join(clean.Const("mode "), clean.Text(reason))
+}
+
 func onEventLine(m Model, ev client.EventLine, now time.Time) (Model, []Effect) {
 	switch ev.Event.Verdict {
 	case "allow-stale":
 		m.staleBeatAt = now
 	case "allow-kill":
 		m.killEvent = true
+	case "deny-rule", "deny-default":
+		return logDeniedEvent(m, ev.Event, now)
 	}
 	return m, nil
+}
+
+func logDeniedEvent(m Model, ev api.Event, now time.Time) (Model, []Effect) {
+	line := deniedLogLine(ev)
+	key := string(line)
+	if last, ok := m.denied[key]; ok {
+		d := now.Sub(last)
+		if d >= 0 && d < deniedLogWindow {
+			return m, nil
+		}
+	}
+	next := maps.Clone(m.denied)
+	if next == nil {
+		next = make(map[string]time.Time, 1)
+	}
+	next[key] = now
+	m.denied = next
+	m, eff := recordLogLine(m, line, now)
+	if eff == nil {
+		return m, nil
+	}
+	return m, []Effect{eff}
+}
+
+func deniedLogLine(ev api.Event) clean.Safe {
+	return clean.Join(clean.Const("denied "), eventProgram(ev), clean.Const(" > "), eventDest(ev))
+}
+
+func eventProgram(ev api.Event) clean.Safe {
+	if (ev.Program == "" || ev.Program == ask.Unknown) && ev.Path != "" {
+		return clean.Path(ev.Path)
+	}
+	if ev.Program != "" {
+		return clean.Text(ev.Program)
+	}
+	return clean.Const("unknown")
+}
+
+func eventDest(ev api.Event) clean.Safe {
+	if ev.Name != "" {
+		host := clean.Name(ev.Name)
+		if ev.Port == 0 {
+			return host
+		}
+		return clean.Join(host, clean.Text(":"+strconv.Itoa(int(ev.Port))))
+	}
+	if ev.Port == 0 {
+		return clean.Text(ev.Addr)
+	}
+	return clean.Text(net.JoinHostPort(ev.Addr, strconv.Itoa(int(ev.Port))))
+}
+
+func onLogFailed(m Model, lf LogFailed) Model {
+	if m.logBroken {
+		return m
+	}
+	m.logBroken = true
+	msg := clean.Const("log write failed")
+	if lf.Err != "" {
+		msg = clean.Join(clean.Const("log write failed: "), lf.Err)
+	}
+	m.log = append(slices.Clone(m.log), msg)
+	return m
 }
 
 func onSummaryLine(m Model, sl client.SummaryLine, _ time.Time) (Model, []Effect) {

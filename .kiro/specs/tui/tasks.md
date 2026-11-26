@@ -300,7 +300,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/tui/trial.go, trial_test.go_
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10_
 
-- [ ] 5.6 The log lines
+- [x] 5.6 The log lines
   - The log pane starts with the tail handed in; a denied connection (`deny-rule`,
     `deny-default`) appends `denied <program> > <destination>` at most once per 10 s for the
     same pair; a mode change appends the daemon's reason; a failed write is said once in the

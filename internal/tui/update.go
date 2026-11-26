@@ -76,6 +76,5 @@ func onResize(m Model, r Resize) Model {
 	return m
 }
 
-// Named message stubs filled by tasks 5.6 and 5.7.
-func onLogFailed(m Model, _ LogFailed) Model { return m }
+// Named message stub filled by task 5.7.
 func onInspected(m Model, _ Inspected) Model { return m }
