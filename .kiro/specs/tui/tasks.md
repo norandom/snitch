@@ -234,7 +234,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/tui/model.go, update.go, keys.go, screen.go, their tests_
   - _Requirements: 1.10, 2.6, 12.3, 13.1, 13.2_
 
-- [ ] 5.2 Following the daemon
+- [x] 5.2 Following the daemon
   - On connection: ask for rules, programs and the snapshot of the current window; a summary
     updates the store; a state line with changed rules asks for rules and programs again; a
     dropped message, a window change and every 30 s ask for the snapshot again; on loss the

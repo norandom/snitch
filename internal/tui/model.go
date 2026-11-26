@@ -119,6 +119,7 @@ type Model struct {
 	up          bool
 	foreign     bool
 	stale       bool
+	downReason  clean.Safe
 	staleBeatAt time.Time
 	killEvent   bool
 	window      string
