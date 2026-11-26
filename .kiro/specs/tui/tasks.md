@@ -165,7 +165,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/table/sort.go, search.go, their tests_
   - _Requirements: 3.4, 3.5, 3.8, 3.9_
 
-- [ ] 4.3 Which rule covers a row
+- [x] 4.3 Which rule covers a row
   - For a row's key, the covering rule in the kernel's documented order (program-specific
     before any-program; exact protocol and port, then protocol, then any; longest prefix),
     name rules by the entry's name, an unknown program resolved through the declared
