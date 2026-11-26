@@ -23,7 +23,7 @@ change that moves their lines.
     kept as the reference for later comparison
   - _Requirements: 9.2_
 
-- [ ] 2. Stricter compiler diagnostics and the deferred analyzer findings
+- [x] 2. Stricter compiler diagnostics and the deferred analyzer findings
 - [x] 2.1 Enable the extended warning set and separate generated headers from authored ones
   - Add the extended set including implicit-conversion warnings to both generation commands
   - Include the kernel type dump as a system header; keep authored headers as user headers
@@ -47,7 +47,7 @@ change that moves their lines.
   - Remove the packet initializer's constant result and the two unreachable error branches
   - Done when this program compiles without a warning under the extended set
   - _Requirements: 1.5, 2.1_
-- [ ] 2.4 Regenerate, shorten the suppressions list and verify nothing regressed
+- [x] 2.4 Regenerate, shorten the suppressions list and verify nothing regressed
   - Regenerate the bindings; remove the four deferred entries and the two entries the
     unreachable branches needed; re-anchor any line-bound entry that moved, widening none
   - Run the analyzer check, the ordinary test suite and the root test script (needs root)
@@ -55,7 +55,7 @@ change that moves their lines.
     the programs load, and the parser tests report the same counters as the baseline
   - _Requirements: 1.6, 2.2, 2.3, 2.4, 9.1_
 
-- [ ] 3. Build-time contracts on shared layouts and limits
+- [x] 3. Build-time contracts on shared layouts and limits
 - [x] 3.1 Create the contract header
   - Provide the three build-time contract forms (size, member position, relation of
     constants) and the runtime contract expression that counts and yields false without
@@ -82,7 +82,7 @@ change that moves their lines.
   - Done when the tap compiles and each relation in the table is present as a build-time
     contract
   - _Requirements: 3.3_
-- [ ] 3.5 Regenerate and prove the contracts bite without adding code
+- [x] 3.5 Regenerate and prove the contracts bite without adding code
   - Regenerate; compare the programs' instruction sections with those from task 2.4
   - On a scratch copy: pad one shared structure, change one member of the shared trie
     definition; observe the failures; discard the copy
@@ -100,7 +100,7 @@ change that moves their lines.
     size fails naming the structure
   - _Requirements: 3.5_
 
-- [ ] 4. Runtime contracts and counters in the kernel programs
+- [x] 4. Runtime contracts and counters in the kernel programs
 - [x] 4.1 Give the egress decision program counters of its own
   - A per-CPU counter array with the fixed index order of the design; count decisions,
     unreadable destinations, missing executables and lost events where they occur today
@@ -128,7 +128,7 @@ change that moves their lines.
   - Done when the tap compiles, the existing eleven indices are unchanged, and no path from a
     violated contract reaches an insert or a record
   - _Requirements: 3.3, 4.2, 4.3, 4.4, 4.8_
-- [ ] 4.4 Regenerate and verify the kernel side
+- [x] 4.4 Regenerate and verify the kernel side
   - Regenerate; run the analyzer check, the root test script (needs root) and a bounded
     monitor-mode run (needs root)
   - Done when the analyzer reports zero unsuppressed findings, both programs pass the
@@ -136,7 +136,7 @@ change that moves their lines.
     starts, reports events and ends on its own
   - _Requirements: 1.6, 2.3, 4.8, 9.2, 9.3_
 
-- [ ] 5. Daemon and API
+- [x] 5. Daemon and API
 - [x] 5.1 (P) Make the two record decoders reject wrong-sized input instead of panicking
   - The egress event decoder and the DNS answer decoder accept only the exact record size and
     return an error otherwise; the event reader notes and skips such a record and continues
@@ -159,7 +159,7 @@ change that moves their lines.
     and the full set of contract names at zero
   - _Depends: 4.4, 5.2_
   - _Requirements: 5.1, 5.2, 5.4, 5.5_
-- [ ] 5.4 Integration: serve the counters in the status reply and tie the names to the maps
+- [x] 5.4 Integration: serve the counters in the status reply and tie the names to the maps
   - Wire the reader into the status reply for every reader of the status
   - Extend the layout test so the counter name tables must match the counter maps' sizes
   - Extend the API check to assert the counters object; run it against a bounded monitor run
@@ -169,8 +169,8 @@ change that moves their lines.
   - _Depends: 3.6, 5.3_
   - _Requirements: 3.5, 5.1, 5.3, 5.7, 9.2_
 
-- [ ] 6. Evidence: hostile DNS input and fuzzed decoders
-- [ ] 6.1 Build the corpus harness for the DNS tap's root tests
+- [x] 6. Evidence: hostile DNS input and fuzzed decoders
+- [x] 6.1 Build the corpus harness for the DNS tap's root tests
   - A corpus entry carries its name, what it probes, the expected outcome, the frame, and the
     expected counters, record and exact trie content; byte-level mutators derive malformed
     frames from well-formed ones
@@ -181,7 +181,7 @@ change that moves their lines.
     by name, and still refuses without root
   - _Depends: 4.4, 5.3_
   - _Requirements: 6.2, 6.3, 6.4, 6.6, 6.7, 6.8_
-- [ ] 6.2 Add the length, count and question entries to the corpus
+- [x] 6.2 Add the length, count and question entries to the corpus
   - Transport and network length disagreements; answer counts above the records present and
     above the tap's limit; question counts other than one; answers without a recorded or
     matching question
@@ -189,7 +189,7 @@ change that moves their lines.
     re-run task 4.4's checks) or correct the expectation with the reason stated in the entry
   - Done when every entry of these groups passes under the root test script (needs root)
   - _Requirements: 6.1_
-- [ ] 6.3 Add the compression, name-limit, record-data and at-the-limit entries to the corpus
+- [x] 6.3 Add the compression, name-limit, record-data and at-the-limit entries to the corpus
   - Looping, forward and out-of-packet pointers; reserved label types; names and labels
     beyond the limits; record data lengths that disagree with the type or the packet
   - Well-formed packets at each limit with the allow entries they must produce
@@ -281,7 +281,7 @@ change that moves their lines.
   - Done when the steering states the observer rule and the handover lists none of the closed
     points
   - _Requirements: 9.4, 9.6_
-- [ ] 8.3 Final validation of the whole feature
+- [x] 8.3 Final validation of the whole feature
   - Run every pipeline check including the bindings check, the ordinary test suite with all
     fuzz seeds, the root test script (needs root), a bounded monitor-mode run and the API
     check (needs root)
@@ -291,8 +291,8 @@ change that moves their lines.
     monitor run, and no step entered enforce mode
   - _Requirements: 2.3, 7.4, 9.1, 9.2, 9.3_
 
-- [ ] 9. Follow-ups decided by the user (2026-11-25)
-- [ ] 9.1 Reject a UDP length larger than the packet in the DNS tap
+- [x] 9. Follow-ups decided by the user (2026-11-25)
+- [x] 9.1 Reject a UDP length larger than the packet in the DNS tap
   - `parse_l34` refuses `uh.len > skb->len - off` before ST_SEEN; bindings regenerated;
     `lengths-udp-beyond-frame` now expects nothing learned, plus an IPv6 twin and the
     one-byte-beyond boundary entry; Req 6.3 amended to name the nine remaining exceptions
@@ -391,4 +391,19 @@ change that moves their lines.
   dispatch (or fold Fmt into the go job). `dagger check` / lint-core / rugged still run it.
 - 7.3: a comment appended after the last code line of a .bpf.c does not change the objects
   (no line info for it), so it is not a stale-detection probe; use a real code change.
+- Root gates (2026-11-26, dev VM, kernel 7.2.6+deb14, bpf LSM active), `scripts/root-checks.sh
+  --at 8300add`: rc=0. Both programs load (dns_query 9420, dns_answer 62785 verified
+  instructions); all 58 corpus entries pass (the three short-L3 `mayRefuse` entries refused by
+  the test run with EINVAL); parser, query and socket-join tests pass with
+  `internal/dns/prog_root_test.go` unchanged since c1ca575, so their counters equal the
+  baseline expectations; the 75 s monitor run ended on its own; api-check 0 failed steps
+  incl. `counters` (both sections available, every contract counter 0, egress decisions 13
+  after the run); mode monitor throughout, never enforce. This closes 2.4, 3.5, 4.4, 5.4,
+  6.1-6.3, 8.3 (with lint-all, `go test ./...` and the decide() diff review: only counter
+  bumps, allow-resolving contract branches, const and casts) and 9.1.
+- The first VM run (`--at f990624`) failed and found two defects, fixed in 8300add: six
+  truncation entries predated 9.1's UDP-length check, and `-api` in `/tmp` made snitchd chmod
+  `/tmp` to 0755 (the daemon now refuses a shared directory; the script uses
+  `/run/snitch-check`).
+- 1.2 stays open until the baseline run `sudo scripts/root-checks.sh --at c1ca575` is recorded.
 
