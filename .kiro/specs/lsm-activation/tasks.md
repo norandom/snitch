@@ -111,7 +111,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: internal/verbs/bar.go, internal/verbs/bar_hook_test.go, cmd/snitch/oneshot_hook_test.go_
   - _Depends: 1.2, 3; not (P): its gate builds `./cmd/snitch`, which compiles the packages 4.2 and 4.3 edit_
   - _Requirements: 5.1, 5.2, 5.3, 3.3_
-- [ ] 4.2 (P) The terminal UI
+- [x] 4.2 (P) The terminal UI
   - A `NO KERNEL HOOK` tag directly after ` snitch |` in the header (the leading ` snitch |`
     becomes its own span inside the existing `Sprintf` line of the header, no net lines, the
     existing goldens unchanged as text), and the bottom line

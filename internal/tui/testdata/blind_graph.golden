@@ -1,0 +1,14 @@
+ snitch | NO KERNEL HOOK | last 1h | 0 programs | sort: activity 10s | mode: monitor | /run/snitch/snitch.sock
+ EGRESS  last 1h   0B sent by 0 programs   bars: log scale
+ totals: connections active in last 1h, bytes counted since first seen
+
+ collecting ... (nothing sent in this time window yet)
+
+────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+ kernel hook inactive: connections not seen or blocked - boot not configured
+ ↑↓:move →:open ←:close x:block t:win s/S:sort /:search e:graph T/K/E/U q:quit

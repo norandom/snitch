@@ -60,7 +60,8 @@ func overviewHeader(m Model, now time.Time) Line {
 		sortStr = fmt.Sprintf("activity %ds", int64(res[m.resortIdx%len(res)]/time.Second))
 	}
 	progLbl := map[bool]string{true: "1 program", false: fmt.Sprintf("%d programs", nProg)}[nProg == 1]
-	out := Line{{Text: clean.Text(fmt.Sprintf(" snitch | last %s | %s | sort: %s | mode: %s", m.window, progLbl, sortStr, modeLabel(m, now))), Style: Head}}
+	out := Line{{Text: clean.Const(" snitch |"), Style: Head},
+		{Text: clean.Text(fmt.Sprintf(" last %s | %s | sort: %s | mode: %s", m.window, progLbl, sortStr, modeLabel(m, now))), Style: Head}}
 	sep := Span{Text: clean.Const(" | "), Style: Dim}
 	if m.view.Search != "" {
 		out = append(out, sep, Span{Text: clean.Text("search: " + m.view.Search), Style: Bold})
@@ -78,7 +79,7 @@ func overviewHeader(m Model, now time.Time) Line {
 	if m.socket != "" {
 		out = append(out, sep, Span{Text: clean.Middle(m.socket, 32), Style: Dim})
 	}
-	return out
+	return withHookTag(m, out)
 }
 
 func allAllowedReason(m Model, now time.Time) clean.Safe {
@@ -229,7 +230,7 @@ func overviewBottom(m Model) []Line {
 		lines[5] = Line{{Text: clean.Join(clean.Const(" "), m.notice), Style: Warn}}
 	}
 	lines[6] = Line{{Text: clean.Const(" ↑↓:move →:open ←:close x:block t:win s/S:sort /:search e:graph T/K/E/U q:quit"), Style: Dim}}
-	return lines
+	return withHookLine(m, lines)
 }
 
 func rowProgAndPath(m Model, row table.Row) (string, string) {
