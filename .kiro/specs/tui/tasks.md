@@ -491,7 +491,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/tui/budget_test.go_
   - _Requirements: 2.7_
 
-- [ ] 8.4 (P) The documentation of the binary
+- [x] 8.4 (P) The documentation of the binary
   - `docs/tui.md`: every key and verb, the config keys with defaults, the exit codes, a
     status-bar example with the absolute path, and the limits in plain words: the log file is
     a convenience and the journal is the record; the measures against other programs do not
