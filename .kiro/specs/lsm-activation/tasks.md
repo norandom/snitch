@@ -26,7 +26,7 @@ deletes it). Wording is fixed by the design's "Sentences" list; tests compare it
 Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files.
 
 - [ ] 1. Foundation: the probe and the wire fact
-- [ ] 1.1 (P) The kernel hook probe
+- [x] 1.1 (P) The kernel hook probe
   - A package that answers, from an injected file reader, whether `bpf` is in the kernel's
     active LSM list (active, inactive, unknown) and, when inactive, whether a generated GRUB
     configuration already carries it (pending) or could not be read (cannot tell)
