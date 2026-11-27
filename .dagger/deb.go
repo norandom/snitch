@@ -35,8 +35,10 @@ install -d -m 0755 \
 	/pkg/DEBIAN \
 	/pkg/usr/local/sbin \
 	/pkg/usr/bin \
+	/pkg/usr/lib/snitch \
 	/pkg/usr/lib/systemd/system \
 	/pkg/usr/share/applications \
+	/pkg/etc/default/grub.d \
 	/pkg/etc/snitch \
 	/pkg/usr/share/doc/snitch \
 	/pkg/usr/share/lintian/overrides
@@ -49,12 +51,14 @@ install -m 0755 /dist/snitch-linux-amd64 /pkg/usr/bin/snitch
 
 # The repository's own files, shipped byte-identical (the payload table's
 # source column): units unpacked and never enabled by the package, the
-# desktop entry where sessions resolve it, the verified sample as the
-# conffile payload, the license where policy puts it, and the overrides
-# record with its written justifications.
+# desktop entry where sessions resolve it, the GRUB drop-in and its helper,
+# the verified sample as the conffile payload, the license where policy puts
+# it, and the overrides record with its written justifications.
 install -m 0644 /src/systemd/snitchd.service /pkg/usr/lib/systemd/system/snitchd.service
 install -m 0644 /src/systemd/snitchd-trial-boot.service /pkg/usr/lib/systemd/system/snitchd-trial-boot.service
 install -m 0644 /src/desktop/snitch-tray.desktop /pkg/usr/share/applications/snitch-tray.desktop
+install -m 0644 /src/packaging/grub-snitch-lsm.cfg /pkg/etc/default/grub.d/snitch-lsm.cfg
+install -m 0755 /src/packaging/lsm-cmdline.sh /pkg/usr/lib/snitch/lsm-cmdline
 install -m 0644 /src/examples/rules.toml /pkg/etc/snitch/rules.toml
 install -m 0644 /src/LICENSE /pkg/usr/share/doc/snitch/copyright
 install -m 0644 /src/packaging/lintian-overrides /pkg/usr/share/lintian/overrides/snitch
@@ -89,6 +93,8 @@ sed -e "s|^Version:.*|Version: $DEB_VERSION|" \
 	/src/packaging/control > /pkg/DEBIAN/control
 chmod 0644 /pkg/DEBIAN/control
 install -m 0644 /src/packaging/conffiles /pkg/DEBIAN/conffiles
+install -m 0755 /src/packaging/postinst.sh /pkg/DEBIAN/postinst
+install -m 0755 /src/packaging/postrm.sh /pkg/DEBIAN/postrm
 
 # DEBIAN/md5sums: every payload file, the conffile included per modern dpkg
 # convention, one canonical order (LC_ALL=C sort over null-separated

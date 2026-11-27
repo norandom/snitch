@@ -14,10 +14,12 @@ Description: egress control for Linux, decided at connect() in the kernel
  name who may talk to where; monitor mode reports, a bounded trial can enforce
  deny-by-default with a boot revert. The snitch tray binary shows connections
  and asks about the ones nobody has decided on yet. This package ships the
- daemon, the tray, their systemd units, the autostart desktop entry and a
- documented sample configuration as a declarable conffile. The binaries are
- static (CGO_ENABLED=0), so the package declares no Depends: installation
- needs nothing but the archive, and the units and the desktop entry stay
- unpacked, never enabled. Recommended: bpftool, for the kill switch from a
- root console, and a D-Bus session bus, for the tray. Suggested: Plasma,
- whose panel hosts the tray, and the Breeze icons its notifications name.
+ daemon, the tray, their systemd units, the autostart desktop entry, a GRUB
+ drop-in and a documented sample configuration as declared conffiles. The
+ binaries are static (CGO_ENABLED=0), so the package declares no Depends:
+ installation needs nothing but the archive. On GRUB hosts the package
+ configures the next boot for the bpf LSM and runs update-grub; the systemd
+ units and the desktop entry stay unpacked, never enabled. Recommended:
+ bpftool, for the kill switch from a root console, and a D-Bus session bus,
+ for the tray. Suggested: Plasma, whose panel hosts the tray, and the Breeze
+ icons its notifications name.

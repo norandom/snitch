@@ -186,7 +186,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
     and the reason. Tests cover all supported, one kernel without the option, one without a
     configuration file, and an empty boot directory (`-k` points at fixtures)
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.12_
-- [ ] 5.2 The maintainer scripts and the deb tree
+- [x] 5.2 The maintainer scripts and the deb tree
   - `postinst` (configure): regenerate through `update-grub` when it and `/boot/grub` exist,
     report a failure in one line without failing, then print the helper's explanation; without
     GRUB print the parameter to add by hand; `postrm` (remove, purge): regenerate when

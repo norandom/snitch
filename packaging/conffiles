@@ -1,1 +1,2 @@
+/etc/default/grub.d/snitch-lsm.cfg
 /etc/snitch/rules.toml
