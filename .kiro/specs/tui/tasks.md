@@ -482,7 +482,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Boundary: internal/tui/hostile_test.go, internal/term/hostile_test.go, testdata/_
   - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.6, 13.8, 15.3_
 
-- [ ] 8.3 (P) The 100 ms budget
+- [x] 8.3 (P) The 100 ms budget
   - A benchmark and a test with 4096 entries, every row open: one movement key (update and
     render) stays under 100 ms, and a summary changing all entries costs one rebuild;
     the timing assertion is skipped under the race detector, the rebuild count is not
