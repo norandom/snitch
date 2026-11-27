@@ -19,14 +19,11 @@ Two programs:
 ## What you need
 
 - Linux 6.12 or newer, amd64, systemd.
-- The `bpf` LSM active. Check with:
-
-  ```sh
-  cat /sys/kernel/security/lsm
-  ```
-
-  The list must contain `bpf`. If it does not, add `bpf` to the `lsm=` kernel parameter
-  and reboot.
+- The `bpf` LSM active. Check with `cat /sys/kernel/security/lsm` (must contain `bpf`),
+  `snitchd status` (the `hook:` line), or `scripts/lsm-check.sh` in a source checkout. If
+  `bpf` is not active yet, the `.deb` package arranges it on GRUB hosts for the next boot
+  (see [Install](#install)); on non-GRUB boot loaders, append the `lsm=<list>,bpf` kernel
+  parameter printed during install and reboot.
 - For the tray: KDE Plasma 6. The terminal UI needs only a terminal of 80x20 or larger.
 
 ## Install
@@ -39,8 +36,26 @@ sha256sum -c snitch_<version>_amd64.deb.sha256
 sudo apt install ./snitch_<version>_amd64.deb
 ```
 
-The package enables nothing. Start the daemon, and name yourself as the operator, the one
-user besides root who may block, allow and start trials:
+On GRUB hosts where `bpf` is not active yet, installing the `.deb` verifies that every
+installed kernel has `CONFIG_BPF_LSM=y`, configures `/etc/default/grub.d/snitch-lsm.cfg`
+to append `bpf` to the kernel's currently active LSM list, and runs `update-grub`. **Reboot
+after the first install** before expecting `snitchd` to see and block connections; until
+then, the daemon logs that the hook is inactive, refuses `default deny` trials, and every
+client surface warns. On non-GRUB boot loaders (or if `lsm=` is already set in GRUB), the
+package changes nothing and prints the `lsm=<list>,bpf` kernel parameter to add by hand.
+
+You can check the state before and after reboot with:
+
+```sh
+snitchd status                   # check the hook: line
+cat /sys/kernel/security/lsm     # must include bpf
+```
+
+(From a source checkout, `scripts/lsm-check.sh` checks all of these read-only.)
+
+The package enables no systemd units, creates no `/etc/snitch/operator`, and touches no
+rules beyond the sample. Start the daemon, and name yourself as the operator, the one user
+besides root who may block, allow and start trials:
 
 ```sh
 sudo systemctl enable --now snitchd-trial-boot.service snitchd.service
@@ -99,7 +114,7 @@ asks you to Allow or Block. To start it with your session:
 cp /usr/share/applications/snitch-tray.desktop ~/.config/autostart/
 ```
 
-The tray never changes a mode. It only writes the rule you clicked. The six icons and every
+The tray never changes a mode. It only writes the rule you clicked. The seven icons and every
 detail are in [docs/tray.md](docs/tray.md).
 
 ### A status bar

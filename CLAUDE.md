@@ -72,7 +72,7 @@ Little-Snitch-style egress control for Linux, open source, eBPF. Two binaries, o
   (BPF LSM hooks), keyed by the program's executable (inode + device) and the destination.
 - `snitch` (user, Go): Bubble Tea TUI (`overview` default, `egress`), one-shot `status` and
   `default` verbs (`snitch default deny|allow [--keep]`), `-version`, and `tray` (the KDE
-  tray: one StatusNotifierItem with six drawn state icons, a facts menu, questions with Allow
+  tray: one StatusNotifierItem with seven drawn state icons, a facts menu, questions with Allow
   and Block through the daemon's `rule.add`). See `docs/tui.md`; alert popups (`watch`/`ask`)
   and process tracing return with `popups-trace`.
 
@@ -125,8 +125,12 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   `dagger call rugged --fuzz-duration 30s`, then `sudo scripts/root-checks.sh --at <rev>` on
   the dev VM (DNS root tests with the hostile-input corpus, bounded monitor run, api-check;
   never enforce). See `docs/c-hardening.md`.
-- `cmd/snitchd/` the daemon. Build + try: `go build -o /tmp/snitchd ./cmd/snitchd &&
-  sudo /tmp/snitchd -mode monitor -duration 10s`.
+- `cmd/snitchd/` the daemon. Imports `internal/lsm` (stdlib + `internal/contract` only; probes
+  `/sys/kernel/security/lsm`, kernel build config, and GRUB config). Build + try:
+  `go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -duration 10s`.
+- `packaging/` deb control files, GRUB drop-in (`grub-snitch-lsm.cfg`), `lsm-cmdline.sh` helper,
+  and `postinst.sh`/`postrm.sh` (runs `update-grub` on configure and removal, nothing else;
+  `packaging/*.sh` is checked by `shellcheck` alongside `scripts/*.sh`).
 - `cmd/snitch/` the user binary: `snitch` (overview TUI), `snitch egress`, `snitch status`,
   `snitch default deny|allow [--keep]`, `snitch tray [-api PATH] [-ask all|enforce]
   [-operator-file PATH]`, `snitch -version`; see `docs/tui.md`. One-way package layers: `internal/term`
@@ -138,7 +142,7 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   github.com/godbus/dbus/v5 v5.2.4 (the tray's session bus, `internal/sni` only; BSD-2-Clause,
   pure Go, no cgo, so the static builds stand — `release.yml` also ships `snitch-linux-amd64`
   built from `./cmd/snitch`). Lint: `gofmt -l .`,
-  `go vet ./...`; CI (`.github/workflows/lint.yml`): fmt, go, shellcheck,
+  `go vet ./...`; CI (`.github/workflows/lint.yml`): fmt, go, shellcheck (`scripts/*.sh`, `packaging/*.sh`),
   actionlint (plus golangci, cppcheck, bindings). Commit as `git -c user.name=marius -c user.email=wishinet@gmail.com commit`.
   Before every push: no secrets in the diff.
 - Docs by audience: `README.md` is for the Linux user (what it does, install from the deb,
@@ -201,6 +205,12 @@ Spec `tui` (2026-11-27, see `.kiro/specs/tui/` and `docs/tui.md`): Bubble Tea v2
 v2 terminal UI (`overview` default, `egress`), `snitch status` JSON, `snitch default
 deny|allow [--keep]`, and `snitch-check`/`scripts/tui-check.sh`, retiring the legacy client
 and its units/assets.
+Spec `lsm-activation` (2026-11-27, see `.kiro/specs/lsm-activation/`): `internal/lsm` (stdlib +
+`internal/contract`) probes whether `bpf` is active in `/sys/kernel/security/lsm`, whether
+the kernel supports BPF LSM, and whether GRUB already configures it; `api.Status.Hook`,
+daemon log/status/trial refusal, TUI tag + bottom line, `snitch status` `down` class, 7th
+tray state `Blind` (`kernel hook inactive`), and deb GRUB drop-in + `lsm-cmdline` +
+`postinst`/`postrm` (running `update-grub` on configure and removal, and nothing else).
 Not done yet, in order:
 
 1. `write-gate` (mandatory follow-up: API writes currently authorise by uid alone; harden loosening writes and `trial`/`keep`), then `popups-trace` (alert popups `watch`/`ask` + kernel-side process trace).

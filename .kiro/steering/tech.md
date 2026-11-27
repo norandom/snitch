@@ -21,11 +21,13 @@ client of the daemon and never touches BPF. Decision order in the kernel is fixe
 proto, any) → mode default (monitor allows and reports, enforce denies and reports).
 
 The user-side binary `cmd/snitch` serves the Bubble Tea TUI (`overview` default, `egress`),
-one-shot `status` and `default` verbs, `-version`, and the KDE `tray` (`internal/sni` imports
-`internal/tray`; `internal/term` isolates `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2`
-over pure `internal/tui` + `internal/table` + `internal/clean`; shared `internal/client` and
-`internal/ask` import only `internal/api` wire types). Alert popups (`watch`, `ask`) and
-process tracing return with `popups-trace`.
+one-shot `status` and `default` verbs, `-version`, and the 7-state KDE `tray` (`internal/sni`
+imports `internal/tray`; `internal/term` isolates `charm.land/bubbletea/v2` and
+`charm.land/lipgloss/v2` over pure `internal/tui` + `internal/table` + `internal/clean`; shared
+`internal/client` and `internal/ask` import only `internal/api` wire types). `cmd/snitchd`
+imports `internal/lsm` (stdlib + `internal/contract` only) to probe the kernel hook;
+`cmd/snitch` reads `api.Status.Hook` instead. Alert popups (`watch`, `ask`) and process
+tracing return with `popups-trace`.
 
 ## Core Technologies
 
@@ -38,7 +40,9 @@ process tracing return with `popups-trace`.
   (`overview`, `egress`, `status`, `default`, `tray`, `-version`; see `docs/tui.md`). Interactive
   popups (`watch`, `ask`) and process trace return with `popups-trace`.
 - **Packaging**: static Go binaries; GitHub releases pinned by sha256 by the consuming repo;
-  Nix flake (`buildGoModule`) later. systemd units in `systemd/`.
+  `.deb` package (`packaging/`) shipping systemd units (unpacked, never enabled), GRUB
+  drop-in + `lsm-cmdline` helper, and `postinst`/`postrm` (running `update-grub` on configure
+  and removal, and nothing else); Nix flake (`buildGoModule`) later. systemd units in `systemd/`.
 
 ## Key Libraries
 
@@ -80,7 +84,7 @@ the fail-open branch (allow in the LSM hooks, pass in the DNS tap), never deny. 
 are in the API status (`counters`); a non-zero contract counter is a defect.
 
 ### Code quality
-`gofmt -l .` clean, `go vet ./...` clean; shell with shellcheck; workflows with actionlint. CI is
+`gofmt -l .` clean, `go vet ./...` clean; shell (`scripts/*.sh` and `packaging/*.sh`) with shellcheck; workflows with actionlint. CI is
 `.github/workflows/lint.yml`. Comments explain why, in plain sentences; file headers state
 what the file does and its fail-safe implications.
 

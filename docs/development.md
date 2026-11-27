@@ -28,8 +28,8 @@ More ways to run it by hand, including learning mode, are in [daemon.md](daemon.
 | `internal/bpf/` | bpf2go output, committed |
 | `cmd/snitchd/` | the daemon |
 | `cmd/snitch/` | the user binary |
-| `internal/` | Go packages; `term` isolates Bubble Tea and Lip Gloss, `sni` isolates the session D-Bus |
-| `systemd/`, `desktop/`, `packaging/` | the units, the tray's autostart entry, the deb's control files |
+| `internal/` | Go packages; `lsm` probes the kernel hook (stdlib + `internal/contract`), `term` isolates Bubble Tea and Lip Gloss, `sni` isolates the session D-Bus |
+| `systemd/`, `desktop/`, `packaging/` | the units, the tray's autostart entry, the deb's control files, GRUB drop-in, `lsm-cmdline` helper and maintainer scripts |
 | `scripts/` | checks and console helpers |
 | `.dagger/` | the pipeline: one function per check, build, packaging and smoke phase |
 
@@ -46,7 +46,7 @@ scripts/fuzz.sh -t 60s                      # fuzz targets, no root
 dagger call bindings                        # committed bindings match their source, byte for byte
 ```
 
-CI (`.github/workflows/lint.yml`) runs fmt, go, shellcheck, actionlint, golangci, cppcheck
+CI (`.github/workflows/lint.yml`) runs fmt, go, shellcheck (`scripts/*.sh` and `packaging/*.sh`), actionlint, golangci, cppcheck
 and the bindings check on every push. The workflows only dispatch into the Dagger module, so
 CI and a local `dagger call` run the same functions; see [ci-debs.md](ci-debs.md) for the
 pipeline, the deb and local reproduction.

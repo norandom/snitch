@@ -25,7 +25,7 @@ popups (`popups-trace`).
   release workflow stay as they are. Speaking StatusNotifierItem directly gives the `Status`
   property (`NeedsAttention` for kill switch and daemon gone) and a tooltip, and it is
   testable against a private session bus. The icons turned out differently from what this
-  line first promised: the tray draws its own pixmaps for all six states, not theme names —
+  line first promised: the tray draws its own pixmaps for all seven states, not theme names —
   every state differs in shape and every stroke carries a light halo, so they read on Breeze
   light and dark alike (`kde-tray` research.md, Decision: icons).
 - **Rejected alternatives**:
@@ -75,12 +75,15 @@ popups (`popups-trace`).
 - [ ] dns-tap bookkeeping -- tasks 1.4, 2.5, 3.3, 3.4 and the three parents are unchecked and
   `spec.json` says `tasks-approved`, although the commits record them as done and v0.4.0 is
   released. Run `/kiro-validate-impl dns-tap`, then tick the boxes and set the phase.
-- [ ] snitchd on chandali -- only with the operator's go: `bpf` into the kernel's LSM list
-  (`CONFIG_BPF_LSM=y` is there; the active list is `lockdown,capability,landlock,yama,apparmor,ima,evm`,
-  so it needs `lsm=...,bpf` on the kernel command line and a reboot), the release binary, the
-  units, a rules file for this host, `/etc/snitch/operator`, monitor mode only. Kernel 7.3 is
-  newer than the 7.2 the bindings were generated on; CO-RE should carry it, the bounded monitor
-  run proves it.
+- [ ] snitchd on chandali -- only with the operator's go (`lsm-activation` task 7.2): install
+  the built `.deb` package (which checks `CONFIG_BPF_LSM=y`, writes
+  `/etc/default/grub.d/snitch-lsm.cfg` for
+  `lsm=lockdown,capability,landlock,yama,apparmor,ima,evm,bpf`, and runs `update-grub`),
+  enable the units and create `/etc/snitch/operator`, run `scripts/lsm-check.sh` before reboot
+  to verify the inactive/reboot-pending warnings on every surface, then reboot and re-run
+  `scripts/lsm-check.sh` to confirm the hook is active and the overview shows programs with
+  destinations (monitor mode only). Kernel 7.3 is newer than the 7.2 the bindings were
+  generated on; CO-RE should carry it, the bounded monitor run proves it.
 
 ## Specs (dependency order)
 

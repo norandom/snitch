@@ -229,7 +229,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: examples/api.md, docs/daemon.md, docs/tui.md, docs/tray.md_
   - _Depends: 2.2, 2.3, 4.1, 4.2, 4.3_
   - _Requirements: 2.6, 8.2_
-- [ ] 6.2 (P) The user and package documents
+- [x] 6.2 (P) The user and package documents
   - The README says the package configures GRUB hosts, that a reboot is needed after the first
     install, how to check, and what to do on other boot loaders; the package document replaces
     "nothing runs on install" with the new promise, lists the eleven payload files and the

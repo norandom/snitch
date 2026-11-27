@@ -35,18 +35,19 @@ test moves into an `internal/` package. `go build -o snitch ./cmd/snitch` (or `/
 when keeping the repo root clean) builds the unified operator binary.
 
 ### Domain packages (as they appear)
-**Location**: `internal/rules/`, `internal/api/`, `internal/dns/`, `internal/client/`,
+**Location**: `internal/lsm/`, `internal/rules/`, `internal/api/`, `internal/dns/`, `internal/client/`,
 `internal/ask/`, `internal/clean/`, `internal/conf/`, `internal/logfile/`, `internal/table/`,
 `internal/tui/`, `internal/term/`, `internal/verbs/`, `internal/tray/`, `internal/sni/`, ...
-**Purpose**: one concern per package: rules file → map entries; the unix socket API; the DNS
+**Purpose**: one concern per package: kernel hook probe (`internal/lsm`, stdlib +
+`internal/contract` only); rules file → map entries; the unix socket API; the DNS
 tap and IP → name cache; TUI core (`table` + pure `tui` model + `term` Bubble Tea adapter)
-and one-shot verbs; the KDE tray (`sni` imports `tray`, which imports `ask` and `client`).
+and one-shot verbs; the 7-state KDE tray (`sni` imports `tray`, which imports `ask` and `client`).
 **Example**: `internal/rules` owns parsing, path/glob → inode+dev resolution and the map
 encoding, and is tested without root.
 
 ### Service units and assets
 **Location**: `systemd/` (`snitchd.service`, `snitchd-trial-boot.service`), `desktop/`, `packaging/`, `docs/*.png`
-**Purpose**: daemon service and boot-revert units, desktop tray autostart, Debian packaging inputs, and documentation screenshots. Lint scripts with `shellcheck`.
+**Purpose**: daemon service and boot-revert units, desktop tray autostart, Debian packaging inputs (control metadata, GRUB drop-in, `lsm-cmdline` helper, `postinst`/`postrm` maintainer scripts), and documentation screenshots. Lint `scripts/*.sh` and `packaging/*.sh` with `shellcheck`.
 
 ### Documentation
 **Location**: `README.md`, `docs/*.md`, `examples/`

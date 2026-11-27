@@ -22,12 +22,14 @@ the firewall is wrong. Rules are configuration files, deployed like any other co
    via BPF LSM hooks, keyed by the program's executable (inode + device) and the destination
    (address prefix, protocol, port). No proxy, no userspace round trip per connection.
 2. **Observation first**: monitor mode reports every decision without blocking; enforce
-   (deny by default) is a timed trial that reverts on its own and at boot.
+   (deny by default) is a timed trial that reverts on its own and at boot, and is refused
+   while the `bpf` LSM kernel hook is inactive (`internal/lsm`).
 3. **Fail-safes in the design** (see `fail-safes.md`): egress only, local network always
    allowed, heartbeat fail-open, kill switch reachable from a serial console.
 4. **Operator UI**: a Bubble Tea TUI (`snitch`, overview and egress graph; see `docs/tui.md`),
-   KDE tray (`snitch tray`), `snitch status`, and trial verbs (`snitch default`), fed by the
-   daemon over a unix socket (alert popups and process tracing return with `popups-trace`).
+   7-state KDE tray (`snitch tray`), `snitch status`, and trial verbs (`snitch default`), fed
+   by the daemon over a unix socket; every surface warns when the kernel hook is inactive
+   (alert popups and process tracing return with `popups-trace`).
 5. **Fleet view, later**: domain rules via a DNS tap, enrichment from Velociraptor (the
    CrowdStrike-style graph process tree › socket › destination behind a verdict) and batches
    to OpenObserve, which renders that graph as a limited Sankey (process › destination ›
@@ -51,9 +53,11 @@ decision is checked against "can this lock me out again?".
 
 ## Delivery
 
-Releases are consumed by the author's VM-provisioning repo pinned by sha256, later as a Nix
-flake. Phases are shippable one by one: enforcement + TUI, domain rules + popups + trace,
-Velociraptor enrichment, OpenObserve batches, fleet rules + packaging.
+Releases ship static Go binaries (consumed by the author's VM-provisioning repo pinned by
+sha256) and a `.deb` package (which configures GRUB hosts for the `bpf` LSM on install and
+removal without enabling systemd units); Nix flake later. Phases are shippable one by one:
+enforcement + TUI, domain rules + popups + trace, Velociraptor enrichment, OpenObserve
+batches, fleet rules + packaging.
 
 ---
 _Focus on patterns and purpose, not exhaustive feature lists_
