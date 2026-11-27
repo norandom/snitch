@@ -66,9 +66,9 @@ func TestRuleRefAndViewsJSONKeys(t *testing.T) {
 }
 
 func TestStatusJSONKeys(t *testing.T) {
-	wantKeys(t, keysOf(t, Status{DNS: &DNSStatus{}}), "running", "pid", "version", "mode", "source", "trial", "kept",
+	wantKeys(t, keysOf(t, Status{DNS: &DNSStatus{}, Hook: &HookStatus{}}), "running", "pid", "version", "mode", "source", "trial", "kept",
 		"kill", "learning", "rules", "rulesError", "clients", "dropped", "entries", "evictions",
-		"started", "counting", "dns")
+		"started", "counting", "dns", "hook")
 	wantKeys(t, keysOf(t, RulesSummary{}), "programs", "resolved", "executables", "rules", "file", "overlay")
 }
 
@@ -129,6 +129,11 @@ func TestOptionalNameAndDNSKeysOmitted(t *testing.T) {
 			}
 		}
 	}
+	for _, k := range keysOf(t, Status{}) {
+		if k == "hook" {
+			t.Fatalf("Status includes nil hook")
+		}
+	}
 }
 
 func TestObservationKeysAllowNameWithEmptyAddress(t *testing.T) {
@@ -167,7 +172,7 @@ func TestStatusWithoutCountersUnchanged(t *testing.T) {
 	if err := json.Unmarshal([]byte(statusGolden), &back); err != nil {
 		t.Fatal(err)
 	}
-	if back.Counters != nil || !reflect.DeepEqual(back, s) {
+	if back.Counters != nil || back.Hook != nil || !reflect.DeepEqual(back, s) {
 		t.Fatalf("older daemon's status\n got %+v\nwant %+v", back, s)
 	}
 }
@@ -211,7 +216,38 @@ func TestStatusFromOlderDaemonHasNoCounters(t *testing.T) {
 	if err := json.Unmarshal([]byte(line), &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Status == nil || r.Status.Counters != nil || !r.Status.Running {
+	if r.Status == nil || r.Status.Counters != nil || r.Status.Hook != nil || !r.Status.Running {
 		t.Fatalf("older status: %+v", r.Status)
 	}
+}
+
+// Req 1.7, 2.1, 2.4, 2.5: the hook object round-trips for every state and preserves existing bytes ahead of it.
+func TestStatusWithHookRoundTrips(t *testing.T) {
+	cases := []HookStatus{
+		{State: HookActive, Reason: "kernel hook active"},
+		{State: HookInactive, Pending: true, Reason: "kernel hook inactive: reboot"},
+		{State: HookInactive, Reason: "kernel hook inactive: boot not configured"},
+		{State: HookInactive, Unsupported: true, Reason: "kernel hook unavailable"},
+		{State: HookUnknown, Reason: "kernel hook not checked"},
+	}
+	goldenPrefix := strings.TrimSuffix(statusGolden, "}\n")
+	for _, h := range cases {
+		s := fullStatus()
+		s.Hook = &h
+		b := Encode(s)
+		hb, _ := json.Marshal(h)
+		want := goldenPrefix + `,"hook":` + string(hb) + "}\n"
+		if string(b) != want {
+			t.Fatalf("hook %+v\n got %s\nwant %s", h, b, want)
+		}
+		var back Status
+		if err := json.Unmarshal(b, &back); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(back, s) {
+			t.Fatalf("round trip %+v\n got %+v\nwant %+v", h, back, s)
+		}
+	}
+	wantKeys(t, keysOf(t, HookStatus{}), "state", "reason")
+	wantKeys(t, keysOf(t, HookStatus{Pending: true, Unsupported: true}), "state", "pending", "unsupported", "reason")
 }

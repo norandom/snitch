@@ -25,7 +25,7 @@ it. Pushes, tags and releases are not part of any task (5.3 uses a local throwaw
 deletes it). Wording is fixed by the design's "Sentences" list; tests compare it exactly.
 Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files.
 
-- [ ] 1. Foundation: the probe and the wire fact
+- [x] 1. Foundation: the probe and the wire fact
 - [x] 1.1 (P) The kernel hook probe
   - A package that answers, from an injected file reader, whether `bpf` is in the kernel's
     active LSM list (active, inactive, unknown) and, when inactive, whether a generated GRUB
@@ -42,7 +42,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - Done when: `go test -race ./internal/lsm` is green and no sentence contains `no such file`
   - _Boundary: internal/lsm/lsm.go, internal/lsm/lsm_test.go_
   - _Requirements: 1.1, 1.2, 1.7_
-- [ ] 1.2 (P) The hook fact in the status type
+- [x] 1.2 (P) The hook fact in the status type
   - The status gains an optional hook object (state, pending, unsupported, reason) as its last member,
     omitted when absent, with the three state words as constants
   - The status without a hook stays byte-identical to the existing golden; with a hook the

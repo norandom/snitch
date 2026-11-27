@@ -162,6 +162,25 @@ type Status struct {
 	// Counters is absent only on daemons older than this version; it comes last so every
 	// field above keeps its name, type, meaning and place in the encoding.
 	Counters *CountersStatus `json:"counters,omitempty"`
+	// Hook is absent on daemons older than this version (nil means not reported); it comes
+	// after Counters so every field above keeps its name, type, meaning and place.
+	Hook *HookStatus `json:"hook,omitempty"`
+}
+
+// Hook states reported in HookStatus.State.
+const (
+	HookActive   = "active"
+	HookInactive = "inactive"
+	HookUnknown  = "unknown"
+)
+
+// HookStatus reports whether the kernel's active LSM list includes bpf so the daemon's
+// hooks will be called. Pending and Unsupported apply when State is HookInactive.
+type HookStatus struct {
+	State       string `json:"state"`
+	Pending     bool   `json:"pending,omitempty"`
+	Unsupported bool   `json:"unsupported,omitempty"`
+	Reason      string `json:"reason"`
 }
 
 // CountersStatus is the kernel programs' own counters, one section per program. Every value
