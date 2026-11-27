@@ -206,7 +206,7 @@ class PtySession:
 
     def send(self, data, pause=0.10):
         os.write(self.master, data)
-        time.sleep(pause)
+        self.drain(pause)
 
     def close(self, quit_timeout=3.0):
         try:
@@ -392,20 +392,20 @@ elif cmd == "pty-block-unblock":
         sess.send(b"\r", pause=0.15)
         if sess.wait_for(f"search: {target_addr}", timeout=4.0, since=mark) is None:
             raise RuntimeError("search filter did not apply")
+        if sess.wait_for(f"{target_addr}:", timeout=4.0, since=mark) is None:
+            raise RuntimeError(f"filtered address row for {target_addr} did not render")
         sess.send(b"\x1b[H", pause=0.10)  # home
         found_row = False
-        for _ in range(8):
+        for _ in range(12):
             mark = len(sess.buf)
             sess.send(b"\r", pause=0.08)    # open row if collapsed
             sess.send(b"\x1b[B", pause=0.10)  # down
-            txt = clean_ansi(sess.buf[mark:])
-            if f"› {target_addr}:" in txt:
+            if sess.wait_for(f"› {target_addr}:", timeout=0.35, since=mark) is not None:
                 found_row = True
                 break
         if not found_row:
-            if f"› {target_addr}:" not in clean_ansi(sess.buf):
-                raise RuntimeError(f"could not select address row for {target_addr}")
-        time.sleep(0.12)
+            raise RuntimeError(f"could not select address row for {target_addr}")
+        sess.drain(0.12)
         mark = len(sess.buf)
         sess.send(b"x", pause=0.15)
         added = None
@@ -417,9 +417,11 @@ elif cmd == "pty-block-unblock":
             time.sleep(0.25)
         if added is None or added.get("verdict") != "deny":
             raise RuntimeError(f"deny rule for {target_cidr} did not appear in rules: {added}")
-        # Wait for daemon reload state and TUI rule update ([x] marker) before pressing x to unblock
-        sess.wait_for("[x]", timeout=5.0, since=mark)
-        time.sleep(0.15)
+        # Wait for TUI BLOCKED log entry and 500 ms row rebuild with refreshed rules before unblocking
+        if sess.wait_for("BLOCKED ", timeout=5.0, since=mark) is None:
+            raise RuntimeError("TUI did not log BLOCKED after x")
+        sess.drain(0.7)
+        mark = len(sess.buf)
         sess.send(b"x", pause=0.15)
         gone = False
         deadline = time.monotonic() + 6.0
@@ -430,6 +432,8 @@ elif cmd == "pty-block-unblock":
             time.sleep(0.25)
         if not gone:
             raise RuntimeError(f"deny rule for {target_cidr} still present after second x")
+        if sess.wait_for("UNBLOCKED ", timeout=5.0, since=mark) is None:
+            raise RuntimeError("TUI did not log UNBLOCKED after second x")
         rc = sess.close()
         if rc != 0:
             raise RuntimeError(f"snitch exited {rc} on 'q'")
@@ -466,9 +470,9 @@ elif cmd == "pty-trial":
         if st.get("mode") != "enforce" or not st.get("trial"):
             raise RuntimeError(f"API status not in trial enforce: {st}")
         mark = len(sess.buf)
-        time.sleep(0.12)
+        sess.drain(0.12)
         sess.send(b"E", pause=0.15)
-        if sess.wait_for("mode: monitor", timeout=6.0, since=mark) is None:
+        if sess.wait_for("monitor", timeout=6.0, since=mark) is None:
             raise RuntimeError("overview did not return to monitor on 'E'")
         deadline = time.monotonic() + 6.0
         restored = False
@@ -520,22 +524,22 @@ pyrun() {
 }
 
 step_build() {
-  go build -o "$BIN" ./cmd/snitch
-  ver=$("$BIN" -version)
-  [ -n "$ver" ]
+  go build -o "$BIN" ./cmd/snitch || return 1
+  ver=$("$BIN" -version) || return 1
+  [ -n "$ver" ] || return 1
   note "snitch $ver ($BIN)"
 }
 
 step_daemon_probe() {
   probe_json=$(pyrun probe) || return 1
-  running=$(pyrun json-field "$probe_json" running)
-  mode=$(pyrun json-field "$probe_json" mode)
-  peer_uid=$(pyrun json-field "$probe_json" peer_uid)
-  daemon_ver=$(pyrun json-field "$probe_json" version)
-  daemon_source=$(pyrun json-field "$probe_json" source)
-  daemon_kill=$(pyrun json-field "$probe_json" kill)
-  daemon_learn=$(pyrun json-field "$probe_json" learning)
-  overlay=$(pyrun json-field "$probe_json" overlay)
+  running=$(pyrun json-field "$probe_json" running) || return 1
+  mode=$(pyrun json-field "$probe_json" mode) || return 1
+  peer_uid=$(pyrun json-field "$probe_json" peer_uid) || return 1
+  daemon_ver=$(pyrun json-field "$probe_json" version) || return 1
+  daemon_source=$(pyrun json-field "$probe_json" source) || return 1
+  daemon_kill=$(pyrun json-field "$probe_json" kill) || return 1
+  daemon_learn=$(pyrun json-field "$probe_json" learning) || return 1
+  overlay=$(pyrun json-field "$probe_json" overlay) || return 1
   [ "$running" = "1" ] || { note "daemon reports running=false"; return 1; }
   if [ "$mode" != "monitor" ]; then
     printf 'REFUSED: daemon on %s is in mode %s; monitor mode only (exit 2)\n' "$api" "$mode"
@@ -555,14 +559,14 @@ step_daemon_probe() {
 }
 
 step_status_json() {
-  status_out=$("$BIN" status -api "$api")
-  status_summary=$(pyrun check-status-json "$status_out" "$is_fake" "$daemon_kill")
+  status_out=$("$BIN" status -api "$api") || return 1
+  status_summary=$(pyrun check-status-json "$status_out" "$is_fake" "$daemon_kill") || return 1
   note "$status_summary"
 }
 
 step_pty_smoke() {
   rt_dir=${XDG_RUNTIME_DIR:-}
-  pyrun pty-smoke "$BIN" "$rt_dir"
+  pyrun pty-smoke "$BIN" "$rt_dir" || return 1
   note "overview rendered, egress graph toggled (e), non-dumpable, XDG_RUNTIME_DIR clean, quit 0"
 }
 
@@ -577,14 +581,14 @@ step_testnet_connect() {
 
 step_pty_block_unblock() {
   rule_added=1
-  pyrun pty-block-unblock "$BIN" "$overlay" "$testnet_addr" "$testnet_cidr"
+  pyrun pty-block-unblock "$BIN" "$overlay" "$testnet_addr" "$testnet_cidr" || return 1
   rule_added=0
   note "blocked $testnet_cidr via x, verified in rules, unblocked via x, confirmed gone"
 }
 
 step_pty_trial() {
   trial_started=1
-  pyrun pty-trial "$BIN"
+  pyrun pty-trial "$BIN" || return 1
   trial_started=0
   note "trial started (T -> y), deadline shown, ended (E), monitor restored"
 }
