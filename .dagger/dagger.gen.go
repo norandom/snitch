@@ -490,20 +490,6 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return (*Snitch).ReleaseBuild(&parent, ctx, source, version)
-		case "Ruff":
-			var parent Snitch
-			err = json.Unmarshal(parentJSON, &parent)
-			if err != nil {
-				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
-			}
-			var source *dagger.Directory
-			if inputArgs["source"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["source"]), &source)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg source", err))
-				}
-			}
-			return nil, (*Snitch).Ruff(&parent, ctx, source)
 		case "Rugged":
 			var parent Snitch
 			err = json.Unmarshal(parentJSON, &parent)

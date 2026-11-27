@@ -548,7 +548,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Requirements: 14.3, 15.4, 15.5_
 
 - [ ] 9. Retiring the Python client (only after 8.7 is recorded)
-- [ ] 9.1 The client, its units, its lanes and its assets leave
+- [x] 9.1 The client, its units, its lanes and its assets leave
   - Delete the Python client, `snitch-trial`, the watch unit and the three trial units of the
     Python client, the Python lint configuration, its lock file and the tracked bytecode
     file; remove the ruff job, the ruff cache line of the ignore file, the CodeQL python lane

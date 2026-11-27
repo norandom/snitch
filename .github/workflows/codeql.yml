@@ -18,11 +18,8 @@ name: codeql
 # observation. Traced extraction replaces none-mode's inferred compilation units and its
 # macro-accuracy caveat, which mattered most for dns.bpf.c, the parser of
 # attacker-shaped DNS answers.
-# python: build-mode none, over a pre-scan copy of the extension-less client `snitch` as
-# `snitch-client.py` (same bytes; the extractor only picks up *.py), so the client gets
-# real taint coverage until the Go TUI retires it.
-# Each language carries its own category, so the three results land as three Sarif
-# uploads, all under the security-extended suite.
+# Each language carries its own category, so the two results land as two Sarif
+# uploads, both under the security-extended suite.
 
 on:
   push:
@@ -56,8 +53,6 @@ jobs:
             build-mode: manual
           - language: c-cpp
             build-mode: manual
-          - language: python
-            build-mode: none
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -72,11 +67,6 @@ jobs:
       - name: Install clang and the libbpf headers (for the traced observation compile)
         if: matrix.language == 'c-cpp'
         run: sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends clang libbpf-dev
-
-      # The extension-less client becomes visible to the python extractor; same bytes
-      - name: Pre-scan copy of the python client
-        if: matrix.language == 'python'
-        run: cp snitch snitch-client.py
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

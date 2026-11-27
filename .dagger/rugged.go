@@ -89,7 +89,7 @@ func fuzzFailures(out string) []string {
 	return failed
 }
 
-// Rugged is the pre-release suite: lint-all (fmt, go, shellcheck, ruff,
+// Rugged is the pre-release suite: lint-all (fmt, go, shellcheck,
 // actionlint, golangci, cppcheck, bindings), then fuzz for the given time
 // per target. It stops at the first failing part, which names itself; on
 // success it names the one step the pipeline cannot run - the root-only

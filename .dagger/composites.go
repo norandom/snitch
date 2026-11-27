@@ -18,8 +18,8 @@ import (
 	"dagger/snitch/internal/dagger"
 )
 
-// LintCore runs the five existing checks in workflow order: fmt, the go
-// sequence (build, vet x3, test, caps), shellcheck, ruff, actionlint. It
+// LintCore runs the four base checks in workflow order: fmt, the go
+// sequence (build, vet x3, test, caps), shellcheck, actionlint. It
 // is the dispatch economy door - one command, from the repo root, that
 // answers "is this tree green the way the lint workflow would say so".
 func (c *Snitch) LintCore(
@@ -35,9 +35,6 @@ func (c *Snitch) LintCore(
 		return err
 	}
 	if err := c.Shellcheck(ctx, source); err != nil {
-		return err
-	}
-	if err := c.Ruff(ctx, source); err != nil {
 		return err
 	}
 	if err := c.Actionlint(ctx, source); err != nil {

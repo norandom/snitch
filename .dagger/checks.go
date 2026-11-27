@@ -86,18 +86,17 @@ func (c *Snitch) Go(
 	return nil
 }
 
-// Shellcheck is the workflow's shellcheck step over today's scope: the
-// legacy trial script and every scripts/*.sh, in the pinned shellcheck
-// build. That image is built FROM scratch - it ships only the static
-// shellcheck binary, no shell - so the workflow's glob, which bash
-// expands before shellcheck ever runs, is expanded here by Directory.Glob
-// and handed to the binary as plain arguments: shellcheck receives the
-// same resolved file list the runner passes it, sorted the way bash
-// sorts its glob matches.
+// Shellcheck is the workflow's shellcheck step: every scripts/*.sh, in
+// the pinned shellcheck build. That image is built FROM scratch - it ships
+// only the static shellcheck binary, no shell - so the workflow's glob,
+// which bash expands before shellcheck ever runs, is expanded here by
+// Directory.Glob and handed to the binary as plain arguments: shellcheck
+// receives the same resolved file list the runner passes it, sorted the
+// way bash sorts its glob matches.
 // +check
 func (c *Snitch) Shellcheck(
 	ctx context.Context,
-	// The repository root holding snitch-trial and scripts/.
+	// The repository root holding scripts/.
 	// +defaultPath="/"
 	source *dagger.Directory,
 ) error {
@@ -106,7 +105,7 @@ func (c *Snitch) Shellcheck(
 		return fmt.Errorf("check shellcheck: %w", err)
 	}
 	sort.Strings(scripts)
-	args := append([]string{"/bin/shellcheck", "snitch-trial"}, scripts...)
+	args := append([]string{"/bin/shellcheck"}, scripts...)
 	_, err = dag.Container().
 		From(imageShellcheck).
 		WithMountedDirectory("/src", source).
@@ -118,29 +117,6 @@ func (c *Snitch) Shellcheck(
 		return fmt.Errorf("check shellcheck: %w", err)
 	}
 	fmt.Println("check shellcheck: PASS")
-	return nil
-}
-
-// Ruff is the workflow's ruff step: the pinned ruff under uvx, over the
-// Python client `snitch`, settings from pyproject.toml, output shaped for
-// GitHub - byte-identical to `uvx ruff@0.16.10 check --output-format
-// github snitch` with the version coming from pins.go and the uvx binary
-// coming from the pinned uv image (see uvContainer for how it is hosted).
-// +check
-func (c *Snitch) Ruff(
-	ctx context.Context,
-	// The repository root holding the Python client and pyproject.toml.
-	// +defaultPath="/"
-	source *dagger.Directory,
-) error {
-	_, err := uvContainer(source).
-		WithExec([]string{"uvx", "ruff@" + ruffVersion, "check", "--output-format", "github", "snitch"}).
-		Sync(ctx)
-	if err != nil {
-		fmt.Println("check ruff: FAIL")
-		return fmt.Errorf("check ruff: %w", err)
-	}
-	fmt.Println("check ruff: PASS")
 	return nil
 }
 
@@ -199,7 +175,7 @@ func goContainer(source *dagger.Directory) *dagger.Container {
 		WithWorkdir("/src")
 }
 
-// uvContainer is the ruff/actionlint environment. The pinned uv image is
+// uvContainer is the actionlint environment. The pinned uv image is
 // built FROM scratch - just the static uv and uvx binaries - and that is
 // too bare to run uvx in: uv needs an OS underneath to detect the libc,
 // and it builds a python for the tool environment (the workflow's runner

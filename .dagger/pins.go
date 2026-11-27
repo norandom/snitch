@@ -76,13 +76,13 @@ const (
 	// release.
 	imageShellcheck = "koalaman/shellcheck:v0.11.0"
 
-	// The uv-providing image: both Python-ish checks resolve their tools with
-	// uvx inside it (ruff pinned below, actionlint pinned to its uvx package
-	// spec below). Current stable uv release 0.13.9 (2026-11-17); the image
-	// tag is the same version (verified on ghcr.io, 2026-11-24; manifest
-	// digest sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf8
-	// 4db79a7d). This replaces setup-uv's "install latest uv at run time"
-	// behavior in lint.yml with a tag that cannot drift between runs.
+	// The uv-providing image: actionlint resolves its tool with uvx inside it
+	// (pinned to its uvx package spec below). Current stable uv release
+	// 0.13.9 (2026-11-17); the image tag is the same version (verified on
+	// ghcr.io, 2026-11-24; manifest digest sha256:d3b601f0c7b118bc1753febf7c
+	// 41cc80981df678445e0254284eecf84db79a7d). This replaces setup-uv's
+	// "install latest uv at run time" behavior in lint.yml with a tag that
+	// cannot drift between runs.
 	imageUv = "ghcr.io/astral-sh/uv:0.13.9"
 )
 
@@ -126,7 +126,7 @@ const (
 	// same reviewable moment as cppcheck.
 	aptLibbpfDev = "libbpf-dev=1:1.7.0-1"
 
-	// The TLS root bundle for the Python-checks host container (checks.go
+	// The TLS root bundle for the actionlint host container (checks.go
 	// installs it): the ubuntu:26.04 base image ships without it - the
 	// plain base leaves the ca-certificates package unpacked, verified on
 	// this runtime - while the workflow's runner image carries one, and
@@ -185,13 +185,9 @@ const (
 	// design: "Commands and pins are byte-identical to current lint.yml
 	// steps; the containing image changes, the logic does not").
 
-	// ruff today: `uvx ruff@0.16.10 check --output-format github snitch`
-	// (the extension-less Python client at the repo root is the target).
-	ruffVersion = "0.16.10"
-
 	// actionlint: `uvx --from actionlint-py==1.7.12.25 actionlint -color`
 	// (pinned 2026-11-26 for the v1 release: the newest actionlint-py on
-	// PyPI, wrapping actionlint 1.7.12; bump deliberately, like ruffVersion).
+	// PyPI, wrapping actionlint 1.7.12; bump deliberately).
 	actionlintUvxSpec = "actionlint-py==1.7.12.25"
 
 	// gocyclo today: `go run github.com/fzpp/gocyclo/cmd/gocyclo@v0.6.0
@@ -226,9 +222,9 @@ const (
 //   - The builder container is debian:forky (dpkg-deb 1.23.11), the one pinned
 //     reproducibility property of R7.2: binaries are built in both distros,
 //     but the deb is assembled exactly once, in forky.
-//   - Release assets: the six frozen names `snitchd`, `snitchd.sha256`,
-//     `snitch`, `snitch-trial`, `snitch-linux-amd64`,
-//     `snitch-linux-amd64.sha256` (consuming repos match these), plus
-//     `snitch_<version>_amd64.deb` and `snitch_<version>_amd64.deb.sha256`
-//     (sidecar produced as `sha256sum <name> > <name>.sha256` in the
-//     containing directory — the form `sha256sum -c` reads).
+//   - Release assets: the six assets `snitchd`, `snitchd.sha256`,
+//     `snitch-linux-amd64`, `snitch-linux-amd64.sha256` (consuming repos
+//     match these), plus `snitch_<version>_amd64.deb` and
+//     `snitch_<version>_amd64.deb.sha256` (sidecar produced as
+//     `sha256sum <name> > <name>.sha256` in the containing directory —
+//     the form `sha256sum -c` reads).

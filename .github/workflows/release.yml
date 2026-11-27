@@ -4,17 +4,16 @@ name: release
 # one static amd64 build with the tag linked in as the version (Req 1.1, 1.2). Nothing is
 # published when any earlier job fails: `needs:` stops the chain (Req 1.3). Only the publish
 # job may write to the repository; the VM repo pins the tag and the sha256 of the asset.
-# Since the kde-tray spec (its Req 9.4): a second static build, the tray client `snitch`,
+# Since the kde-tray spec (its Req 9.4): a second static build, the client binary `snitch`,
 # published as `snitch-linux-amd64` with its checksum. The asset name is pinned (consuming
-# repos match it), and `snitch` is already the Python client's asset; the four original
-# assets keep their names.
+# repos match it); the legacy Python client and trial script have retired.
 # Since the ci-debs spec: both artifact lanes build through the Dagger module - the existing
 # static pair (`release-build`, byte-parity with the steps above) and the deb pair
 # (`deb-release`, the proof + assembly + smoke composite) - and the publish job needs both
-# artifact sets before it touches a release. The six pinned assets keep their names and
-# their gate (ci-debs Req 6.1, 6.2); the deb and its sha256 join as the 7th and 8th, and
-# the one existence loop covers all eight before any gh call, so the publication is
-# all-or-nothing, never half-way (ci-debs Req 6.3).
+# artifact sets before it touches a release. Six assets publish atomically (`snitchd`,
+# `snitchd.sha256`, `snitch-linux-amd64`, `snitch-linux-amd64.sha256`, and the deb +
+# its sha256), and the one existence loop checks all six before any gh call, so the
+# publication is all-or-nothing, never half-way (ci-debs Req 6.3).
 
 on:
   push:
@@ -81,7 +80,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          assets=(dist/snitchd dist/snitchd.sha256 snitch snitch-trial dist/snitch-linux-amd64 dist/snitch-linux-amd64.sha256 dist-deb/snitch_${GITHUB_REF_NAME#v}_amd64.deb dist-deb/snitch_${GITHUB_REF_NAME#v}_amd64.deb.sha256)
+          assets=(dist/snitchd dist/snitchd.sha256 dist/snitch-linux-amd64 dist/snitch-linux-amd64.sha256 dist-deb/snitch_${GITHUB_REF_NAME#v}_amd64.deb dist-deb/snitch_${GITHUB_REF_NAME#v}_amd64.deb.sha256)
           for f in "${assets[@]}"; do [ -f "$f" ] || { echo "missing asset: $f" >&2; exit 1; }; done
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${assets[@]}" --clobber
