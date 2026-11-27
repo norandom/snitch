@@ -1,0 +1,22 @@
+{
+  "feature_name": "lsm-activation",
+  "created_at": "2026-11-27T14:31:51Z",
+  "updated_at": "2026-11-27T15:45:00Z",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
