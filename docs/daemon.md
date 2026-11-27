@@ -44,6 +44,27 @@ The kernel programs carry runtime contracts that fail open and count their viola
 the daemon serves those counters in `status` (a non-zero contract counter means a bug, report
 it). See [c-hardening.md](c-hardening.md).
 
+## Kernel hook
+
+`snitchd`'s BPF LSM hooks only run when `bpf` is in the kernel's active LSM list
+(`/sys/kernel/security/lsm`). At startup, after attaching its programs and before printing the
+`snitchd <version>: mode ...` startup line, `snitchd` probes the active list (and, when `bpf`
+is absent, the kernel build configuration and GRUB configuration) and logs one `snitchd:` line:
+
+| state | logged sentence |
+|---|---|
+| active | `kernel hook active` |
+| inactive, reboot pending | `kernel hook inactive: reboot to activate it; until then connections are neither seen nor blocked` |
+| inactive, boot not configured | `kernel hook inactive: bpf is not in the kernel's LSM list and the next boot is not configured for it; connections are neither seen nor blocked` |
+| inactive, unsupported kernel | `kernel hook unavailable: this kernel is built without BPF LSM support, so no reboot can activate it; connections are neither seen nor blocked` |
+| unknown (LSM list unreadable) | `kernel hook not checked: the kernel's LSM list could not be read` |
+
+When the hook is inactive or unknown, `snitchd` keeps running and keeps serving its API, DNS
+tap and byte counters; it never denies a connection, changes the mode, touches the kill switch
+or alters any recorded trial or kept-enforce file because of the hook state. On `status` reads
+over the API, the cached probe refreshes every 30 s so `pending` updates after a package
+install or `update-grub`.
+
 ## Names
 
 A rule such as `program = "gh", to = "github.com", verdict = "allow"` allows
@@ -93,9 +114,16 @@ without `--force`.
 With the service running (any daemon started without `-mode`), `sudo snitchd trial
 10m` turns deny-by-default on for a bounded time (default 10 min, 1 to 60; verb flags such as
 `-extend` go before the duration) and prints the deadline; `-extend` restarts the 60 minute
-cap from now. `snitchd status` shows the daemon, mode, trial, kept, kill switch and rules, one
-line each (exit 1 when the daemon is not running); `snitchd end` ends a trial early;
-`snitchd keep`, only during a trial, makes enforce stay and prints the way back;
+cap from now. `snitchd status` shows one line per fact with stable keys (`daemon:`, `mode:`,
+`trial:`, `kept:`, `kill:`, `hook:`, `learning:`, `rules:`, `status:`, `dns:`, `version:`; exit
+1 when the daemon is not running, 0 otherwise — including when the hook is inactive). The
+`hook:` line follows `kill:` with the sentence from [Kernel hook](#kernel-hook), or
+`kernel hook inactive: connections are neither seen nor blocked; run as root to see whether a reboot is pending`
+when run without root while inactive. `snitchd trial` and `snitchd keep` (and their
+API equivalents) refuse before any check or write when the kernel hook is inactive, answering
+`refused: <sentence>` and changing nothing; `active` and `unknown` accept trials and keeps as
+before, and `snitchd end` and `snitchd unkeep` work in every hook state. `snitchd end` ends a
+trial early; `snitchd keep`, only during a trial, makes enforce stay and prints the way back;
 `snitchd unkeep` takes it back. The daemon follows the two files under `/var/lib/snitch` and
 ends a trial itself at its deadline; a reboot ends an open trial (the boot oneshot above, and
 the daemon checks the boot id itself). A kept enforce is the one exception, and it is a plain

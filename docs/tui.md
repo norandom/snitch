@@ -58,6 +58,22 @@ Before any write or mode-change key (`x`, `space`, `T`, `K`, `E`, `U`, `y`) is a
 
 Bracketed pastes are routed only as sanitised text into an open search line and never trigger action keys.
 
+## Kernel Hook Warning
+
+When the daemon reports that the BPF LSM kernel hook is not active, both the overview and the egress graph warn without blocking navigation, time windows, graph toggling, or quitting:
+
+- **Header tag (`inactive`)**: inserts `NO KERNEL HOOK` directly after `snitch |` in the error style so it stays visible within the `80x20` minimum terminal size regardless of mode or kept enforce.
+- **Bottom line**: whenever no confirmation prompt, search bar, or transient notice occupies the bottom line, `snitch` renders one fixed message:
+
+| Daemon `hook` state | Bottom line |
+|---|---|
+| `inactive`, `pending: true` | `kernel hook inactive: connections not seen or blocked - reboot to activate` |
+| `inactive`, `pending: false` | `kernel hook inactive: connections not seen or blocked - boot not configured` |
+| `inactive`, `unsupported: true` | `kernel hook unavailable: kernel built without BPF LSM - snitch cannot work` |
+| `unknown` | `kernel hook could not be checked` |
+
+When the daemon later reports `active` (for example after a reboot and daemon restart), the header tag and bottom line are removed automatically without restarting `snitch`. Older daemons that omit `hook` show no hook warning.
+
 ## Configuration
 
 `snitch` reads `~/.config/snitch/config.toml` for the overview, `egress`, and `default` verbs (`status` ignores it). When the file does not exist, built-in defaults apply.
@@ -95,9 +111,9 @@ Invoke `snitch status` by its absolute path in Waybar's custom module configurat
 
 `snitch status` outputs a single JSON object with `text`, `class`, and `tooltip`:
 
-- `class`: `"allow"` in monitor mode, `"deny"` in enforce mode, or `"down"` if the daemon cannot be reached within 800 ms, the kill switch is set, or the socket is not owned by `uid 0`.
+- `class`: `"allow"` in monitor mode, `"deny"` in enforce mode, or `"down"` if the daemon cannot be reached within 800 ms, the kernel hook is inactive, the kill switch is set, or the socket is not owned by `uid 0`. (`active`, `unknown`, and omitted `hook` keep `allow`/`deny`; `snitch status` still prints one line and exits `0`.)
 - `text`: shield icon (solid `\U000F0498` for `deny`, outline `\U000F0499` for `allow`/`down`), followed by the count of connections denied in the last hour when greater than zero.
-- `tooltip`: sanitised multi-line summary of daemon state, mode/trial deadline, denied count, and any rules error.
+- `tooltip`: sanitised multi-line summary: when the kernel hook is inactive, the first line is the daemon's sanitised `hook.reason` (falling back to `kernel hook inactive: connections are neither seen nor blocked` if blank), followed by any kill-switch line, mode/trial deadline, denied count, and any rules error.
 
 ## Limits
 

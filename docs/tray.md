@@ -26,16 +26,18 @@ being `-api /run/snitch/api.sock`, `-ask all` and `-operator-file /etc/snitch/op
 ## States
 
 The icon alone tells whether anything is enforced or wrong; when more than one
-condition holds, the first that holds in this order wins: daemon not running, kill switch
-set, rules error, enforce kept, enforce trial, monitor. The first three also mark the item
-as needing attention, so the desktop does not hide them among the inactive ones. The icon
-set is drawn by the program, not loaded from a theme: the six states differ in shape and
-every stroke carries a light halo, so they read on a light and on a dark panel. The images
-here are the 44 px ones; this directory holds both sizes (the 22 px pair is the panel's).
+condition holds, the first that holds in this order wins: daemon not running,
+kernel hook inactive, kill switch set, rules error, enforce kept, enforce trial, monitor.
+The first four also mark the item as needing attention, so the desktop does not hide them among the inactive
+ones. The icon set is drawn by the program, not loaded from a theme: the seven states differ
+in shape and every stroke carries a light halo, so they read on a light and on a dark panel.
+The images here are the 44 px ones; this directory holds both sizes (the 22 px pair is the
+panel's).
 
 | | state | the icon says |
 |---|---|---|
 | ![tray icon: daemon not running](tray-gone-44.png) | **daemon not running** | dashed outline with a cross: snitchd's API is unreachable — not started, gone, or 10 s silent (the tooltip then says "not answering"). The tray retries on its own |
+| ![tray icon: kernel hook inactive](tray-blind-44.png) | **kernel hook inactive** | extended red horizontal bar across the shield's middle (extending past the outline on both sides): `bpf` is not in the kernel's active LSM list, so connections are neither seen nor blocked |
 | ![tray icon: kill switch set](tray-kill-44.png) | **kill switch set** | red slash: the kernel allows everything until the switch is cleared |
 | ![tray icon: rules error](tray-rules-error-44.png) | **rules error** | amber exclamation mark: the daemon's last rules load failed; the menu shows its error text in full |
 | ![tray icon: enforce kept](tray-kept-44.png) | **enforce kept** | green shield: enforcement stays on, also across reboots, until it is unkept |
@@ -44,6 +46,9 @@ here are the 44 px ones; this directory holds both sizes (the 22 px pair is the 
 
 The tooltip names the state in words — and every other condition that holds too — plus
 `learning` while the daemon learns and `questions paused` while questions are paused.
+Entering `kernel hook inactive` posts one urgent notification (`snitch: kernel hook inactive`)
+with the daemon's sanitised reason (or `Connections are neither seen nor blocked.` if blank);
+it fires once on entry and never repeats while the state holds.
 
 ## Menu
 
@@ -52,10 +57,13 @@ first row (`snitch: monitor` — or whatever holds): the Mode, the Trial (its de
 time left, or `no trial`), Enforce kept, the Kill switch, Learning, Loaded (programs and
 rules), the Rules file, the Overlay file, the DNS tap (on with its names and compiled
 counts, or off with the daemon's reason), and snitchd's version and start time. The Role row
-says whether this user may answer questions. Fact rows are information, never clickable —
-while the daemon is gone the menu says so and lists nothing stale. The only actions are
-`Pause questions` (a ticked row that pauses and resumes questions for the running tray;
-while paused the tray asks nothing, keeps nothing waiting) and `Quit`.
+says whether this user may answer questions. When `kernel hook inactive` holds, the first row
+is `snitch: kernel hook inactive`, any recorded mode, trial or kept enforce stays listed in
+its row, and an additional row names the cause: `Kernel hook: reboot pending`,
+`Kernel hook: boot not configured`, or `Kernel hook: kernel lacks BPF LSM`. Fact rows are
+information, never clickable — while the daemon is gone the menu says so and lists nothing
+stale. The only actions are `Pause questions` (a ticked row that pauses and resumes questions
+for the running tray; while paused the tray asks nothing, keeps nothing waiting) and `Quit`.
 
 ## Questions
 

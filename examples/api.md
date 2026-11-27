@@ -173,7 +173,7 @@ An off tap retains address rules and reports its counters and sizes as zero:
 
 `counters` carries the kernel programs' own counters, read from their maps at the time of the
 request: one object for the egress program (`egress`) and one for the DNS tap (`dns`). It comes
-last in the status and is absent only on older daemons; every field above keeps its name, type
+after `dns` (before `hook`) in the status and is absent only on older daemons; every field above keeps its name, type
 and meaning. Every value is a total since the kernel programs were loaded (a daemon restart
 loads them anew and starts from zero). Every reader may read it, like the rest of `status`.
 
@@ -222,6 +222,39 @@ is still sent. With the tap off, `counters.dns` carries the same reason as the `
              "counters": {"addr_unreadable": 0, "decisions": 51200, "event_lost": 0, "no_exe": 3},
              "contracts": {"control_slot": 0, "kill_slot": 0, "mode": 0, "rule_verdict": 0}},
   "dns": {"available": false, "reason": "flag"}}
+```
+
+`hook` reports whether `bpf` is in the kernel's active LSM list (`/sys/kernel/security/lsm`)
+so the daemon's hooks will be called. It comes last in the status (after `counters`) and is
+absent only on older daemons; clients treat an omitted `hook` as not reported and show no
+hook warning.
+
+* `state`: `"active"`, `"inactive"`, or `"unknown"` (the LSM list could not be read).
+* `pending`: optional boolean, present (`true`) only when `state` is `"inactive"` and the
+  generated GRUB configuration already carries `bpf` (a reboot will activate it).
+* `unsupported`: optional boolean, present (`true`) only when `state` is `"inactive"` and the
+  running kernel's build configuration lacks `CONFIG_BPF_LSM=y`, so no reboot into this kernel
+  can activate the hook.
+* `reason`: fixed one-sentence explanation (`lsm.Hook.Sentence()`).
+
+```json
+"hook": {"state": "active", "reason": "kernel hook active"}
+```
+
+```json
+"hook": {"state": "inactive", "pending": true, "reason": "kernel hook inactive: reboot to activate it; until then connections are neither seen nor blocked"}
+```
+
+```json
+"hook": {"state": "inactive", "reason": "kernel hook inactive: bpf is not in the kernel's LSM list and the next boot is not configured for it; connections are neither seen nor blocked"}
+```
+
+```json
+"hook": {"state": "inactive", "unsupported": true, "reason": "kernel hook unavailable: this kernel is built without BPF LSM support, so no reboot can activate it; connections are neither seen nor blocked"}
+```
+
+```json
+"hook": {"state": "unknown", "reason": "kernel hook not checked: the kernel's LSM list could not be read"}
 ```
 
 ### rules
@@ -364,7 +397,11 @@ lines joined with `\n` where the verb prints two). Show `text` to the user; do n
 `trial` needs `duration` (Go syntax, `1m` to `1h`, the verb's default of 10 min does not apply
 here); `extend` moves a running trial's deadline; `yes` is the answer to the question the
 daemon asks when no rules are loaded (the error text is the question; send the request again
-with `"yes": true` to confirm). The verb's refusals come back as `error`: a trial already
+with `"yes": true` to confirm). Both `trial` and `keep` refuse with `error` when the kernel hook
+is inactive (`refused: kernel hook inactive: ...` or `refused: kernel hook unavailable: ...`,
+checked first before any other check or write; `active` and `unknown` accept both as usual,
+and `end` and `unkeep` are accepted in every hook state). Other `trial` refusals come back as
+`error`: a trial already
 running, enforce already kept, the kill switch set, learning on, a daemon started with `-mode`
 (`the daemon runs with -mode, it does not follow trial files`), a duration out of bounds
 (`trial duration 2h0m0s: must be between 1m0s and 1h0m0s`).

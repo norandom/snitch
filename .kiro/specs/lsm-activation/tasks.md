@@ -219,7 +219,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Requirements: 7.11, 8.4_
 
 - [ ] 6. Documentation and the host check script
-- [ ] 6.1 (P) The reference documents
+- [x] 6.1 (P) The reference documents
   - The API document describes the hook member with one example per state; the daemon
     document gains the `hook:` line, the start log line and the trial refusal; the terminal UI
     document the tag, the bottom line and the `down` class; the tray document the seventh
