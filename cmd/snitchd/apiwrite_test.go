@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/norandom/snitch/internal/api"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/rules"
 	"github.com/norandom/snitch/internal/trial"
 )
@@ -21,6 +22,7 @@ import (
 func apiDaemonOf(f *fake) *daemon {
 	d := &daemon{cfg: config{learn: f.rec.Learning, stateDir: memDir}, log: func(string) {}}
 	d.api.kill = func() bool { return f.kill }
+	d.hook = hookCache{read: fakeHookRead(map[string][]byte{lsm.ListPath: []byte("bpf\n")}, nil)}
 	d.st.publish(&snapshot{res: &rules.Resolved{File: &rules.File{Rules: make([]rules.Rule, f.rec.Rules)}}})
 	if f.rec.Source == "files" {
 		d.follow = &follower{store: f.m.store(), boot: tBoot, now: func() time.Time { return tNow }}

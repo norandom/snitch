@@ -16,6 +16,7 @@ import (
 
 	"github.com/norandom/snitch/internal/contract"
 	"github.com/norandom/snitch/internal/contract/contracttest"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/trial"
 )
 
@@ -29,6 +30,7 @@ func opsOf(f *fake) trialOps {
 		kill:      func() bool { return f.kill },
 		following: f.rec.Source == "files",
 		rules:     func() int { return f.rec.Rules },
+		hook:      func() lsm.Hook { return lsm.Hook{State: lsm.Active} },
 	}
 }
 
@@ -194,6 +196,11 @@ func TestContractTrialOpsNeedsAStoreDir(t *testing.T) {
 	o.rules = nil
 	if got := contracttest.Panics(t, contract.Precondition, func() { _, _ = o.start(2*time.Minute, false, true) }); got.Msg != "trialOps: incomplete delegates" {
 		t.Errorf("nil rules: violation %q", got.Msg)
+	}
+	o = opsOf(f)
+	o.hook = nil
+	if got := contracttest.Panics(t, contract.Precondition, func() { _, _ = o.start(2*time.Minute, false, true) }); got.Msg != "trialOps: incomplete delegates" {
+		t.Errorf("nil hook: violation %q", got.Msg)
 	}
 }
 

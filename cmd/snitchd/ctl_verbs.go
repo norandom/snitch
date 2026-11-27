@@ -28,7 +28,7 @@ func (c *ctl) require() {
 	contract.Require(c.out != nil && c.errw != nil && c.probes.control != nil && c.probes.kill != nil,
 		"ctl: incomplete writers or probes")
 	contract.Require(d.store != nil && d.dirExists != nil && d.readStatus != nil && d.bootID != nil &&
-		d.now != nil && d.confirm != nil, "ctl: incomplete deps")
+		d.now != nil && d.confirm != nil && d.hook != nil, "ctl: incomplete deps")
 }
 
 // refuse is every refusal: one sentence on stderr, exit 1.
@@ -59,7 +59,7 @@ func noStateDir(dir string) string {
 func (c *ctl) ops(rec status.Record) trialOps {
 	return trialOps{store: c.deps.store(c.stateDir), now: c.deps.now, boot: c.deps.bootID,
 		learning: rec.Learning, kill: c.probes.kill, following: rec.Source == "files",
-		rules: func() int { return rec.Rules }}
+		rules: func() int { return rec.Rules }, hook: c.deps.hook}
 }
 
 // report prints the seam's outcome: the text on stdout (exit 0), a refusal on stderr (exit 1),

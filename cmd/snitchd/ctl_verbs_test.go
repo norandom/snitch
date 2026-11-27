@@ -10,6 +10,7 @@ import (
 
 	"github.com/norandom/snitch/internal/contract"
 	"github.com/norandom/snitch/internal/contract/contracttest"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/status"
 	"github.com/norandom/snitch/internal/trial"
 )
@@ -55,6 +56,7 @@ func (f *fake) run(t *testing.T, args ...string) (int, string, string) {
 		bootID:     func() (string, error) { return tBoot, f.bootErr },
 		now:        func() time.Time { return tNow },
 		confirm:    func(q string) bool { f.asked = q; return f.answer },
+		hook:       func() lsm.Hook { return lsm.Hook{State: lsm.Active} },
 	}
 	code := dispatch(verbs, c, append([]string{args[0], "-state-dir", memDir}, args[1:]...)) // flags before the duration
 	return code, out.String(), errw.String()
@@ -279,10 +281,8 @@ func TestAskYNReadsOneLine(t *testing.T) {
 
 func TestRunCtlDepsAreReal(t *testing.T) {
 	c := newCtl(&bytes.Buffer{}, &bytes.Buffer{}, realProbes())
+	c.require()
 	d := c.deps
-	if d.store == nil || d.dirExists == nil || d.readStatus == nil || d.bootID == nil || d.now == nil || d.confirm == nil {
-		t.Fatalf("a delegate is nil: %+v", d)
-	}
 	if dir := t.TempDir(); !d.dirExists(dir) || d.dirExists(dir+"/none") || d.store(dir).Dir != dir {
 		t.Fatal("dirExists or store do not look at the real file system")
 	}

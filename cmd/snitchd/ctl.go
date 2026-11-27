@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/norandom/snitch/internal/contract"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/status"
 	"github.com/norandom/snitch/internal/trial"
 )
@@ -59,6 +60,7 @@ type deps struct {
 	bootID     func() (string, error)
 	now        func() time.Time
 	confirm    func(question string) bool
+	hook       func() lsm.Hook
 }
 
 func realDeps(in io.Reader, out io.Writer) deps {
@@ -69,6 +71,7 @@ func realDeps(in io.Reader, out io.Writer) deps {
 		bootID:     func() (string, error) { return trial.BootID(os.ReadFile) },
 		now:        time.Now,
 		confirm:    askYN(in, out),
+		hook:       func() lsm.Hook { return lsm.Probe(os.ReadFile) },
 	}
 }
 

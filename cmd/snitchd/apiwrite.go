@@ -45,7 +45,8 @@ func (d *daemon) trialOps() trialOps {
 	o := trialOps{store: trial.OSStore(d.cfg.stateDir), now: time.Now,
 		boot:     func() (string, error) { return trial.BootID(os.ReadFile) },
 		learning: d.cfg.learn, kill: d.api.kill, following: d.follow != nil,
-		rules: func() int { _, _, _, n := counts(d.st.current()); return n }}
+		rules: func() int { _, _, _, n := counts(d.st.current()); return n },
+		hook:  d.hookNow}
 	if f := d.follow; f != nil {
 		o.store, o.now, o.boot = f.store, f.now, func() (string, error) { return f.boot, nil }
 	}

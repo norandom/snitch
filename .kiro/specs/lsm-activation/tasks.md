@@ -68,7 +68,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: cmd/snitchd/hook.go, cmd/snitchd/hook_test.go, cmd/snitchd/daemon.go, cmd/snitchd/api.go_
   - _Depends: 1.1, 1.2_
   - _Requirements: 1.3, 1.4, 1.5, 1.6, 2.1, 3.3_
-- [ ] 2.2 Refuse a trial or a keep while the hook is inactive
+- [x] 2.2 Refuse a trial or a keep while the hook is inactive
   - The shared trial operations consult the hook before any other check or write: `start` and
     `keep` answer `refused: ` plus the sentence when inactive; `end` and `unkeep` never ask
   - Wired for both doors: the API handlers use the daemon's cached probe, the command-line
@@ -274,3 +274,4 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
 
 ## Implementation Notes
 - Task 2.1: `cmd/snitchd/apifacts_test.go` (`TestFactsOfAFlagDaemon`) was added to Task 2.1's boundary to assert `got.Hook != nil && got.Hook.State != "" && got.Hook.Reason != ""` and clear `got.Hook = nil` alongside `got.DNS` and `got.Counters` before struct equality comparison (matching commits `2f68e338` and `90bfeb11`). Also `hookCache` uses field name `clock` because `now()` is a method.
+- Task 2.2: `cmd/snitchd/apiwrite_test.go` (`apiDaemonOf`) was added to Task 2.2's boundary so API trial tests inject an in-memory `hookCache` reader answering `lsm.Active` instead of reading host `/sys/kernel/security/lsm`.

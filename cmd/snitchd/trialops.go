@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/norandom/snitch/internal/contract"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/trial"
 )
 
@@ -25,6 +26,7 @@ type trialOps struct {
 	kill      func() bool
 	following bool       // false when the daemon runs with -mode: nobody follows the files
 	rules     func() int // effective rule count: zero needs the explicit yes
+	hook      func() lsm.Hook
 }
 
 // usageErr marks a refusal the CLI reports as a usage error (exit 2): the bounds.
@@ -38,13 +40,23 @@ func (e needsYes) Error() string { return e.question }
 
 func (o trialOps) require() {
 	contract.Require(o.store.Dir != "", "trialOps: empty store directory")
-	contract.Require(o.now != nil && o.boot != nil && o.kill != nil && o.rules != nil, "trialOps: incomplete delegates")
+	contract.Require(o.now != nil && o.boot != nil && o.kill != nil && o.rules != nil && o.hook != nil, "trialOps: incomplete delegates")
+}
+
+func (o trialOps) hookRefusal() error {
+	if h := o.hook(); h.State == lsm.Inactive {
+		return errors.New("refused: " + h.Sentence())
+	}
+	return nil
 }
 
 // start writes the trial file for d from now (persistent-trial Req 2); an extend rewrites it
 // with start = now (the MaxTrial cap is relative to start). Checks come before the write.
 func (o trialOps) start(d time.Duration, extend, yes bool) (string, error) {
 	o.require()
+	if err := o.hookRefusal(); err != nil {
+		return "", err
+	}
 	if err := trial.Bounds(d); err != nil {
 		return "", usageErr{err}
 	}
@@ -105,6 +117,9 @@ func trialRefusal(store trial.Store, st trial.State, boot string, now time.Time,
 // Only a running trial can be kept; an already kept enforce is reported, not an error.
 func (o trialOps) keep() (string, error) {
 	o.require()
+	if err := o.hookRefusal(); err != nil {
+		return "", err
+	}
 	boot, err := o.boot()
 	if err != nil {
 		return "", err

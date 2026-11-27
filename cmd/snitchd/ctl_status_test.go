@@ -9,6 +9,7 @@ import (
 
 	"github.com/norandom/snitch/internal/contract"
 	"github.com/norandom/snitch/internal/contract/contracttest"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/status"
 	"github.com/norandom/snitch/internal/trial"
 )
@@ -270,6 +271,7 @@ func TestStatusReadsEachSourceOnce(t *testing.T) {
 		bootID:     func() (string, error) { return tBoot, nil },
 		now:        func() time.Time { return tNow },
 		confirm:    func(string) bool { return false },
+		hook:       func() lsm.Hook { return lsm.Hook{State: lsm.Active} },
 	}
 	if code := dispatch(verbs, c, []string{"status"}); code != 0 || control != 1 || kill != 1 || reads != 2 {
 		t.Fatalf("exit %d, control %d kill %d store+record %d reads, want 0 and one each (output %q)", code, control, kill, reads, out.String())

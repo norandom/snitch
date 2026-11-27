@@ -9,6 +9,7 @@ import (
 
 	"github.com/norandom/snitch/internal/contract"
 	"github.com/norandom/snitch/internal/contract/contracttest"
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/status"
 	"github.com/norandom/snitch/internal/trial"
 )
@@ -32,6 +33,7 @@ func completeCtl() *ctl {
 		bootID:     func() (string, error) { return tBoot, nil },
 		now:        func() time.Time { return tNow },
 		confirm:    func(string) bool { return false },
+		hook:       func() lsm.Hook { return lsm.Hook{State: lsm.Active} },
 	}
 	return c
 }
@@ -56,6 +58,7 @@ func TestContractEveryVerbNamesTheMissingSlot(t *testing.T) {
 		{"deps.bootID", delegates, func(c *ctl) { c.deps.bootID = nil }},
 		{"deps.now", delegates, func(c *ctl) { c.deps.now = nil }},
 		{"deps.confirm", delegates, func(c *ctl) { c.deps.confirm = nil }},
+		{"deps.hook", delegates, func(c *ctl) { c.deps.hook = nil }},
 	}
 	for _, v := range verbs {
 		if !v.root {
