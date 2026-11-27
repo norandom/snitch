@@ -103,11 +103,12 @@ var commands = map[string]command{
 	"summary":  noArgs((*StandIn).FlushSummary),
 	"drop":     cmdDrop,
 	"rules":    cmdRules,
+	"hook":     cmdHook,
 	"quit":     func(*StandIn, []string) error { return ErrQuit },
 }
 
 // Do runs one command line: `mode monitor|enforce`, `trial 10m`, `end`, `keep`, `unkeep`,
-// `kill on|off`, `error TEXT|none`, `learning on|off`,
+// `kill on|off`, `error TEXT|none`, `learning on|off`, `hook active|inactive|pending|unknown|none`,
 // `event PROGRAM PATH ADDR[=NAME] PORT PROTO VERDICT`, `summary`, `drop [COUNT]`,
 // `rules none|reset`, `refuse on|off`, `quit` (ErrQuit). A blank line does nothing.
 func (s *StandIn) Do(line string) error {

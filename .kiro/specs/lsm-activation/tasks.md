@@ -92,7 +92,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Depends: 2.2_
   - _Requirements: 2.2, 2.3_
 
-- [ ] 3. The fake daemon can report a hook state
+- [x] 3. The fake daemon can report a hook state
   - `SetHook(*api.HookStatus)` and a stdin command `hook active|inactive|pending|unknown|none`
     (`pending` = inactive with pending, `none` = not reported) on the stand-in;
     the default stays "not reported", so every existing client test and host check is unchanged
