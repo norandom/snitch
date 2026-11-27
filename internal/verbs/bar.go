@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	shieldDeny  = "\U000F0498" // solid shield (enforce)
-	shieldAllow = "\U000F0499" // shield outline (monitor / down)
+	shieldDeny      = "\U000F0498" // solid shield (enforce)
+	shieldAllow     = "\U000F0499" // shield outline (monitor / down)
+	hookDownDefault = "kernel hook inactive: connections are neither seen nor blocked"
 )
 
 // Line is the status-bar JSON payload for waybar's custom module.
@@ -49,8 +50,12 @@ func Bar(st *api.Status, hour []api.Entry, now time.Time, down string) Line {
 	}
 }
 
+func hookInactive(st *api.Status) bool {
+	return st != nil && st.Hook != nil && st.Hook.State == api.HookInactive
+}
+
 func barClass(st *api.Status, down string) string {
-	if down != "" || st == nil || st.Kill {
+	if down != "" || st == nil || st.Kill || hookInactive(st) {
 		return "down"
 	}
 	if st.Mode == "enforce" {
@@ -80,7 +85,10 @@ func buildTooltip(st *api.Status, count int, now time.Time, down string) string 
 	if down != "" || st == nil {
 		return downTooltip(count, down)
 	}
-	lines := make([]string, 0, 4)
+	lines := make([]string, 0, 5)
+	if hookInactive(st) {
+		lines = append(lines, hookTooltipLine(st))
+	}
 	if st.Kill {
 		lines = append(lines, cleanLine("snitch: down (kill switch set; kernel allows everything)"))
 	}
@@ -90,6 +98,14 @@ func buildTooltip(st *api.Status, count int, now time.Time, down string) string 
 		lines = append(lines, cleanLine("rules error: "+st.RulesError))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func hookTooltipLine(st *api.Status) string {
+	line := cleanLine(st.Hook.Reason)
+	if strings.TrimSpace(line) == "" {
+		return hookDownDefault
+	}
+	return line
 }
 
 func downTooltip(count int, down string) string {

@@ -103,7 +103,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Requirements: 8.3_
 
 - [ ] 4. Every client surface warns
-- [ ] 4.1 The status-bar verb
+- [x] 4.1 The status-bar verb
   - Inactive gives class `down` and the sanitised reason as the tooltip's first line; unknown
     and not reported print what they print today; always one line, exit 0
   - Done when: `go test -race ./internal/verbs ./cmd/snitch -run 'Bar|Status'` is green with
