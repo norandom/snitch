@@ -256,7 +256,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Requirements: 8.5_
 
 - [ ] 7. Close-out
-- [ ] 7.1 The whole tree is clean
+- [x] 7.1 The whole tree is clean
   - Full test, vet, format, caps, the import and request pins of the user binary, and the
     pipeline's lint functions
   - Done when: `gofmt -l .` prints nothing, `go vet ./...`, `go test -race ./...`,
