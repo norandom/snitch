@@ -454,7 +454,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 6.2, 6.3_
   - _Requirements: 9.5, 9.6, 9.7, 9.11_
 
-- [ ] 8. Validation
+- [x] 8. Validation
 - [x] 8.1 The whole client side against the stand-in
   - Model, client and stand-in together, without a terminal: start and first snapshot; a
     summary changes a row within one tick and the cursor stays; block and unblock on an
@@ -533,7 +533,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 3.3, 7.3, 8.1_
   - _Requirements: 15.4, 15.5_
 
-- [ ] 8.7 The run on the development VM and the parity check
+- [x] 8.7 The run on the development VM and the parity check
   - The operator runs the script on the VM against the deployed daemon in monitor mode and
     pastes the output (the agent has no sudo and switches no mode); `--trial` only with the
     operator's explicit go and the hypervisor console open

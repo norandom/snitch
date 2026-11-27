@@ -158,11 +158,29 @@
 - The client extension breaks the tray — zero-value compatibility, the tray's suite unchanged.
 - A future Bubble Tea release passes more sequences through — the hostile-input tests run on
   every dependency bump (Revalidation Triggers).
-- A path-blocked unknown program is reported under a new name — `Cover` resolves through the
-  programs list; first integration test settles it.
+- A path-blocked unknown program is reported under a new name — resolved (see VM Validation & Open Question Resolution below): `rule.add` with `path` creates an ad-hoc `[[program]]` named `filepath.Base(path)` (suffixed `-2`, `-3` on collision), and `table.Cover` resolves through `m.rules.Programs` (`Paths` match on `execPath`) so `[x]` and unblocking keep working before and after daemon reload.
 - File and function caps on a large port — the file plan splits by area; `update.go` only
   dispatches.
 - The stated gap (uid-only authorisation) — the mandatory follow-up `write-gate`.
+
+## VM Validation & Open Question Resolution (2026-11-27)
+
+### Monitor-mode host check (`debb`, commit `3dc2a1b`)
+- Ran `sh scripts/tui-check.sh` against the deployed `snitchd` in monitor mode (`/run/snitch/api.sock`, `peer_uid=0`, `writer=mc`, `overlay=/etc/snitch/rules.d/local.toml`):
+  - `PASS  build snitch binary from tree` (`snitch dev`)
+  - `PASS  daemon answers on /run/snitch/api.sock in monitor mode`
+  - `PASS  snitch status prints valid JSON` (`class=allow text='\U000f0499'`)
+  - `PASS  overview PTY: start, egress graph (e), non-dumpable, runtime dir clean, quit (q)`
+  - `PASS  TEST-NET (192.0.2.1) connect (1s, expected to fail) makes row exist` (`program=curl verdict=allow-monitor`)
+  - `PASS  PTY search 192.0.2.1, open rows, x block -> rules, x unblock -> gone`
+  - `== summary: 6 passed, 0 skipped, 0 failed`
+- `--trial` (`T -> y -> enforce -> E -> monitor`) was skipped for this run by operator choice; PTY rendering of `trial` -> `end` transition (`monitor`) was additionally verified against `tools/fakedaemon`.
+- All items in `docs/parity.md` were confirmed against the VM check and signed off by the operator.
+
+### Closed Open Question: Path-blocked undeclared program name
+- Per `cmd/snitchd/apiwrite_rules.go` (`editProgram` / `adHocName`), a `rule.add` request sent with `path` (for an undeclared executable) appends an ad-hoc `[[program]]` entry to `/etc/snitch/rules.d/local.toml` named `filepath.Base(path)` (or `<base>-2`, `<base>-3`, ... on collision with any existing base/overlay program name or `"any"`).
+- Once the daemon reloads the merged rules within 2 s, the resolver maps that executable's `(inode, device)` to the ad-hoc program ID, so subsequent events and snapshot entries report it under that ad-hoc program name. Note `rule.remove` removes the overlay rule while leaving the ad-hoc `[[program]]` declaration in `local.toml`.
+- `table.Cover` (`internal/table/cover.go`) resolves rules through `m.rules.Programs` (matching `execPath` against `p.Paths`), so both pre-reload (`unknown` + path) and post-reload (ad-hoc program name) rows show `[x]` and generate matching `rule.remove` requests.
 
 ## References
 - [Bubble Tea v2 upgrade guide](https://github.com/charmbracelet/bubbletea/blob/main/UPGRADE_GUIDE_V2.md) — Model, View, keys, removed options
