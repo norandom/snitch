@@ -159,7 +159,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Depends: 3, 4.1, 4.2, 4.3_
   - _Requirements: 8.3_
 
-- [ ] 5. The package configures the next boot
+- [x] 5. The package configures the next boot
 - [x] 5.1 The helper and the drop-in
   - A POSIX shell helper that prints one kernel parameter or nothing for the five cases of the
     design's table, with `--explain` for the human sentence, file overrides for tests, output
@@ -202,7 +202,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: packaging/postinst.sh, packaging/postrm.sh, packaging/conffiles, packaging/control, .dagger/deb.go, internal/lsm/scripts_test.go_
   - _Depends: 5.1_
   - _Requirements: 7.6, 7.7, 7.8, 7.9, 7.10_
-- [ ] 5.3 The smoke proves it on both distributions
+- [x] 5.3 The smoke proves it on both distributions
   - Group 2's payload list grows to the eleven files; a new group 9 "boot setting" checks the
     laid files and modes, the no-GRUB message of the install, the stub-driven configure and
     its failing variant, the helper's table inside the container, removal (helper gone,
