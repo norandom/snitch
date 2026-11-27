@@ -9,20 +9,21 @@ baseline run; root gates passed at 8300add on the dev VM).
 
 ## Next steps, in order
 
-1. **Next spec item: `tui`** (`.kiro/specs/tui/brief.md`, roadmap item unchecked). The operator
-   UI is still the Python client (`snitch` asset, Textual) talking to Little Snitch's
-   `ws://127.0.0.1:3031/stream`; Little Snitch was retired on the VM 2026-10-11, so there the
-   Python client has no backend. Port: a bubbletea TUI in `cmd/snitch`, key for key like the
-   Python client (overview, egress graph, one-key block/allow via overlay rules, trial verbs,
-   `snitch status` for waybar), fed by snitchd's `snapshot`/`summary` API. Dependencies done:
-   kde-tray (client package), popups-trace. At parity the Python client, its units and its
-   lint job leave the repo. Start with `/kiro-spec-requirements tui` (or quick mode), then
-   design, then tasks.
-2. **Packaging wart to fix with the tui port**: the deb ships the Go tray binary as
-   `/usr/bin/snitch`, colliding with the Python client's asset name (release.yml header
-   documents it). When the Go TUI lands, ship the tray under its own name (e.g.
-   `/usr/bin/snitch-tray`) so `/usr/bin/snitch` is the TUI again; until then the Python
-   client is installed at `~/.local/bin/snitch` (ahead of /usr/bin in PATH) on this host.
+1. **Completed since v1.0.0: `tui`** (`.kiro/specs/tui/`, `docs/tui.md`). The unified Go binary
+   `cmd/snitch` now implements the Bubble Tea v2 overview and egress graph, `snitch status`,
+   `snitch default deny|allow [--keep]`, `snitch tray`, and `-version`, validated against `snitchd`
+   in monitor mode on the dev VM (`scripts/tui-check.sh`: 6/6 passed). The legacy Python client,
+   trial script, legacy systemd units, `ruff` CI/Dagger lane, and CodeQL Python lane have been
+   retired. Note: `kde-tray` and `tui` are done (`popups-trace` is NOT done yet).
+   Next in order:
+   1. **`write-gate`** (mandatory before `popups-trace`; see `.kiro/specs/tui/requirements.md` and
+      `.kiro/steering/roadmap.md`): the daemon currently authorises API writes by caller uid alone;
+      loosening writes and `trial`/`keep` must require more than uid.
+   2. **`popups-trace`**: alert popups (`snitch watch`, `snitch ask`) and `/proc`/kernel process trace.
+2. **Resolved `/usr/bin/snitch` packaging collision**: the deb ships `/usr/bin/snitch` built from
+   `./cmd/snitch`, which now serves both the TUI/verbs and `snitch tray` (matching
+   `desktop/snitch-tray.desktop`). Any stale `~/.local/bin/snitch` from the legacy install can
+   be removed on hosts migrating to the Go binary/deb.
 3. **VM repo re-pin**: the hyperland worker VM repo may re-pin `snitchd`'s version+sha256 and
    add the deb pin per the runbook below.
 4. **Watch**: `TestEmitNeverBlocks` (internal/api) flaked once on a loaded CI runner (5 ms vs
@@ -68,25 +69,36 @@ Decisions on record (2026-11-25):
   (9.4). Still optional: the `internal/dns` reader's `malformed` counter is a plain uint64
   (make it atomic if it is ever served).
 - **CodeQL**: c-cpp traced (`build-mode: manual`, an observation compile with the runner's
-  clang and libbpf, no `-Werror`, output to `/dev/null`), python via the pre-scan copy
-  `snitch-client.py`; 0 open code-scanning alerts.
+  clang and libbpf, no `-Werror`, output to `/dev/null`), go traced; 0 open code-scanning alerts.
 
 Dependabot: grpc (1.79.3 -> 1.83.2, all high) and `golang.org/x/net` 0.60.0 fixed in
 `.dagger/go.mod` (`3ef4f14`, `f15d84b`); only the 8 otel alerts above remain.
 
 ## Release-day runbook
 
-Release note for the next tag (c-hardening 9.2): rule names now have at most 15 labels. A
-16-label name in `/etc/snitch/rules.toml` makes snitchd refuse to start (fail-open: nothing
-attached); in the overlay `local.toml` it makes the whole overlay skipped at startup. Before
-upgrading, run `snitchd check -rules /etc/snitch/rules.toml` and check `local.toml`. (The VM's
-deployed rules have their domain rules commented out; no current exposure.) Also note: an
-`-api` path inside a shared directory such as `/tmp` is now refused.
+Release note for the next tag (`tui` + retiring the legacy frontend):
+The Go `snitch` binary (`snitch-linux-amd64` and `/usr/bin/snitch` in the `.deb`) now provides
+the Bubble Tea overview and egress TUI, `snitch status`, `snitch default deny|allow [--keep]`,
+`snitch tray`, and `-version`. Breaking / scope notes for upgraders:
+- **Removed assets**: the retired Python client script (`snitch`), the legacy trial script, their
+  systemd units, and their CI lanes are removed; releases now publish 6 assets (`snitchd`,
+  `snitchd.sha256`, `snitch-linux-amd64`, `snitch-linux-amd64.sha256`, the `.deb`, and its
+  `.sha256`).
+- **Missing popups (`popups-trace`)**: interactive alert popups (`snitch watch`, `snitch ask`),
+  `baseline`, and `/proc`/kernel process traces (`x via y`) are absent in this release and
+  return with `popups-trace`.
+- **Write-authorisation gap (`write-gate`)**: the daemon API still authorises writes
+  (`rule.add`, `rule.remove`, `trial`, `keep`, `unkeep`, `end`) by caller uid alone
+  (`/etc/snitch/operator`), so any process running under the operator account can send writes;
+  tightening loosening writes and `trial`/`keep` moves into the mandatory `write-gate` spec
+  before `popups-trace`.
+
+Release note from `c-hardening` (if tagging straight past v1.0.0): rule names have at most 15 labels (`snitchd check -rules /etc/snitch/rules.toml`), and an `-api` path inside a shared directory such as `/tmp` is refused.
 
 Before tagging: `dagger call rugged --fuzz-duration 30s`, then
 `sudo scripts/root-checks.sh --at <commit to tag>` on the dev VM. Push a `vX.Y.Z` tag →
 `release.yml`: `checks` (lint.yml via workflow_call; linters, incl. the bindings check,
-self-skip on tags) → `release-build` ∥ `deb` lanes → `publish` (eight-file existence loop,
+self-skip on tags) → `release-build` ∥ `deb` lanes → `publish` (six-file existence loop,
 then the unchanged `gh` pattern; `contents: write` only there). SOURCE_DATE_EPOCH = the tag
 commit's committer time. The deb lane's first CI run (~2.5–3 min warm, both distro smokes)
 happens here. After publish: the VM repo deliberately re-pins `snitchd`'s sha256 and may add

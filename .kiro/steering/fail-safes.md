@@ -16,9 +16,10 @@ these five rules. They are not features to schedule; a change that weakens one i
 4. **Kill switch from a serial console**, root, no network or daemon needed:
    `bpftool map update pinned /sys/fs/bpf/snitch/kill key 0 0 0 0 value 1 0 0 0`
    (`value 0 0 0 0` clears it). A daemon restart must keep it until cleared.
-5. **Deny mode only as a timed trial with a boot revert.** The deadline is a file, not a timer
-   in memory (the shape of `snitch-trial`: a timer checks it, a boot unit ends an open trial
-   before anything enforces). `--keep` is an explicit second step.
+5. **Deny mode only as a timed trial with a boot revert.** The deadline is a file under
+   `/var/lib/snitch`, not a timer in memory (`systemd/snitchd.service` checks the deadline,
+   and `systemd/snitchd-trial-boot.service` runs `snitchd end -at-boot` before it so an open
+   trial at reboot is ended before anything enforces). `--keep` is an explicit second step.
 
 ## Working rules on the development VM
 

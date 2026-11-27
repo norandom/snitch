@@ -13,27 +13,25 @@ Two pieces:
   instead of a list of IPs. The kernel programs carry runtime contracts that fail open and
   count their violations, and the daemon serves those counters in `status` (a non-zero
   contract counter means a bug, report it). See [docs/c-hardening.md](docs/c-hardening.md).
-- **the client** (the `snitch` script at the repo root): the terminal UI, the tray item, and
-  the alert popups. It started against
-  [Little Snitch for Linux](https://obdev.at/littlesnitch-linux) over its WebSocket
-  (`ws://127.0.0.1:3031/stream`), so every rule it writes is an ordinary Little Snitch rule,
-  editable in the web UI; the snitchd-backed TUI and tray below are the Go rewrite.
+- **`snitch`** (this repo, Go): the operator binary — Bubble Tea TUI (`overview` default and
+  `egress` graph), `snitch status` JSON, `snitch default deny|allow [--keep]` trial verbs,
+  `snitch tray` for KDE Plasma, and `-version` (see [docs/tui.md](docs/tui.md)). Alert popups
+  (`watch`, `ask`) and process tracing return with `popups-trace`.
 
 **Agentic layer 7 filter.** snitch is built to be the network guardrail for AI agents running on
-a machine: an agent's `curl` or `git` shows up as its own row, gets its own rules, and in
-enforce mode a connection nobody allowed is blocked with a popup naming the process chain
-behind it. That agentic featureset is work in progress: today the shipped piece is a thin
-client over a VM (see the
+a machine: an agent's `curl` or `git` shows up as its own row, gets its own rules, and with
+`popups-trace` a denied connection in enforce mode asks with its process chain. That agentic
+featureset is work in progress: today the shipped piece is a thin client over a VM (see the
 [Hyprland thin client over RDP](https://github.com/norandom/hyperland-forky-worker-vm)), where
 it runs with deny by default, and the rule engine, trial flow, and DNS learning described
 below are what an agent host builds on. More agentic features (per-agent policies, automatic
 baselining, popup triage) are planned on top of this.
 
-## snitchd: the Go rewrite
+## snitchd
 
-`snitchd` replaces Little Snitch's daemon: it decides at `connect()` in the kernel (BPF LSM),
+`snitchd` decides at `connect()` and unconnected `sendmsg()` in the kernel (BPF LSM),
 keyed by the program's executable and the destination. Rules from a file, learning mode,
-bounded enforce. The TUI below still talks to Little Snitch until parity.
+bounded enforce.
 
 ```sh
 go build -o /tmp/snitchd ./cmd/snitchd
@@ -123,16 +121,12 @@ bounded monitor run. A tag `vX.Y.Z` runs the lint checks (`.github/workflows/lin
 same jobs as on every push) and then the release lanes (`.github/workflows/release.yml`): the
 static amd64 builds (position-independent, `-buildmode=pie`) with the tag linked in, plus the
 deb. The lanes dispatch into the repo's Dagger module, so CI and a local `dagger call` run
-the same pipeline (see [docs/ci-debs.md](docs/ci-debs.md)); a failing check publishes nothing. The assets are
-`snitchd`, `snitchd.sha256` (the form `sha256sum -c` reads), the tray binary
-`snitch-linux-amd64` and its `snitch-linux-amd64.sha256` (see [The tray](#the-tray) below),
-the Python client's `snitch` and `snitch-trial`, and the deb `snitch_<version>_amd64.deb` with
-its `snitch_<version>_amd64.deb.sha256` — eight assets, published in one step.
+the same pipeline (see [docs/ci-debs.md](docs/ci-debs.md)); a failing check publishes nothing. Six assets are published in one step:
+`snitchd`, `snitchd.sha256` (the form `sha256sum -c` reads), the user binary
+`snitch-linux-amd64` and its `snitch-linux-amd64.sha256` (see [The TUI](#the-tui) and [The tray](#the-tray) below),
+and the deb `snitch_<version>_amd64.deb` with its `snitch_<version>_amd64.deb.sha256`.
 `snitchd -version` prints the tag (`dev` for a plain `go build`), and `snitchd status` shows
 it. The VM repo pins the version and the sha256 of the `snitchd` asset (see **Service** above).
-
-`systemd/snitch-trial*.service`, `snitch-trial.timer` and `snitch-watch.service` belong to the
-Little Snitch client below, not to snitchd.
 
 ## The tray
 
@@ -142,12 +136,11 @@ facts, and questions with Allow and Block. It talks to the **API** above — eve
 shows comes from `/run/snitch/api.sock` — and the only thing it ever writes is the rule an
 operator clicked, through the daemon's `rule.add`.
 
-By hand (never `go build -o snitch` in the repo root: the Python client owns that name
-there):
+By hand:
 
 ```sh
-go build -o /tmp/snitch ./cmd/snitch && /tmp/snitch -version
-/tmp/snitch tray
+go build -o snitch ./cmd/snitch && ./snitch -version   # or -o /tmp/snitch
+./snitch tray
 ```
 
 `usage: snitch tray [-api PATH] [-ask all|enforce] [-operator-file PATH]`, the defaults
@@ -233,8 +226,8 @@ cp desktop/snitch-tray.desktop ~/.config/autostart/
 
 The entry runs `snitch tray` at KDE's earliest autostart phase (safe: the item appears
 within 10 s of the tray host, whatever order Plasma starts in), and needs `snitch` on PATH:
-the release ships the Go binary as `snitch-linux-amd64` with its `snitch-linux-amd64.sha256`
-(the Python client owns the `snitch` asset name), so install it under that name:
+the deb installs it as `/usr/bin/snitch`, or from the release assets install
+`snitch-linux-amd64` as `snitch`:
 
 ```sh
 install -m 755 snitch-linux-amd64 ~/.local/bin/snitch
@@ -252,139 +245,72 @@ reaches the daemon's `rule.add`, it edits no rule file, removes no rule, replace
 And a reader's tray cannot decide: without the operator role it shows and notifies but
 answers nothing.
 
-## Install
+## The TUI
 
-Needs Little Snitch for Linux (tested with 1.1.0, web UI on its default `127.0.0.1:3031`) and
-[uv](https://docs.astral.sh/uv/): `snitch` is a single script that declares its dependencies
-(Textual, websockets) inline, uv fetches them on the first start.
+Install `snitch_<version>_amd64.deb` (which installs `/usr/bin/snitch`), install the static
+`snitch-linux-amd64` release asset as `~/.local/bin/snitch`, or build from source:
 
 ```sh
-install -m 755 snitch ~/.local/bin/snitch
+go build -o ~/.local/bin/snitch ./cmd/snitch
 snitch                       # the overview
 ```
 
-Alert popups (`snitch watch`, a user service) and the deny-by-default trial (`snitch-trial`,
-root) are optional:
-
-```sh
-install -m 644 systemd/snitch-watch.service ~/.config/systemd/user/
-systemctl --user enable --now snitch-watch.service
-
-sudo install -m 755 snitch-trial /usr/local/sbin/snitch-trial
-sudo install -d -m 700 /var/lib/snitch-trial
-sudo install -m 644 systemd/snitch-trial*.service systemd/snitch-trial.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable snitch-trial-boot.service && sudo systemctl enable --now snitch-trial.timer
-```
-
-Popups open in `foot`; another terminal goes in `~/.config/snitch/config.toml` (`terminal = ...`,
-see `snitch --help` for all options). On Hyprland, `~/.local/bin/hypr-launch` is used if present,
-so a popup starts like a keybinding.
+See [docs/tui.md](docs/tui.md) for all verbs, keys, configuration keys, and exit codes.
 
 ## The overview
 
 ![snitch: connections](docs/list.png)
 
-`snitch` (or a click on the shield in the bar, see below) shows the daemon's own tree: process ›
-host › address, with the details of the selected row below and the log at the bottom.
+`snitch` shows the daemon's connection tree (`program › host › address`), with the details of
+the selected row below and the log (`~/.local/state/snitch/snitch.log`) at the bottom.
 
 | key | |
 |---|---|
 | ↑ ↓ | move, the details follow |
 | enter / → | open · ← close |
-| `x` | block · `x` again unblocks (`[x]`) |
+| `x` / `space` | block · `x` / `space` again unblocks (`[x]`, removes overlay rule) |
 | `t`, `1`…`5` | time window 15m / 30m / 1h / 24h / 7d |
-| `s` / `S` | sort by activity (re-sorted every 10 s, `s` again 20 s) / by name |
+| `s` / `S` | sort by activity (cycles `resort`, default 10 s / 20 s) / by name |
 | `/` | search |
 | `e` | egress graph |
+| `T` / `K` / `E` / `U` | trial / keep / end / unkeep enforce mode |
 
-Blocking a protected process (`protect` in the config: `hypr-rdp`, `sshd`, `littlesnitch`) takes a second `x`.
+Blocking a protected process (`protect` in `~/.config/snitch/config.toml`: always at least `hypr-rdp`, `sshd`) takes a second `x`.
 
 ## Where does the data go?
 
 ![snitch: egress graph](docs/egress.png)
 
-`e` (or a right-click on the shield) shows what each program sends, and where to: btop-style
-bars on a log scale, so 12 GB and 50 KB are both visible, plus the live rate. The sender is the
-program that really talks (`ktop`), with the one that started it in brackets.
+`e` (or `snitch egress`) shows what each program sends, and where to: btop-style bars on a
+log scale (1 KiB floor), so large and small flows stay visible, plus the daemon's 10 s transfer rate.
 
-## Alerts
+## Trials, status, and alert popups
 
-![snitch: alert popup](docs/popup.png)
-
-With **deny by default**, a connection no rule covers is blocked and a popup asks:
-
-| key | |
-|---|---|
-| `o` / `x` | allow / block from now on |
-| `O` / `X` | allow / block for 15 minutes (`temporary` in the config) |
-| esc | decide later (asks again after `snooze`, 10 min) |
-
-Below the destination the popup shows a **trace**: the running process behind the connection
-and how it was started (`session › terminator › bash › claude`, with PIDs; the session itself is
-known and shown as `session`), its command line and working directory. Little Snitch only names
-the program, so `snitch` looks the process up in `/proc` the moment the block arrives;
-short-lived programs such as `curl` may have exited by then, and the popup says so.
-
-The popup ignores keys for its first 0.6 s, so it can't catch an `o` or `x` you were typing
-somewhere else. The program has to retry after you allow it; nothing is held open.
-
-Every answer is an ordinary Little Snitch rule (*"snitch popup …"*): listed, editable and
-deletable in the web UI, and 15-minute rules expire inside the daemon itself. Decisions and
-blocks are logged to `~/.local/state/snitch/snitch.log`.
+`snitch status` prints Waybar custom-module JSON (`text`, `class`, `tooltip`) queried from
+`snitchd`. `snitch default deny|allow [--keep]` manages timed enforce trials through `snitchd`
+(using `/var/lib/snitch` and `systemd/snitchd-trial-boot.service` for deadline and boot-time
+revert):
 
 ```sh
-snitch default deny          # a trial: baseline first, back to allow after 10 min and at the next boot
-snitch default deny --keep   # keep it
-snitch default allow         # back
+snitch default deny          # start an enforce trial (reverts at deadline and on reboot)
+snitch default deny --keep   # keep enforce across reboots
+snitch default allow         # return to monitor mode immediately
 ```
 
-**Deny by default locked the author's VM out once** (2026-10-09): RDP and SSH were cut, it took a
-reboot and the Proxmox console. Right after Little Snitch (1.1.0) starts, and for connections
-that already exist when it restarts, its per-program rules don't apply yet, so everything is
-denied, the RDP session included. Hence:
-
-* the local network is always allowed (a baseline rule for any program, both directions)
-* Anthropic (Claude Code) is allowed for any program: rules with a program path take minutes to
-  apply after Little Snitch starts, and some connections come without an identified program
-* `snitch default deny` is only a trial: a root timer goes back to allow after `trial` (10 min),
-  and an open trial at boot is ended before Little Snitch starts
-* recommended: stay on allow, watch the overview and the egress graph, block with `x`
-
-In waybar (`snitch status`, JSON for a custom module), the shield is solid for deny, an outline for allow, and red when the
-popups aren't running (`snitch-watch.service`).
+Interactive alert popups (`snitch watch`, `snitch ask`) and `/proc`/kernel process traces (`x via y`)
+are deferred to `popups-trace`. Decisions and blocks from the TUI are logged to
+`~/.local/state/snitch/snitch.log`.
 
 ![the shield in the bar](docs/bar.png)
-
-### Dev tools and overnight jobs
-
-Nobody answers popups while you're away, so jobs that run overnight need their rules before:
-
-```sh
-snitch baseline --dev
-```
-
-adds allow rules for the dev tools, each to its own hosts only: Claude Code → Anthropic,
-Codex → OpenAI, Copilot / `gh` → GitHub, `git` (https and ssh) → GitHub / GitLab / Codeberg /
-Gitea, `apt` from the session (sudo, deploys) → its repositories, `npm` → npmjs.org, `uv` / `pip` → PyPI,
-`cargo` → crates.io, `go` → golang.org, `podman` → the registries, `helm` → chart sources and
-the cluster on the local network, `kubectl` / `k9s` / `ktop` → the cluster, and the bar's quota
-module.
-Versioned installs are matched with narrow wildcards (`~/.local/share/claude/versions/*`), so
-the rules survive updates. Each tool gets a rule for "started in the session" and one for
-"running on its own"; there is no session-wide rule, which would open those hosts to
-everything. General-purpose tools such as `curl` are left out on purpose: they get a popup.
-Running it again only adds what's missing.
 
 ## What this does and doesn't stop
 
 | | |
 |---|---|
-| ⚠️ a package phoning home | only with deny by default (popups); on allow you see it in the overview and block it with `x` |
-| ⚠️ deny by default | cut RDP and SSH once (rules don't apply right after Little Snitch starts): only as a 10-minute trial |
-| ⚠️ wildcards in rule paths | Little Snitch expands them on disk: `/**` hung its web server once. `snitch` refuses paths without two fixed leading components |
+| ⚠️ a package phoning home | in monitor mode you see it in the overview and block it with `x`; interactive alert popups (`watch`/`ask`) return with `popups-trace` |
+| ⚠️ deny by default | only as a bounded trial (`snitchd` + `/var/lib/snitch` deadline + `snitchd-trial-boot.service`), with local network, heartbeat, and kill-switch fail-safes |
+| ⚠️ write authorisation (`write-gate`) | API writes currently authorise by caller uid (`/etc/snitch/operator`); hardening loosening writes (`write-gate`) precedes `popups-trace` |
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Little Snitch is a product of Objective Development; this is an
-independent client of its web UI protocol.
+MIT, see [LICENSE](LICENSE).

@@ -28,7 +28,7 @@ Payload (every mode explicit, every file root-owned, `DEBIAN/` as listed):
 | path in package | source | mode | notes |
 |---|---|---|---|
 | `/usr/local/sbin/snitchd` | the built daemon | 0755 | the frozen unit contract: both shipped units name this exact path in `ExecStart` (R4.2) |
-| `/usr/bin/snitch` | the built tray binary | 0755 | a PATH directory, so `snitch tray` and the desktop entry's `Exec=` resolve for every user (R4.4) |
+| `/usr/bin/snitch` | the built client binary | 0755 | a PATH directory, so `snitch` (TUI, `status`, `default`, `tray`) and the desktop entry's `Exec=` resolve for every user (R4.4) |
 | `/usr/lib/systemd/system/snitchd.service` | repo unit, byte-identical | 0644 | unpacked by dpkg, never enabled by the package |
 | `/usr/lib/systemd/system/snitchd-trial-boot.service` | repo unit, byte-identical | 0644 | unpacked by dpkg, never enabled by the package |
 | `/usr/share/applications/snitch-tray.desktop` | repo desktop entry | 0644 | the autostart entry the desktop session resolves |
@@ -76,10 +76,8 @@ Semantics of the sample (`/etc/snitch/rules.toml`, R4.3 and R4.6):
   keeps that entirely dpkg's.
 
 Never shipped, on purpose: the operator file `/etc/snitch/operator`
-(`scripts/setup.sh` owns it, deploy-service deploys it), any base
-configuration of `/etc/snitch` beyond the sample, and the legacy Little-Snitch
-client era units — `snitch-trial*.service`, `snitch-trial.timer`,
-`snitch-watch.service` belong to the Python client, not to snitchd's package.
+(`scripts/setup.sh` owns it, deploy-service deploys it) and any base
+configuration of `/etc/snitch` beyond the sample.
 
 No runtime `Depends` (R4.5): both binaries are static (`CGO_ENABLED=0`,
 `-trimpath`), so the control file declares no scripting runtime, no libc and no
@@ -231,11 +229,8 @@ Coverage realities (R3.2):
   that warning must not stop the observation). Traced extraction replaces none-mode's inferred
   compilation units and its macro-accuracy caveat, which mattered most for `dns.bpf.c`, the
   parser of attacker-shaped DNS answers. cppcheck stays the line-level layer.
-- **The Python client is extracted through a pre-scan copy** (since 2026-11-25): the job copies
-  the extension-less `snitch` to `snitch-client.py` before `init` (same bytes; the extractor
-  picks up `*.py` only — the client's `#!/usr/bin/env -S uv run --quiet --script` shebang does
-  not match its script pattern), so the client gets real taint coverage until the Go TUI
-  retires it. Ruff keeps covering the file on the lint side.
+- *(History)* Until `tui` retired the legacy frontend, a third `python` lane
+  scanned a pre-scan copy of that script; `codeql.yml` now scans `go` and `c-cpp`.
 
 The findings-review expectation (R3.3, R3.4): findings never gate anything —
 they surface in code scanning for human review; the release does not reference
@@ -262,7 +257,8 @@ draw exactly this line).
   enabled is the package's whole motion; everything else is a deploy step.
 - Consuming repos update their pins deliberately on each release; this
   feature's side of that contract is stable asset names and byte-stable
-  construction (the six frozen names are untouched, the deb pair joins them).
+  construction (following `tui`, six assets publish: the four Go binary/sha256
+  assets plus the deb pair).
 
 ## Local reproduction (R7.1–R7.3)
 
@@ -284,21 +280,21 @@ The command set, from the repo root (a throwaway tag such as v0.0.0-cidev
 satisfies the tag guard; never push it, delete it after):
 
 ```sh
-dagger call lint-all                                                        # every check, ten PASS banners
-dagger call release-build --version=vX.Y.Z --output=dist                    # the four existing artifacts
+dagger call lint-all                                                        # every check, all PASS banners
+dagger call release-build --version=vX.Y.Z --output=dist                    # the Go release artifacts
 dagger call deb --version=vX.Y.Z --output=dist-deb                          # the deb + its sha256
 dagger call smoke --distro=UBUNTU_2604 --version=vX.Y.Z --docker-socket=/var/run/docker.sock
 dagger call smoke --distro=DEBIAN_FORKY --version=vX.Y.Z --docker-socket=/var/run/docker.sock
 dagger call deb-release --version=vX.Y.Z --docker-socket=/var/run/docker.sock --output=dist-deb   # the release lane in one call
-dagger check                                                               # the eight-check gate
+dagger check                                                               # the seven-check gate
 ```
 
-`dagger check` runs the eight functions marked `+check`: fmt, go, shellcheck,
-ruff, actionlint, golangci, cppcheck and — added by c-hardening — bindings,
+`dagger check` runs the seven functions marked `+check`: fmt, go, shellcheck,
+actionlint, golangci, cppcheck and — added by c-hardening — bindings,
 which regenerates `internal/bpf/` with the pinned clang in a pinned forky
 image and fails when the committed bindings differ from their source (the
 compiler only observes; nothing it produces is committed or shipped; see
-`docs/c-hardening.md`). `lint-all` runs the same eight, the first five
+`docs/c-hardening.md`). `lint-all` runs the same seven, the first four
 through `lint-core`.
 
 The build functions enforce, not assume, the two determinism guards: a clean
@@ -337,9 +333,8 @@ Why the artifacts are reproducible — every byte-varying input is pinned:
   it: identical deb sha256 twice.
 
 Parity in one line: for the same release tag, `release-build`'s `snitchd` and
-`snitch-linux-amd64` are byte-identical to today's pre-module workflow build
-of the same commit, and the deb packs that same pair — the eight assets are
-the same bytes by construction (R6.1, R7.1).
+`snitch-linux-amd64` are byte-identical to the deb's shipped binaries, and the deb
+packs that same pair — all six published assets are reproducible by construction (R6.1, R7.1).
 
 ## CI specifics
 
@@ -358,9 +353,9 @@ the same bytes by construction (R6.1, R7.1).
   exactly as it does on lint's own runs (GitHub's events-that-trigger docs).
 - `GH_TOKEN` exists only in the publish job (`contents: write` only there);
   no pipeline function receives a secret, and no engine holds credentials.
-- Publish is all-or-nothing: one existence loop over the eight asset paths
-  (six frozen names in their order, then the deb pair) prints `missing asset:
-  <path>` and exits 1 before any `gh` runs, then one `gh` step
+- Publish is all-or-nothing: one existence loop over the six asset paths
+  (`snitchd`, `snitchd.sha256`, `snitch-linux-amd64`, `snitch-linux-amd64.sha256`,
+  and the deb pair) prints `missing asset: <path>` and exits 1 before any `gh` runs, then one `gh` step
   (`upload --clobber` over an existing release, `create --verify-tag
   --generate-notes` otherwise) — a reader-side pin never observes a partial
   release (R6.3).

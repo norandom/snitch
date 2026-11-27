@@ -547,7 +547,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 8.2, 8.5, 8.6_
   - _Requirements: 14.3, 15.4, 15.5_
 
-- [ ] 9. Retiring the Python client (only after 8.7 is recorded)
+- [x] 9. Retiring the Python client (only after 8.7 is recorded)
 - [x] 9.1 The client, its units, its lanes and its assets leave
   - Delete the Python client, `snitch-trial`, the watch unit and the three trial units of the
     Python client, the Python lint configuration, its lock file and the tracked bytecode
@@ -569,7 +569,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 8.7_
   - _Requirements: 14.3, 14.4, 14.6_
 
-- [ ] 9.2 The documents say what is now true
+- [x] 9.2 The documents say what is now true
   - `README.md`, `CLAUDE.md`, the steering files, `docs/ci-debs.md` and `docs/rugged.md` no
     longer name the Python client as the operator UI or the reference; they describe the Go
     TUI, say that popups return with popups-trace, and describe the trial's shape by the

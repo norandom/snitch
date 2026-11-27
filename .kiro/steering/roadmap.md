@@ -4,20 +4,20 @@
 
 snitch is Little-Snitch-style egress control for Linux: `snitchd` decides in the kernel, and the
 user-side `snitch` binary shows and asks. The daemon side is shipped through v0.4.0 (rule
-loading, persistent trial, deploy service, daemon API, DNS tap). What is left is the user side:
-nothing under `cmd/snitch/` exists yet, and the Python client in the repo root is still the
-only operator UI.
+loading, persistent trial, deploy service, daemon API, DNS tap), and `cmd/snitch/` now ships
+both `snitch tray` and the Bubble Tea TUI (`overview`, `egress`, `status`, `default`, `-version`);
+the legacy Python client has retired. Alert popups (`watch`, `ask`) and process tracing return
+with `popups-trace`.
 
-This phase builds the user side in three shippable steps, all clients of the API in
-`examples/api.md`, none of them touching BPF. It starts with a KDE tray because the operator
-now also works on a KDE Plasma host (chandali, Ubuntu 26.04, Plasma 6.6 on Wayland), where the
-Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not apply.
+This phase builds the user side in shippable specs, all clients of the API in `examples/api.md`,
+none of them touching BPF outside `popups-trace`. It started with the KDE tray (`kde-tray`)
+and the Bubble Tea TUI (`tui`); hardening write authorisation (`write-gate`) precedes alert
+popups (`popups-trace`).
 
 ## Approach Decision
 
-- **Chosen**: one user binary, `snitch`, with verbs, like the Python client it replaces
-  (`snitch tray` first, later `snitch watch`, `snitch ask`, `snitch status`, and the TUI as the
-  default verb). The tray speaks D-Bus directly through `github.com/godbus/dbus/v5`:
+- **Chosen**: one Go user binary, `snitch`, with verbs (`tray`, `egress`, `status`, `default`,
+  `-version`, TUI overview as default; later `watch` and `ask` in `popups-trace`). The tray speaks D-Bus directly through `github.com/godbus/dbus/v5`:
   `org.kde.StatusNotifierItem` with a `com.canonical.dbusmenu` menu, and
   `org.freedesktop.Notifications` for the notifications. The API client and the
   "answer becomes a rule" logic live in `internal/` packages so the popups and the TUI reuse them.
@@ -34,12 +34,12 @@ Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not 
     still be needed for the notifications.
   - A Plasma applet (QML) or a Qt/Python tray: a second language and a runtime dependency on
     the desktop host, against the "Go for both binaries" decision.
-  - Extending the Python client: it is lint-only, the reference until parity, no new features.
 
 ## Scope
 
 - **In**: the KDE tray (status icon, status menu, notifications with Allow and Block), the
-  popups with a kernel-side process trace, the bubbletea TUI at parity with the Python client.
+  Bubble Tea TUI (`overview`, `egress`, `status`, `default`), `write-gate` write-authorisation
+  hardening, and alert popups with a kernel-side process trace (`popups-trace`).
 - **Out**: trial verbs in the tray menu (the operator decided against them on 2026-11-23; they
   stay on `snitchd trial | keep | unkeep | end` and, later, the TUI); a remote transport for
   the API (the tray talks to the daemon on its own host); inbound traffic (fail-safe 1); any
@@ -57,10 +57,10 @@ Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not 
 
 ## Boundary Strategy
 
-- **Why this split**: the tray needs no kernel change and no terminal, so it ships alone and
-  proves the client package. The popups add the only kernel work of the phase (the process
-  trace) and the terminal question. The TUI is the large port and comes last, on a client
-  package two specs have already exercised.
+- **Why this split**: the tray shipped first with no kernel change and no terminal, proving the
+  client package (`kde-tray`). The Bubble Tea TUI (`tui`) shipped next on that shared client,
+  retiring the legacy Python client. `write-gate` tightens daemon write authorisation before
+  `popups-trace` adds kernel-side process tracing and the `watch`/`ask` terminal popups.
 - **Shared seams to watch**:
   - The API client package (connect, reconnect, subscribe, resync after `dropped`): owned by
     `kde-tray`, reused unchanged by the other two.
@@ -85,9 +85,9 @@ Hyprland-only pieces of the Python client (waybar module, `foot` popups) do not 
 ## Specs (dependency order)
 
 - [x] kde-tray -- `snitch tray`: StatusNotifierItem icon and status menu, KDE notifications with Allow and Block for undecided or denied connections; creates `cmd/snitch` and the API client package. Dependencies: none
-- [ ] popups-trace -- kernel-side process trace on events, `snitch watch` and `snitch ask` (the terminal question, with the trace), the trace in the tray's notifications. Dependencies: kde-tray
 - [ ] write-gate -- mandatory (see `.kiro/specs/tui/requirements.md`, Mandatory Follow-up): the daemon authorises writes by uid alone, so any program of the operator's account can send them itself; loosening writes (allow rule, deny removal) and `trial` / `keep` must need more than the uid, tightening writes and the way back stay easy. Before popups-trace is implemented. No brief yet. Dependencies: daemon-api
-- [ ] tui -- the bubbletea TUI, key for key like the Python client (overview, egress graph, rule edits, trial verbs), then the Python client retires. Dependencies: kde-tray, popups-trace
+- [ ] popups-trace -- kernel-side process trace on events, `snitch watch` and `snitch ask` (the terminal question, with the trace), the trace in the tray's notifications. Dependencies: kde-tray, write-gate
+- [x] tui -- the Bubble Tea TUI (`overview`, `egress`, `status`, `default`), rule edits, trial verbs, and retirement of the legacy frontend. Dependencies: kde-tray
 
 ## Later phases (no briefs yet)
 

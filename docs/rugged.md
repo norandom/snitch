@@ -12,7 +12,7 @@ for the part that loads kernel programs. Run both, in that order, then tag.
 `rugged` is one Dagger call that runs two things back to back and stops at the first
 failure, naming it:
 
-1. `lint-all` — every pipeline check: fmt, go, shellcheck, ruff, actionlint, golangci,
+1. `lint-all` — every pipeline check: fmt, go, shellcheck, actionlint, golangci,
    cppcheck, and the bindings check. The bindings check regenerates `internal/bpf/` with
    the pinned clang in the pinned forky image and compares byte for byte with the committed
    objects. The compiler only observes: nothing it produces is committed or shipped

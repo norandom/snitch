@@ -6,9 +6,9 @@ decides in the kernel whether a program may open an outbound connection, and a t
 with one key, draws an egress graph of who sends how much to where, and pops up a question for
 connections nobody has decided on yet.
 
-It replaces two things the author used before: the closed-source Little Snitch for Linux daemon
-and the Python client in the repo root that drives its web UI. The Python client stays in the
-repo as the behavioural reference until the Go TUI reaches parity, key for key.
+It replaces the closed-source Little Snitch for Linux daemon and legacy frontend: both
+`snitchd` and the `snitch` operator binary are Go in this repo, with interactive alert
+popups (`watch`/`ask`) and process tracing returning in `popups-trace`.
 
 ## Who it is for
 
@@ -25,8 +25,9 @@ the firewall is wrong. Rules are configuration files, deployed like any other co
    (deny by default) is a timed trial that reverts on its own and at boot.
 3. **Fail-safes in the design** (see `fail-safes.md`): egress only, local network always
    allowed, heartbeat fail-open, kill switch reachable from a serial console.
-4. **Operator UI**: a TUI with the same views and keys as the Python client (overview,
-   egress graph, popups with a process trace), fed by the daemon over a unix socket.
+4. **Operator UI**: a Bubble Tea TUI (`snitch`, overview and egress graph; see `docs/tui.md`),
+   KDE tray (`snitch tray`), `snitch status`, and trial verbs (`snitch default`), fed by the
+   daemon over a unix socket (alert popups and process tracing return with `popups-trace`).
 5. **Fleet view, later**: domain rules via a DNS tap, enrichment from Velociraptor (the
    CrowdStrike-style graph process tree › socket › destination behind a verdict) and batches
    to OpenObserve, which renders that graph as a limited Sankey (process › destination ›

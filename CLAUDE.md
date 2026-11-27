@@ -70,16 +70,16 @@ Little-Snitch-style egress control for Linux, open source, eBPF. Two binaries, o
 
 - `snitchd` (root, Go + BPF C): decides at `connect()` / unconnected `sendmsg()` inside the kernel
   (BPF LSM hooks), keyed by the program's executable (inode + device) and the destination.
-- `snitch` (user, Go): verb `tray` today — the KDE tray: one StatusNotifierItem with six
-  drawn state icons, a facts menu, questions with Allow and Block through the daemon's
-  `rule.add` — and `-version`; the bubbletea TUI is planned: the same views and keys as the
-  Python client it replaces
-  (`snitch`, the file in the repo root, talks to Little Snitch's web UI; it stays until parity).
+- `snitch` (user, Go): Bubble Tea TUI (`overview` default, `egress`), one-shot `status` and
+  `default` verbs (`snitch default deny|allow [--keep]`), `-version`, and `tray` (the KDE
+  tray: one StatusNotifierItem with six drawn state icons, a facts menu, questions with Allow
+  and Block through the daemon's `rule.add`). See `docs/tui.md`; alert popups (`watch`/`ask`)
+  and process tracing return with `popups-trace`.
 
 Started as part of github.com/norandom/hyperland-forky-worker-vm (a Hyprland thin client over
 RDP). That repo deploys releases of this one pinned by sha256 (`group_data/all.py`:
 `snitchd_enabled`, `snitchd_version`, `snitchd_sha256`, `snitchd_learn`; `tasks/snitchd.py`);
-Little Snitch and the Python client were retired there on 2026-10-11, snitchd watches egress.
+Little Snitch and its legacy client were retired on 2026-10-11, snitchd watches egress.
 
 ## Fail-safes: design constraints, not options
 
@@ -95,7 +95,8 @@ Never again:
 4. Kill switch, usable from a serial console as root, no network or daemon needed:
    `bpftool map update pinned /sys/fs/bpf/snitch/kill key 0 0 0 0 value 1 0 0 0`
    (`value 0 0 0 0` to clear). A restart must keep it until cleared.
-5. Deny mode only as a timed trial with a boot revert (see `snitch-trial` for the shape).
+5. Deny mode only as a timed trial with a boot revert (`/var/lib/snitch` deadline +
+   `systemd/snitchd-trial-boot.service` running `snitchd end -at-boot`).
 
 Never switch a mode or deploy anything that can cut the user's RDP session without asking;
 test on this VM with `-duration`, and the kill switch reset in a trap.
@@ -126,21 +127,19 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   never enforce). See `docs/c-hardening.md`.
 - `cmd/snitchd/` the daemon. Build + try: `go build -o /tmp/snitchd ./cmd/snitchd &&
   sudo /tmp/snitchd -mode monitor -duration 10s`.
-- `cmd/snitch/` the user binary: `snitch tray [-api PATH] [-ask all|enforce]
-  [-operator-file PATH]`, `snitch -version`; exits 0 (Quit/signal), 1 (no session bus, bus
-  lost, an instance already running), 2 (usage), 70 (wiring bug). Four packages, one
-  direction: `internal/sni` (session bus: the item, its menu, notifications, the drawn
-  icons) imports `internal/tray` (the pure model/view), which imports `internal/ask` (the
-  rule an answer stands for) and `internal/client` (the API as messages); those two import
-  `internal/api` types only — the tray has no D-Bus, the bus layer no daemon. Build to
-  `/tmp/snitch`, never `go build -o snitch` in the repo root: the Python client owns `snitch`
-  there (`go build -o /tmp/snitch ./cmd/snitch`).
+- `cmd/snitch/` the user binary: `snitch` (overview TUI), `snitch egress`, `snitch status`,
+  `snitch default deny|allow [--keep]`, `snitch tray [-api PATH] [-ask all|enforce]
+  [-operator-file PATH]`, `snitch -version`; see `docs/tui.md`. One-way package layers: `internal/term`
+  isolates Bubble Tea v2 / Lip Gloss v2 over pure `internal/tui`, `internal/table`, and
+  `internal/clean`; `internal/sni` isolates session D-Bus over `internal/tray`; both share
+  `internal/client` and `internal/ask`, which import `internal/api` types only. Build to
+  `snitch` or `/tmp/snitch` (`go build -o /tmp/snitch ./cmd/snitch`).
 - Go module `github.com/norandom/snitch`; deps: cilium/ebpf v0.22, x/sys,
   github.com/godbus/dbus/v5 v5.2.4 (the tray's session bus, `internal/sni` only; BSD-2-Clause,
   pure Go, no cgo, so the static builds stand — `release.yml` also ships `snitch-linux-amd64`
   built from `./cmd/snitch`). Lint: `gofmt -l .`,
-  `go vet ./...`; CI (`.github/workflows/lint.yml`): go, ruff (Python client), shellcheck,
-  actionlint. Commit as `git -c user.name=marius -c user.email=wishinet@gmail.com commit`.
+  `go vet ./...`; CI (`.github/workflows/lint.yml`): fmt, go, shellcheck,
+  actionlint (plus golangci, cppcheck, bindings). Commit as `git -c user.name=marius -c user.email=wishinet@gmail.com commit`.
   Before every push: no secrets in the diff.
 - Rule maps (see the C): `programs` hash (exe inode+dev -> program id), `rules` LPM trie
   (prefixlen | program | family | proto | port | addr[16] -> rule_val {verdict 1 allow / 2 deny,
@@ -193,9 +192,13 @@ implemented, root gates pending): extended clang warnings with `-Werror`, the fo
 cppcheck findings fixed, layout and limit contracts, counted fail-open runtime contracts in
 both programs served as `counters` in the API status, exact-size record decoders, six fuzz
 targets, a 58-frame hostile DNS corpus, and the pinned bindings check in CI.
+Spec `tui` (2026-11-27, see `.kiro/specs/tui/` and `docs/tui.md`): Bubble Tea v2 + Lip Gloss
+v2 terminal UI (`overview` default, `egress`), `snitch status` JSON, `snitch default
+deny|allow [--keep]`, and `snitch-check`/`scripts/tui-check.sh`, retiring the legacy client
+and its units/assets.
 Not done yet, in order:
 
-1. Popups + kernel-side process trace; then the bubbletea TUI, key for key like the Python one.
+1. `write-gate` (mandatory follow-up: API writes currently authorise by uid alone; harden loosening writes and `trial`/`keep`), then `popups-trace` (alert popups `watch`/`ask` + kernel-side process trace).
 2. Velociraptor (server in the k3s cluster at 10.0.0.63) enrichment: it supplies the
    CrowdStrike-style graph (process tree -> socket -> destination) behind a verdict. OpenObserve
    (http://10.0.0.54:40002, org default; OTLP gateway in k3s :4317/:4318) gets one batch per

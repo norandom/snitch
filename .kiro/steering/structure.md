@@ -5,8 +5,8 @@
 A standard Go module layout around two BPF programs. The kernel side lives in `bpf/`, its
 generated Go bindings in `internal/bpf/`, each binary under `cmd/`. Shared daemon logic goes
 into `internal/<domain>/` packages as it appears (rules, api, dns, enrich); nothing under
-`internal/` is importable from outside the module. The legacy Python client and its systemd
-units stay at the top level until the Go TUI replaces them.
+`internal/` is importable from outside the module. Both `snitchd` and the user-side
+`snitch` binary (TUI, status, trial verbs, and KDE tray) are pure Go.
 
 ## Directory Patterns
 
@@ -28,31 +28,25 @@ reasoned suppressions.
 bindings check regenerates in the pinned image and compares. Never edited by hand.
 
 ### Binaries
-**Location**: `cmd/snitchd/` (root daemon), `cmd/snitch/` (user binary: `snitch tray` today,
-`snitch -version`; the TUI verb is planned)
+**Location**: `cmd/snitchd/` (root daemon), `cmd/snitch/` (user binary: `snitch` overview TUI,
+`egress`, `status`, `default`, `tray`, `-version`)
 **Purpose**: `main` packages: flag parsing, wiring, signal handling. Logic that needs a unit
-test moves into an `internal/` package. Build `cmd/snitch` to `/tmp`, never
-`go build -o snitch` in the repo root: there `snitch` is the legacy Python client, which
-owns the name until parity.
+test moves into an `internal/` package. `go build -o snitch ./cmd/snitch` (or `/tmp/snitch`
+when keeping the repo root clean) builds the unified operator binary.
 
 ### Domain packages (as they appear)
 **Location**: `internal/rules/`, `internal/api/`, `internal/dns/`, `internal/client/`,
-`internal/ask/`, `internal/tray/`, `internal/sni/`, `internal/enrich/`, ...
+`internal/ask/`, `internal/clean/`, `internal/conf/`, `internal/logfile/`, `internal/table/`,
+`internal/tui/`, `internal/term/`, `internal/verbs/`, `internal/tray/`, `internal/sni/`, ...
 **Purpose**: one concern per package: rules file → map entries; the unix socket API; the DNS
-tap and IP → name cache; Velociraptor / OpenObserve clients. The tray's four point one way:
-`internal/sni` (the session bus: item, menu, notifications, icons, over
-`github.com/godbus/dbus/v5` v5.2.4 — pure Go, BSD-2-Clause, no cgo) imports `internal/tray`
-(the pure tray model), which imports `internal/ask` (which events ask, the rule an answer
-stands for) and `internal/client` (the API as typed messages, with reconnect), and those two
-import only `internal/api`'s types — `sni` has no client, `tray` has no D-Bus, and nothing
-points the other way.
+tap and IP → name cache; TUI core (`table` + pure `tui` model + `term` Bubble Tea adapter)
+and one-shot verbs; the KDE tray (`sni` imports `tray`, which imports `ask` and `client`).
 **Example**: `internal/rules` owns parsing, path/glob → inode+dev resolution and the map
 encoding, and is tested without root.
 
-### Legacy Python client
-**Location**: `snitch` (uv script, root of the repo), `snitch-trial`, `systemd/`, `docs/*.png`
-**Purpose**: the behavioural reference for the TUI (views, keys, popup flow, trace) and the
-trial/revert shape. Lint only (ruff, shellcheck); no new features.
+### Service units and assets
+**Location**: `systemd/` (`snitchd.service`, `snitchd-trial-boot.service`), `desktop/`, `packaging/`, `docs/*.png`
+**Purpose**: daemon service and boot-revert units, desktop tray autostart, Debian packaging inputs, and documentation screenshots. Lint scripts with `shellcheck`.
 
 ### Specs and steering
 **Location**: `.kiro/steering/` (this memory), `.kiro/specs/<feature>/`
@@ -92,8 +86,8 @@ Module path `github.com/norandom/snitch`; no replace directives, no vendoring.
   the TUI never opens BPF maps; the BPF program never depends on the daemon being alive to
   allow traffic.
 - **Fail-safes live in the C program**, not in Go and not in rule files (see `fail-safes.md`).
-- **Everything user-facing has a reference**: TUI views and keys follow the Python client;
-  the daemon's JSON lines follow the shapes that client already consumes.
+- **Everything follows documented specs and wire contracts**: TUI views and keys follow `.kiro/specs/tui/` (`docs/tui.md`);
+  the daemon's JSON lines follow `examples/api.md`.
 - **Committed generated code**: bindings and the BPF object are build inputs, regenerated
   deliberately and reviewed in the diff.
 

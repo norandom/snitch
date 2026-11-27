@@ -20,14 +20,12 @@ client of the daemon and never touches BPF. Decision order in the kernel is fixe
 → heartbeat → local network → rules (program-specific before any-program; exact proto+port,
 proto, any) → mode default (monitor allows and reports, enforce denies and reports).
 
-The tray adds the user-side half of that client role, as a second binary with four packages
-that point one way: `cmd/snitch` (the `snitch` binary: verb `tray`, `-version`) wires
-`internal/sni` (the session bus: StatusNotifierItem, its menu, notifications, the drawn
-icons), which depends on `internal/tray` (the pure model: state, menu rows, notices), which
-depends on `internal/ask` (which event deserves a question, and the rule an answer stands
-for) and `internal/client` (the daemon's API as typed messages, with reconnect); those two
-depend only on `internal/api`'s wire types. `internal/tray` has no D-Bus and `internal/sni`
-has no daemon, and the tray's only write is the `rule.add` behind an operator's click.
+The user-side binary `cmd/snitch` serves the Bubble Tea TUI (`overview` default, `egress`),
+one-shot `status` and `default` verbs, `-version`, and the KDE `tray` (`internal/sni` imports
+`internal/tray`; `internal/term` isolates `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2`
+over pure `internal/tui` + `internal/table` + `internal/clean`; shared `internal/client` and
+`internal/ask` import only `internal/api` wire types). Alert popups (`watch`, `ask`) and
+process tracing return with `popups-trace`.
 
 ## Core Technologies
 
@@ -36,9 +34,9 @@ has no daemon, and the tray's only write is the `rule.add` behind an operator's 
 - **Kernel interface**: BPF LSM hooks via `github.com/cilium/ebpf` (programs attached with
   `link.AttachLSM`, maps pinned under `/sys/fs/bpf/snitch`). Requires a kernel with
   `CONFIG_BPF_LSM` and `bpf` in the active LSM list; developed on Debian forky, kernel 7.2.
-- **TUI**: bubbletea (planned). The user-side binary exists meanwhile: `cmd/snitch`, verb
-  `tray` (the KDE tray) and `-version`; reference implementation: the Python/Textual client
-  `snitch`.
+- **TUI & tray**: Bubble Tea v2 + Lip Gloss v2 isolated in `internal/term`, plus `snitch` verbs
+  (`overview`, `egress`, `status`, `default`, `tray`, `-version`; see `docs/tui.md`). Interactive
+  popups (`watch`, `ask`) and process trace return with `popups-trace`.
 - **Packaging**: static Go binaries; GitHub releases pinned by sha256 by the consuming repo;
   Nix flake (`buildGoModule`) later. systemd units in `systemd/`.
 
@@ -82,8 +80,7 @@ the fail-open branch (allow in the LSM hooks, pass in the DNS tap), never deny. 
 are in the API status (`counters`); a non-zero contract counter is a defect.
 
 ### Code quality
-`gofmt -l .` clean, `go vet ./...` clean; Python client checked with ruff (settings in
-`pyproject.toml`); shell with shellcheck; workflows with actionlint. CI is
+`gofmt -l .` clean, `go vet ./...` clean; shell with shellcheck; workflows with actionlint. CI is
 `.github/workflows/lint.yml`. Comments explain why, in plain sentences; file headers state
 what the file does and its fail-safe implications.
 
@@ -130,8 +127,7 @@ scripts/caps.sh
 
 # build + bounded monitor run
 go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -duration 10s
-# the user binary: build to /tmp (never `go build -o snitch` in the repo root: `snitch`
-# there is the Python client, which owns that name until the TUI replaces it)
+# the user binary (builds static `snitch`; or output to `/tmp/snitch` to keep repo root clean)
 go build -o /tmp/snitch ./cmd/snitch && /tmp/snitch -version
 # regenerate bindings after editing bpf/*.c, bpf/*.h or gen.go (pinned image), then check
 scripts/bindings-regen.sh --docker --write
@@ -164,7 +160,8 @@ the VM's disk is for the user's development.
 - **Maps pinned, links not**: `control` and `kill` survive a daemon restart (the kill switch
   must), but a dead daemon detaches the programs, so nothing enforces without a heartbeat.
 - **Deny only as a trial**: enforce mode is entered with a deadline and a boot-time revert
-  (shape: `snitch-trial` + its systemd units). The lockout of 2026-10-09 is why.
+  (shape: `/var/lib/snitch` deadline + `systemd/snitchd-trial-boot.service` running
+  `snitchd end -at-boot`). The lockout of 2026-10-09 is why.
 - **Domain rules via a DNS tap, not synchronous resolution**: a BPF tap on DNS answers feeds
   an IP → name cache; rules by name are compiled to prefixes live.
 - **Enrichment stays outside the hot path**: Velociraptor supplies the process graph and
