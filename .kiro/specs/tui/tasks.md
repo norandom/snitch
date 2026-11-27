@@ -516,7 +516,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 7.3_
   - _Requirements: 14.1, 14.2_
 
-- [ ] 8.6 The host-check script
+- [x] 8.6 The host-check script
   - `scripts/tui-check.sh [-api PATH] [--trial]` (no root): `snitch status` prints valid
     JSON; the overview starts and quits on a pseudo-terminal; one connection attempt to a
     TEST-NET address (`192.0.2.1`, one second, expected to fail) makes its row exist; the
