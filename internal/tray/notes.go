@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/norandom/snitch/internal/api"
 	"github.com/norandom/snitch/internal/ask"
+	"github.com/norandom/snitch/internal/clean"
 	"github.com/norandom/snitch/internal/client"
 )
 
@@ -87,6 +89,18 @@ func noteRulesError(text string) Note {
 // noteRulesOK is a rules error that cleared (7.5).
 func noteRulesOK() Note {
 	return notice("rules load again", "The rules error is gone.")
+}
+
+// noteBlind is the kernel hook inactive notice, with the daemon's sanitised reason (6.4).
+func noteBlind(h *api.HookStatus) Note {
+	body := ""
+	if h != nil {
+		body = strings.TrimSpace(string(clean.Text(h.Reason)))
+	}
+	if body == "" {
+		body = "Connections are neither seen nor blocked."
+	}
+	return attention(Blind.String(), body)
 }
 
 // noteGone is a daemon gone for 10 s, with the Down reason and when it went (7.6).

@@ -66,6 +66,7 @@ func (m Model) conditions(now time.Time) []cond {
 			cs = append(cs, cond{s, text})
 		}
 	}
+	add(hookInactive(st), Blind, Blind.String())
 	add(st.Kill, Kill, Kill.String())
 	add(st.RulesError != "", RulesError, RulesError.String())
 	add(st.Kept, Kept, Kept.String())
@@ -156,6 +157,9 @@ func (m Model) factRows(st api.Status, now time.Time) []Row {
 	}
 	if st.RulesError != "" {
 		rows = append(rows, info(RowRulesError, "Rules error: "+st.RulesError))
+	}
+	if r, ok := hookRow(st); ok {
+		rows = append(rows, r)
 	}
 	return rows
 }

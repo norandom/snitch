@@ -20,11 +20,11 @@ import (
 	"github.com/norandom/snitch/internal/tray"
 )
 
-// allStates lists the six states in the design's order.
-var allStates = [...]tray.State{tray.Gone, tray.Kill, tray.RulesError, tray.Kept, tray.Trial, tray.Monitor}
+// allStates lists the seven states in the design's order.
+var allStates = [...]tray.State{tray.Gone, tray.Blind, tray.Kill, tray.RulesError, tray.Kept, tray.Trial, tray.Monitor}
 
 // stateNames names the PNG files (tray-gone-22.png and so on).
-var stateNames = [...]string{"gone", "kill", "rules-error", "kept", "trial", "monitor"}
+var stateNames = [...]string{"gone", "blind", "kill", "rules-error", "kept", "trial", "monitor"}
 
 // pngEnv names the directory the PNG helper writes the twelve icons into, for
 // looking at them by hand and for the README's icon set (task 5.3).

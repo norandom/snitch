@@ -92,6 +92,9 @@ func changes(old, cur api.Status, reason string, loc *time.Location) []Note {
 	case cur.RulesError == "" && old.RulesError != "":
 		notes = append(notes, noteRulesOK())
 	}
+	if n, ok := hookNote(old, cur); ok {
+		notes = append(notes, n)
+	}
 	return notes
 }
 

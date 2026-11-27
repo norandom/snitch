@@ -7,10 +7,10 @@ import (
 	"github.com/norandom/snitch/internal/ask"
 )
 
-// The six states have six distinct names; an unknown value still prints something.
+// The seven states have seven distinct names; an unknown value still prints something.
 func TestStateNames(t *testing.T) {
 	seen := map[string]State{}
-	for _, s := range []State{Gone, Kill, RulesError, Kept, Trial, Monitor} {
+	for _, s := range []State{Gone, Blind, Kill, RulesError, Kept, Trial, Monitor} {
 		name := s.String()
 		if name == "" {
 			t.Fatalf("state %d has no name", int(s))

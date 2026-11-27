@@ -3,7 +3,7 @@
 // the session bus) turn traffic into messages and run the effects; this package knows neither
 // sockets nor D-Bus.
 //
-// model.go: the model value, the options, the six states, and every message and effect type
+// model.go: the model value, the options, the seven states, and every message and effect type
 // the loop exchanges with its adapters (design "Components and Interfaces > Core > tray").
 //
 // Fail-safe implications: none on the kernel side. The tray displays the daemon's facts and
@@ -24,6 +24,7 @@ type State int
 
 const (
 	Gone State = iota
+	Blind
 	Kill
 	RulesError
 	Kept
@@ -36,6 +37,8 @@ func (s State) String() string {
 	switch s {
 	case Gone:
 		return "daemon not running"
+	case Blind:
+		return "kernel hook inactive"
 	case Kill:
 		return "kill switch set"
 	case RulesError:
@@ -51,7 +54,9 @@ func (s State) String() string {
 }
 
 // Attention is true for the states the desktop must not hide among inactive items (2.3).
-func (s State) Attention() bool { return s == Gone || s == Kill || s == RulesError }
+func (s State) Attention() bool {
+	return s == Gone || s == Blind || s == Kill || s == RulesError
+}
 
 // Options are the tray's start settings.
 type Options struct {
@@ -165,6 +170,7 @@ const (
 	RowDaemon
 	RowRole
 	RowRulesError
+	RowHook
 	RowNoAnswer
 	RowSeparator
 	RowPause

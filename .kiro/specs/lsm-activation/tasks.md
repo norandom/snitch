@@ -127,7 +127,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: internal/tui/hook.go, internal/tui/hook_test.go, internal/tui/overview.go, internal/tui/graph.go, internal/tui/testdata/blind*.golden, internal/tui/testdata/hook_unknown.golden_
   - _Depends: 1.2_
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 3.3_
-- [ ] 4.3 (P) The tray's seventh state and its icon (integration of `internal/tray` and `internal/sni`)
+- [x] 4.3 (P) The tray's seventh state and its icon (integration of `internal/tray` and `internal/sni`)
   - `kernel hook inactive` ranks after "daemon not running" and before "kill switch set",
     needs attention, is named by the tooltip and the first menu row, adds a row saying reboot
     pending, boot not configured, or kernel lacks BPF LSM, and notifies once on entry; nothing new is written or

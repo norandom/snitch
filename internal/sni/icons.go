@@ -1,9 +1,9 @@
-// icons.go: the six state icons as pixmaps drawn by the program (requirements
-// 2.1, 2.7; research.md "icons are pixmaps the program draws"): all six share
+// icons.go: the seven state icons as pixmaps drawn by the program (requirements
+// 2.1, 2.7; research.md "icons are pixmaps the program draws"): all seven share
 // one shield outline, drawn per state as outline, lower half filled, filled,
-// outline with a slash, outline with an exclamation mark, dashed outline with
-// a cross. Pure drawing — no bus, no clocks, no input. Fail-safe implications:
-// none on egress: a change here can only alter what the operator sees.
+// outline with a slash, outline with an exclamation mark, outline with a horizontal
+// bar, or dashed outline with a cross. Pure drawing — no bus, no clocks, no input.
+// Fail-safe implications: none on egress: a change here can only alter what the operator sees.
 package sni
 
 import (
@@ -107,6 +107,8 @@ func markOf(s tray.State, size int) mark {
 	px := float64(size)
 	u := func(x, y float64) pt { return pt{x * px, y * px} }
 	switch s {
+	case tray.Blind:
+		return blindMark(size)
 	case tray.Kill:
 		return mark{strokes: []path{linePath(u(0.30, 0.21), u(0.70, 0.67))}, c: colRed}
 	case tray.RulesError:
