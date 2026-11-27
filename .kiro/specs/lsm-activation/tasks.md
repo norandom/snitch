@@ -218,7 +218,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Depends: 2.1, 4.4, 5.2_
   - _Requirements: 7.11, 8.4_
 
-- [ ] 6. Documentation and the host check script
+- [x] 6. Documentation and the host check script
 - [x] 6.1 (P) The reference documents
   - The API document describes the hook member with one example per state; the daemon
     document gains the `hook:` line, the start log line and the trial refusal; the terminal UI
@@ -242,7 +242,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: README.md, docs/ci-debs.md, docs/development.md, CLAUDE.md, .kiro/steering/product.md, .kiro/steering/tech.md, .kiro/steering/structure.md, .kiro/steering/roadmap.md_
   - _Depends: 5.2_
   - _Requirements: 8.1, 8.2_
-- [ ] 6.3 (P) A read-only host check
+- [x] 6.3 (P) A read-only host check
   - A script that prints the active LSM list, whether the running command line carries
     `lsm=`, whether the drop-in and helper are installed, what the helper would emit (called
     with explicit `-l /sys/kernel/security/lsm -c /proc/cmdline`, so the PID-1 guard does not
