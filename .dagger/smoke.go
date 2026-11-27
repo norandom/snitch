@@ -1,7 +1,7 @@
 // The in-container deb smoke (ci-debs tasks 6.1-6.4, requirements 4.3, 4.4,
 // 5.3, 5.4): the deb installed and driven for real in each contract distro's
 // own userspace, inside containers, from one `dagger call`. The assertions
-// are the design's nine groups, every one named in the log as it passes or
+// are the design's ten groups, every one named in the log as it passes or
 // fails, and any failure exits non-zero naming its group.
 //
 // The mechanism was decided by probing, and the committed shape is what the
@@ -141,10 +141,11 @@ group "3 unit verify" "3-unit-verify.sh"
 group "4 trial-boot start" "4-trial-boot.sh"
 group "5 daemon journal signature" "5-daemon-journal.sh"
 group "6 installed-path check" "6-installed-check.sh"
-	group "7 tray -version from PATH" "7-tray-version.sh"
+group "7 tray -version from PATH" "7-tray-version.sh"
 group "8 tray headless" "8-tray-headless.sh"
+group "9 boot setting" "9-boot-setting.sh"
 
-# Group 9 runs HERE, not in the sibling: lintian judges the deb FILE against
+# Group 10 runs HERE, not in the sibling: lintian judges the deb FILE against
 # the policy profile - no installed state involved - and this driver IS the
 # distro (same base image, same apt, its own lintian), which is what R5.4's
 # per-distro tags mean: forky's 2.144 and ubuntu's 2.129 each render their own
@@ -155,9 +156,9 @@ group "8 tray headless" "8-tray-headless.sh"
 # lists. --display-info widens the record to the info class; --show-overrides
 # keeps what was overridden visible, so the record shows the whole truth.
 if lintian --profile debian --display-info --show-overrides --color never --fail-on error "/deb/$DEBFILE"; then
-	step "9 lintian: PASS"
+	step "10 lintian: PASS"
 else
-	die "9 lintian: FAIL: an above-threshold tag (the lines above name it)"
+	die "10 lintian: FAIL: an above-threshold tag (the lines above name it)"
 fi
 `
 
@@ -229,6 +230,9 @@ set -uo pipefail
 die() { echo "smoke: $DISTRO: 2 fresh install: FAIL: $*"; exit 1; }
 say() { echo "smoke: $DISTRO: 2 fresh install: $*"; }
 
+[ -z "${DPKG_ROOT:-}" ] || die "DPKG_ROOT is set (${DPKG_ROOT}) during fresh install; expected empty/unset"
+printf '%s' "${DPKG_ROOT:-}" > /tmp/g2.dpkg_root
+
 dpkg --purge snitch >/dev/null 2>&1 || die "dpkg --purge left the package behind"
 dpkg -i /deb.deb >/tmp/g2.out 2>&1 || {
 	rc=$?
@@ -242,30 +246,39 @@ dpkg -s snitch > /tmp/g2.s 2>/dev/null || die "dpkg -s knows nothing of snitch"
 grep -q "^Status: install ok installed" /tmp/g2.s || die "status is not install ok installed (unmet dependencies?)"
 grep -q "^Version: $PKGVER" /tmp/g2.s || die "installed version is not $PKGVER"
 
-# The payload table, every file byte-equal to the deb's own member: the units
-# unpacked at /usr/lib/systemd/system, the sample at /etc/snitch/rules.toml,
-# the binaries at their payload paths, the desktop entry, doc, overrides.
+# The payload table, every file byte-equal to the deb's own member: the GRUB
+# drop-in and helper, the units unpacked at /usr/lib/systemd/system, the sample
+# at /etc/snitch/rules.toml, the binaries, desktop entry, doc, and overrides.
 mkdir -p /tmp/expect
 dpkg-deb --fsys-tarfile /deb.deb | tar -x -C /tmp/expect || die "the deb's members could not be extracted"
-for f in \
-	etc/snitch/rules.toml \
-	usr/lib/systemd/system/snitchd.service \
-	usr/lib/systemd/system/snitchd-trial-boot.service \
-	usr/local/sbin/snitchd \
-	usr/bin/snitch \
-	usr/share/applications/snitch-tray.desktop \
-	usr/share/doc/snitch/copyright \
-	usr/share/doc/snitch/changelog.Debian.gz \
-	usr/share/lintian/overrides/snitch
-do
+while read -r want_mode f; do
 	[ -f "/tmp/expect/$f" ] || die "the deb ships no $f"
-	[ -e "/$f" ] || die "/$f did not land on the fresh install"
+	[ -f "/$f" ] || die "/$f did not land on the fresh install"
+	owner=$(stat -c '%u:%g' "/$f") || die "stat owner failed for /$f"
+	[ "$owner" = "0:0" ] || die "/$f owner is $owner, expected 0:0"
+	mode=$(stat -c '%04a' "/$f") || die "stat mode failed for /$f"
+	[ "$mode" = "$want_mode" ] || die "/$f mode is $mode, expected $want_mode"
 	cmp -s "/tmp/expect/$f" "/$f" || die "/$f is not byte-equal to the deb's member"
-done
-test -x /usr/local/sbin/snitchd && test -x /usr/bin/snitch \
-	|| die "a shipped binary lost its executable bit"
+	want_sha=$(sha256sum "/tmp/expect/$f" | awk '{print $1}')
+	got_sha=$(sha256sum "/$f" | awk '{print $1}')
+	[ "$got_sha" = "$want_sha" ] || die "/$f sha256 $got_sha != deb member $want_sha"
+done <<'PAYLOAD'
+0644 etc/default/grub.d/snitch-lsm.cfg
+0644 etc/snitch/rules.toml
+0755 usr/lib/snitch/lsm-cmdline
+0644 usr/lib/systemd/system/snitchd.service
+0644 usr/lib/systemd/system/snitchd-trial-boot.service
+0755 usr/local/sbin/snitchd
+0755 usr/bin/snitch
+0644 usr/share/applications/snitch-tray.desktop
+0644 usr/share/doc/snitch/copyright
+0644 usr/share/doc/snitch/changelog.Debian.gz
+0644 usr/share/lintian/overrides/snitch
+PAYLOAD
+test -x /usr/local/sbin/snitchd && test -x /usr/bin/snitch && test -x /usr/lib/snitch/lsm-cmdline \
+	|| die "a shipped executable lost its executable bit"
 
-say "Status 'install ok installed', version $PKGVER; all 9 payload files byte-equal to the deb; binaries executable"
+say "Status 'install ok installed', version $PKGVER; all 11 payload files owned 0:0, exact modes, sha256/byte-equal to the deb; executables runnable"
 `
 
 // smokeUnitVerifyScript is assertion group 3 (5.3's parse verification):
@@ -388,6 +401,206 @@ else
 	rc=$?
 	die "the headless tray exercise exited $rc (the A-numbered step lines above carry the evidence)"
 fi
+`
+
+// smokeBootSettingScript is assertion group 9 (lsm-activation 5.3, R7.11, R8.4):
+// verifies the laid boot-setting drop-in and helper modes, Group 2's no-GRUB
+// manual instruction with DPKG_ROOT empty, the helper's decision table via
+// fixture directories, stub-driven postinst configure (working and failing),
+// dpkg -r (helper gone, conffile survives and is inert), dpkg -P (conffile
+// gone), and that neither systemd unit is enabled before remove or after purge.
+const smokeBootSettingScript = `#!/usr/bin/env bash
+set -euo pipefail
+die() { echo "smoke: $DISTRO: 9 boot setting: FAIL: $*"; exit 1; }
+say() { echo "smoke: $DISTRO: 9 boot setting: $*"; }
+
+# 1. Laid files and modes.
+for spec in \
+	"0644 /etc/default/grub.d/snitch-lsm.cfg" \
+	"0755 /usr/lib/snitch/lsm-cmdline"
+do
+	want_mode=${spec%% *}
+	path=${spec#* }
+	[ -f "$path" ] || die "$path does not exist"
+	owner=$(stat -c '%u:%g' "$path")
+	[ "$owner" = "0:0" ] || die "$path owner is $owner, expected 0:0"
+	mode=$(stat -c '%04a' "$path")
+	[ "$mode" = "$want_mode" ] || die "$path mode is $mode, expected $want_mode"
+done
+[ -x /usr/lib/snitch/lsm-cmdline ] || die "/usr/lib/snitch/lsm-cmdline is not executable"
+
+# 2. Group 2 dpkg -i output (no-GRUB manual line) and empty/unset DPKG_ROOT.
+[ -z "${DPKG_ROOT:-}" ] || die "DPKG_ROOT is unexpectedly set (${DPKG_ROOT})"
+[ -f /tmp/g2.dpkg_root ] || die "/tmp/g2.dpkg_root missing (group 2 did not record DPKG_ROOT)"
+g2_root=$(cat /tmp/g2.dpkg_root)
+[ -z "$g2_root" ] || die "DPKG_ROOT was non-empty during group 2 install ($g2_root)"
+[ -f /tmp/g2.out ] || die "/tmp/g2.out missing (group 2 dpkg -i log absent)"
+grep -qF "snitch: add to the kernel command line: " /tmp/g2.out || {
+	cat /tmp/g2.out
+	die "group 2 dpkg -i output missing no-GRUB manual line"
+}
+
+# Temp workspace and cleanup trap for fixtures, stubs, and /boot/grub.
+fdir=$(mktemp -d /tmp/snitch-lsm-smoke.XXXXXX)
+stubbin=$(mktemp -d /tmp/snitch-stubbin.XXXXXX)
+stublog="$fdir/update-grub.calls"
+created_boot_grub=0
+cleanup() {
+	rm -rf "$fdir" "$stubbin" /tmp/g9-remove.out /tmp/g9-purge.out
+	if [ "$created_boot_grub" -eq 1 ]; then
+		rm -rf /boot/grub
+	fi
+}
+trap cleanup EXIT
+
+# 3. Helper table cases inside the container via -l, -c, -k fixtures.
+mkdir -p "$fdir/okboot" "$fdir/bad-missing-cfg" "$fdir/bad-no-bpflsm" "$fdir/bad-nokernel"
+: > "$fdir/okboot/vmlinuz-6.8.0"
+printf 'CONFIG_BPF_LSM=y\n' > "$fdir/okboot/config-6.8.0"
+: > "$fdir/okboot/vmlinuz-7.3.4"
+printf 'CONFIG_SECURITY=y\nCONFIG_BPF_LSM=y\n' > "$fdir/okboot/config-7.3.4"
+
+: > "$fdir/bad-missing-cfg/vmlinuz-6.8.0"
+printf 'CONFIG_BPF_LSM=y\n' > "$fdir/bad-missing-cfg/config-6.8.0"
+: > "$fdir/bad-missing-cfg/vmlinuz-7.3.4"
+
+: > "$fdir/bad-no-bpflsm/vmlinuz-6.8.0"
+printf '# CONFIG_BPF_LSM is not set\n' > "$fdir/bad-no-bpflsm/config-6.8.0"
+
+printf 'lockdown,apparmor\n' > "$fdir/lsm-nobpf"
+printf 'lockdown,bpf\n' > "$fdir/lsm-bpf"
+printf 'lockdown;bad\n' > "$fdir/lsm-bad"
+printf 'quiet splash\n' > "$fdir/cmd-quiet"
+printf 'quiet lsm=lockdown,bpf\n' > "$fdir/cmd-lsm"
+
+assert_helper() {
+	local label=$1 mode_flag=$2 want_exact=$3 want_sub=$4
+	shift 4
+	local out
+	if [ -n "$mode_flag" ]; then
+		out=$(/usr/lib/snitch/lsm-cmdline "$mode_flag" "$@") || die "helper ($label $mode_flag) exited non-zero"
+	else
+		out=$(/usr/lib/snitch/lsm-cmdline "$@") || die "helper ($label) exited non-zero"
+	fi
+	if [ "$want_exact" != "__ANY__" ] && [ "$out" != "$want_exact" ]; then
+		die "helper ($label): got '$out', want '$want_exact'"
+	fi
+	if [ -n "$want_sub" ]; then
+		case "$out" in
+			*"$want_sub"*) ;;
+			*) die "helper ($label): '$out' missing substring '$want_sub'" ;;
+		esac
+	fi
+}
+
+# admin (add & already-present)
+assert_helper "admin add emit" "" "" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "lsm=lockdown,apparmor"
+assert_helper "admin add explain" "--explain" "__ANY__" "add bpf to your own lsm=" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "lsm=lockdown,apparmor"
+assert_helper "admin present emit" "" "" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- 'quiet lsm="lockdown,bpf"'
+assert_helper "admin present explain" "--explain" "__ANY__" "already in your lsm=" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- 'quiet lsm="lockdown,bpf"'
+
+# unreadable (missing & invalid char)
+assert_helper "unreadable missing emit" "" "" "" -l "$fdir/missing-lsm" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+assert_helper "unreadable missing explain" "--explain" "__ANY__" "cannot read the active LSM list" -l "$fdir/missing-lsm" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+assert_helper "unreadable invalid emit" "" "" "" -l "$fdir/lsm-bad" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+assert_helper "unreadable invalid explain" "--explain" "__ANY__" "cannot read the active LSM list" -l "$fdir/lsm-bad" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+
+# default (bpf active without cmdline lsm=)
+assert_helper "default emit" "" "" "" -l "$fdir/lsm-bpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+assert_helper "default explain" "--explain" "__ANY__" "already active by default" -l "$fdir/lsm-bpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+
+# unsupported (missing config, false / not set, no kernel)
+assert_helper "unsupported missing-cfg emit" "" "" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/bad-missing-cfg" -- "quiet"
+assert_helper "unsupported missing-cfg explain" "--explain" "__ANY__" "vmlinuz-7.3.4 has missing config" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/bad-missing-cfg" -- "quiet"
+assert_helper "unsupported false emit" "" "" "" -l "$fdir/lsm-bpf" -c "$fdir/cmd-lsm" -k "$fdir/bad-no-bpflsm" -- "quiet"
+assert_helper "unsupported false explain" "--explain" "__ANY__" "vmlinuz-6.8.0 lacks CONFIG_BPF_LSM=y" -l "$fdir/lsm-bpf" -c "$fdir/cmd-lsm" -k "$fdir/bad-no-bpflsm" -- "quiet"
+assert_helper "unsupported no-kernel emit" "" "" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/bad-nokernel" -- "quiet"
+assert_helper "unsupported no-kernel explain" "--explain" "__ANY__" "no kernel found" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/bad-nokernel" -- "quiet"
+
+# ours & add
+assert_helper "ours emit" "" "lsm=lockdown,bpf" "" -l "$fdir/lsm-bpf" -c "$fdir/cmd-lsm" -k "$fdir/okboot" -- "quiet"
+assert_helper "ours explain" "--explain" "__ANY__" "kept lsm=lockdown,bpf" -l "$fdir/lsm-bpf" -c "$fdir/cmd-lsm" -k "$fdir/okboot" -- "quiet"
+assert_helper "add emit" "" "lsm=lockdown,apparmor,bpf" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+assert_helper "add explain" "--explain" "__ANY__" "configured next boot with lsm=lockdown,apparmor,bpf" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+
+# --manual
+assert_helper "manual readable" "--manual" "snitch: add to the kernel command line: lsm=lockdown,apparmor,bpf" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+assert_helper "manual unreadable" "--manual" "snitch: add to the kernel command line: lsm=<your list>,bpf" "" -l "$fdir/missing-lsm" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
+
+# 4. Unit enablement before remove.
+check_units_not_enabled() {
+	local phase=$1 u st
+	for u in snitchd.service snitchd-trial-boot.service; do
+		st=$(systemctl is-enabled "$u" 2>/dev/null || true)
+		[ "$st" != "enabled" ] || die "$phase: $u is enabled (expected never enabled)"
+	done
+}
+check_units_not_enabled "before remove"
+
+# 5. Stub-driven postinst configure (working and failing update-grub).
+if [ ! -d /boot/grub ]; then
+	mkdir -p /boot/grub
+	created_boot_grub=1
+fi
+write_stub() {
+	local code=$1
+	cat > "$stubbin/update-grub" <<STUB
+#!/bin/sh
+printf 'called\n' >> "$stublog"
+exit $code
+STUB
+	chmod 0755 "$stubbin/update-grub"
+}
+
+write_stub 0
+: > "$stublog"
+PATH="$stubbin:$PATH" /var/lib/dpkg/info/snitch.postinst configure >/dev/null 2>&1 || die "postinst configure failed with working update-grub stub"
+calls=$(wc -l < "$stublog")
+[ "$calls" -eq 1 ] || die "postinst configure called stub $calls times, expected 1"
+
+write_stub 1
+: > "$stublog"
+postinst_fail_out=$(PATH="$stubbin:$PATH" /var/lib/dpkg/info/snitch.postinst configure 2>&1) || die "postinst configure failed when update-grub exited 1"
+calls=$(wc -l < "$stublog")
+[ "$calls" -eq 1 ] || die "postinst configure (failing stub) called stub $calls times, expected 1"
+echo "$postinst_fail_out" | grep -qF "snitch: update-grub failed" || {
+	echo "$postinst_fail_out"
+	die "postinst configure did not report update-grub failure"
+}
+
+# 6. dpkg -r snitch: working stub called, helper gone, drop-in survives and is inert.
+write_stub 0
+: > "$stublog"
+PATH="$stubbin:$PATH" dpkg -r snitch >/tmp/g9-remove.out 2>&1 || {
+	rc=$?
+	cat /tmp/g9-remove.out
+	die "dpkg -r snitch exited $rc"
+}
+calls=$(wc -l < "$stublog")
+[ "$calls" -eq 1 ] || die "dpkg -r snitch called update-grub stub $calls times, expected 1"
+[ ! -e /usr/lib/snitch/lsm-cmdline ] || die "/usr/lib/snitch/lsm-cmdline still exists after dpkg -r"
+[ -f /etc/default/grub.d/snitch-lsm.cfg ] || die "/etc/default/grub.d/snitch-lsm.cfg missing after dpkg -r"
+grub_after=$(
+	GRUB_CMDLINE_LINUX="root=UUID=abc"
+	GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+	. /etc/default/grub.d/snitch-lsm.cfg
+	printf '%s' "$GRUB_CMDLINE_LINUX_DEFAULT"
+)
+[ "$grub_after" = "quiet splash" ] || die "drop-in modified GRUB_CMDLINE_LINUX_DEFAULT after remove: '$grub_after'"
+
+# 7. dpkg -P snitch: drop-in gone, stub called, units still not enabled.
+: > "$stublog"
+PATH="$stubbin:$PATH" dpkg -P snitch >/tmp/g9-purge.out 2>&1 || {
+	rc=$?
+	cat /tmp/g9-purge.out
+	die "dpkg -P snitch exited $rc"
+}
+calls=$(wc -l < "$stublog")
+[ "$calls" -eq 1 ] || die "dpkg -P snitch called update-grub stub $calls times, expected 1"
+[ ! -e /etc/default/grub.d/snitch-lsm.cfg ] || die "/etc/default/grub.d/snitch-lsm.cfg still exists after dpkg -P"
+check_units_not_enabled "after purge"
+
+say "files/modes, no-GRUB install line (DPKG_ROOT empty), helper table, stub postinst, remove (inert drop-in), purge, and units-not-enabled all verified"
 `
 
 // Smoke is the deb's in-container proof on one contract distro (R5.3): the
@@ -604,7 +817,8 @@ func smokeContainer(distro Distro, image, version string, deb *dagger.Directory,
 		WithNewFile("/smoke/groups/5-daemon-journal.sh", smokeDaemonJournalScript).
 		WithNewFile("/smoke/groups/6-installed-check.sh", smokeInstalledCheckScript).
 		WithNewFile("/smoke/groups/7-tray-version.sh", smokeTrayVersionScript).
-		WithNewFile("/smoke/groups/8-tray-headless.sh", smokeTrayHeadlessScript)
+		WithNewFile("/smoke/groups/8-tray-headless.sh", smokeTrayHeadlessScript).
+		WithNewFile("/smoke/groups/9-boot-setting.sh", smokeBootSettingScript)
 }
 
 // fakeDaemon builds the tray exercise's stand-in: the harness's own build
