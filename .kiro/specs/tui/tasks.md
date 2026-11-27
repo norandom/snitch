@@ -504,7 +504,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 7.3_
   - _Requirements: 13.12, 15.1_
 
-- [ ] 8.5 The parity list
+- [x] 8.5 The parity list
   - `docs/parity.md`: every key, view, column, verb, flag and config key of the Python client
     (read from the file `snitch` in the repo root), each marked same or deviation with its
     reason, with a checkbox per item for the check against the running binary; the deviations
