@@ -1,0 +1,35 @@
+{
+  "daemon_strings": [
+    {
+      "name": "sgr_and_osc8",
+      "value": "\u001b[31mred\u001b[99;99H\u001b]8;;https://evil.example\u0007click\u001b]8;;\u0007"
+    },
+    {
+      "name": "c0_del_c1",
+      "value": "a\u0007b\nc\rd\u007fe\u0080f\u009bg"
+    },
+    {
+      "name": "bidi_and_invisible",
+      "value": "p\u061c\u200b\u200e\u202e\u2066\ufeffq"
+    },
+    {
+      "name": "overlong",
+      "value": "overlong-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef-end"
+    },
+    {
+      "name": "non_ascii_name",
+      "value": "bücher.example",
+      "name_only": true,
+      "want_substr": "xn--bcher-kva.example",
+      "forbid_substr": "bücher"
+    }
+  ],
+  "pastes": [
+    "x TxKyq",
+    "x\n\ry\u001b[31m T K E U q"
+  ],
+  "burst_sequences": [
+    "hx TKEU",
+    "j x T K E U"
+  ]
+}

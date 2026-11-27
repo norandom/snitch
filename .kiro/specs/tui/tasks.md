@@ -470,7 +470,7 @@ message; tasks 5.2 to 5.8 replace their own stubs there and nowhere else, strict
   - _Depends: 3.3, 5.4, 5.5_
   - _Requirements: 5.12, 10.2, 10.3, 12.2, 12.5, 15.2_
 
-- [ ] 8.2 Hostile input
+- [x] 8.2 Hostile input
   - Escape sequences, control and direction-changing characters, over-long and non-ASCII
     names in every field the daemon supplies (program, path, name, note, text, error, reason):
     neither the flattened screen nor the log holds a replaced character, and the row count on

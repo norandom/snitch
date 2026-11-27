@@ -1,0 +1,67 @@
+{
+  "strings": [
+    {
+      "name": "sgr_escape",
+      "value": "\u001b[31mred\u001b[0m"
+    },
+    {
+      "name": "csi_cursor",
+      "value": "\u001b[2J\u001b[Hspoof"
+    },
+    {
+      "name": "osc8_hyperlink",
+      "value": "\u001b]8;;https://evil.example\u0007click\u001b]8;;\u0007"
+    },
+    {
+      "name": "c0_controls",
+      "value": "a\u0000b\u0007c\u0008d\te\nf\u000bg\u000ch\ri\u001fj"
+    },
+    {
+      "name": "del_and_c1",
+      "value": "a\u007fb\u0080c\u0085d\u0090e\u009bf\u009cg\u009fe"
+    },
+    {
+      "name": "bidi_controls",
+      "value": "safe\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069evil"
+    },
+    {
+      "name": "invisible_formatters",
+      "value": "vis\u200b\u200c\u200d\u2060\ufeffible"
+    },
+    {
+      "name": "overlong",
+      "value": "very-long-prefix-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef-tail-marker"
+    },
+    {
+      "name": "non_ascii_punycode",
+      "value": "bücher.münchen.example"
+    },
+    {
+      "name": "mixed_non_ascii_and_escapes",
+      "value": "café\u001b[31m\u202e\n.example"
+    }
+  ],
+  "invalid_utf8_hex": [
+    "61ff62c363e28264f09f9265c0af66",
+    "8081feff1b5b33316d0a"
+  ],
+  "non_ascii_names": [
+    {
+      "raw": "bücher.example",
+      "punycode": "xn--bcher-kva.example",
+      "raw_label": "bücher"
+    },
+    {
+      "raw": "café.münchen.example",
+      "punycode": "xn--caf-dma.xn--mnchen-3ya.example",
+      "raw_label": "münchen"
+    }
+  ],
+  "pastes": [
+    "x y T K E U",
+    "x\n\ry\u001b[31m T K E U q",
+    " x  T  K  E  U  y "
+  ],
+  "action_keys": ["x", "space", "T", "K", "E", "U"],
+  "confirm_keys": ["y", "x", "space", "T", "K", "E", "U", "enter"]
+}
