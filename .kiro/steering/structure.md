@@ -48,6 +48,14 @@ encoding, and is tested without root.
 **Location**: `systemd/` (`snitchd.service`, `snitchd-trial-boot.service`), `desktop/`, `packaging/`, `docs/*.png`
 **Purpose**: daemon service and boot-revert units, desktop tray autostart, Debian packaging inputs, and documentation screenshots. Lint scripts with `shellcheck`.
 
+### Documentation
+**Location**: `README.md`, `docs/*.md`, `examples/`
+**Purpose**: the README addresses the Linux user (install, use, trial, rules, fail-safes) and
+indexes the docs by concern; reference material lives in `docs/`: `daemon.md` (running
+`snitchd`, service, trial, names, API), `tray.md`, `tui.md`, `development.md` (build, checks,
+release), plus the feature records `c-hardening.md`, `ci-debs.md`, `rugged.md`, `parity.md`.
+Developer and operator detail goes into `docs/` and is linked from the README, not written into it.
+
 ### Specs and steering
 **Location**: `.kiro/steering/` (this memory), `.kiro/specs/<feature>/`
 **Purpose**: one spec per shippable step (requirements → design → tasks). Specs cite the

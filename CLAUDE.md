@@ -141,6 +141,11 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   `go vet ./...`; CI (`.github/workflows/lint.yml`): fmt, go, shellcheck,
   actionlint (plus golangci, cppcheck, bindings). Commit as `git -c user.name=marius -c user.email=wishinet@gmail.com commit`.
   Before every push: no secrets in the diff.
+- Docs by audience: `README.md` is for the Linux user (what it does, install from the deb,
+  use, trial, rules, fail-safes) and indexes `docs/` by concern; reference material lives in
+  `docs/daemon.md` (running `snitchd`, service, trial verbs, names, API), `docs/tray.md`
+  (the tray), `docs/tui.md` (TUI and user verbs), `docs/development.md` (build, checks,
+  release). Keep developer and operator detail out of the README; put it in `docs/` and link it.
 - Rule maps (see the C): `programs` hash (exe inode+dev -> program id), `rules` LPM trie
   (prefixlen | program | family | proto | port | addr[16] -> rule_val {verdict 1 allow / 2 deny,
   rule id}; 0 = any for program/proto/port), `control` array (heartbeat_ns, mode 0 monitor /
