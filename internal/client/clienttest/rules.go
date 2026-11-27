@@ -17,12 +17,6 @@ const (
 	overlayFilePath = "/etc/snitch/rules.d/local.toml"
 )
 
-func (s *StandIn) ruleCount() int {
-	s.fmu.Lock()
-	defer s.fmu.Unlock()
-	return len(s.merged.Rules)
-}
-
 func (s *StandIn) rulesFacts() ([]api.RuleView, []api.ProgramView) {
 	s.fmu.Lock()
 	defer s.fmu.Unlock()

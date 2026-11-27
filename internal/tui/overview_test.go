@@ -200,7 +200,7 @@ func TestDetailInspectOncePerPathAndEmptyPath(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("100 cursor moves over /usr/bin/curl emitted %d Inspect effects, want 1", count)
 	}
-	m, fx = pressKey(m, "end", t0.Add(20*time.Second))
+	_, fx = pressKey(m, "end", t0.Add(20*time.Second))
 	if got := inspectsOf(fx); len(got) != 0 {
 		t.Fatalf("row without path emitted Inspect: %#v", got)
 	}

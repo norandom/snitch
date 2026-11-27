@@ -77,7 +77,7 @@ func onPaste(m Model, p Paste) Model {
 }
 
 func onResize(m Model, r Resize) Model {
-	m.size = termSize{W: r.W, H: r.H}
+	m.size = termSize(r)
 	return m
 }
 

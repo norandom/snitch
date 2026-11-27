@@ -123,9 +123,10 @@ func runeCellWidth(r rune, enc string) int {
 func cutMiddle(raw string, spans []cellSpan, cells int) string {
 	rem := cells - 1
 	hCount, hUsed := takeHead(spans, rem/3)
-	tStart, tUsed := takeTail(spans[hCount:], rem-hUsed)
+	tStart, _ := takeTail(spans[hCount:], rem-hUsed)
 	tStart += hCount
 	if tStart == len(spans) && spans[len(spans)-1].width <= rem {
+		var tUsed int
 		tStart, tUsed = takeTail(spans, rem)
 		hCount, _ = takeHead(spans[:tStart], rem-tUsed)
 	}
