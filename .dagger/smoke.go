@@ -94,7 +94,10 @@ docker run -d --name "$S" \
 # state anyway). 60 tries * 5 s covers the ~2 min install on a cold host.
 state=starting
 for _ in $(seq 1 60); do
-	state=$(docker exec "$S" systemctl is-system-running 2>/dev/null || echo starting)
+	# is-system-running exits non-zero for every state but running, degraded
+	# included, so the exit status says nothing here: only the word counts.
+	state=$(docker exec "$S" systemctl is-system-running 2>/dev/null)
+	[ -n "$state" ] || state=starting
 	case "$state" in
 		running|degraded) break ;;
 		failed) die "sibling boot: systemd reached state failed" ;;
