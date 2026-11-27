@@ -14,7 +14,7 @@ import (
 	"github.com/norandom/snitch/internal/trial"
 )
 
-var statusKeys = []string{"daemon:", "mode:", "trial:", "kept:", "kill:", "learning:", "rules:", "status:", "version:"}
+var statusKeys = []string{"daemon:", "mode:", "trial:", "kept:", "kill:", "hook:", "learning:", "rules:", "status:", "version:"}
 
 // fullRecord is the record a daemon following the files with examples/rules.toml writes.
 var fullRecord = status.Record{PID: 1234, Mode: "monitor", Source: "files", RulesFile: "examples/rules.toml",
@@ -43,6 +43,7 @@ func TestStatusRunningShowsEveryFieldAndExitsZero(t *testing.T) {
 		"trial:":    "trial:     none",
 		"kept:":     "kept:      no",
 		"kill:":     "kill:      clear",
+		"hook:":     "hook:      kernel hook active",
 		"learning:": "learning:  no",
 		"rules:":    "rules:     3 programs (3 resolved), 5 executables mapped, 6 rules effective (examples/rules.toml)",
 		"status:":   "status:    /run/snitch/status written 0s ago",

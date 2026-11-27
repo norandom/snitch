@@ -52,7 +52,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: internal/api/types.go, internal/api/types_test.go_
   - _Requirements: 2.1, 2.4, 2.5, 1.7_
 
-- [ ] 2. The daemon reports and refuses
+- [x] 2. The daemon reports and refuses
 - [x] 2.1 Probe at start, log, and serve the fact
   - The daemon probes after attaching, logs the sentence as one line before its existing start
     line (which stays unchanged), keeps the probe cached and re-probes when older than 30 s,
@@ -82,7 +82,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: cmd/snitchd/trialops.go, cmd/snitchd/apiwrite.go, cmd/snitchd/ctl.go, cmd/snitchd/ctl_verbs.go, cmd/snitchd/hook_refusal_test.go, cmd/snitchd/trialops_test.go, cmd/snitchd/ctl_verbs_test.go, cmd/snitchd/contracts_trial_test.go, cmd/snitchd/ctl_status_test.go_
   - _Depends: 2.1_
   - _Requirements: 3.1, 3.2, 3.4_
-- [ ] 2.3 The `hook:` line of `snitchd status`
+- [x] 2.3 The `hook:` line of `snitchd status`
   - One line after `kill:` in every state carrying the sentence of the `hook` delegate that 2.2
     added; without root the inactive sentence is the "run as root" variant; the usage text names the key; the exit code logic
     is untouched

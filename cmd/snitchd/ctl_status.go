@@ -1,5 +1,5 @@
 // ctl_status.go: `snitchd status` (Req 7). One line per fact with a stable key, so a script
-// can grep it: daemon, mode, trial, kept, kill, learning, rules, status, version. Every source is read
+// can grep it: daemon, mode, trial, kept, kill, hook, learning, rules, status, version. Every source is read
 // once (two map lookups, the two state files, the status record): nothing waits, nothing
 // retries, so the command is done well within a second. Exit 1 when the daemon is not running
 // (no pinned maps or a heartbeat older than 15 s); the files and the kill switch print anyway.
@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/norandom/snitch/internal/lsm"
 	"github.com/norandom/snitch/internal/status"
 	"github.com/norandom/snitch/internal/trial"
 )
@@ -25,6 +26,7 @@ type statusFacts struct {
 	mapMode uint32        // the control map's mode: 0 monitor, 1 enforce
 	mapOK   bool          // the control map exists
 	kill    bool
+	hook    lsm.Hook
 	rec     status.Record
 	recErr  error
 	recPath string
@@ -36,7 +38,7 @@ type statusFacts struct {
 }
 
 func (c *ctl) gather() statusFacts {
-	f := statusFacts{kill: c.probes.kill(), recPath: c.status, store: c.deps.store(c.stateDir), now: c.deps.now()}
+	f := statusFacts{kill: c.probes.kill(), hook: c.deps.hook(), recPath: c.status, store: c.deps.store(c.stateDir), now: c.deps.now()}
 	f.age, f.mapMode, _, f.mapOK = c.probes.control()
 	f.rec, f.recErr = c.deps.readStatus(c.status)
 	f.st = f.store.Read()
@@ -144,6 +146,8 @@ func (f statusFacts) killLine() string {
 	return "clear"
 }
 
+func (f statusFacts) hookLine() string { return f.hook.Sentence() }
+
 func (f statusFacts) learningLine() string {
 	switch {
 	case f.recErr != nil:
@@ -188,7 +192,8 @@ func (f statusFacts) statusLine() string {
 func (f statusFacts) lines() [][2]string {
 	lines := [][2]string{
 		{"daemon", f.daemonLine()}, {"mode", f.modeLine()}, {"trial", f.trialLine()}, {"kept", f.keptLine()},
-		{"kill", f.killLine()}, {"learning", f.learningLine()}, {"rules", f.rulesLine()}, {"status", f.statusLine()},
+		{"kill", f.killLine()}, {"hook", f.hookLine()}, {"learning", f.learningLine()}, {"rules", f.rulesLine()},
+		{"status", f.statusLine()},
 	}
 	if f.recErr == nil && f.rec.DNS != "" {
 		lines = append(lines, [2]string{"dns", f.rec.DNS})
@@ -199,7 +204,7 @@ func (f statusFacts) lines() [][2]string {
 func statusUsage(f *flag.FlagSet) func() {
 	return func() {
 		_, _ = fmt.Fprint(f.Output(), `usage: snitchd status [flags]
-  one line per fact, a stable key each: daemon: mode: trial: kept: kill: learning: rules: status: dns: version:
+  one line per fact, a stable key each: daemon: mode: trial: kept: kill: hook: learning: rules: status: dns: version:
   exit 1 when the daemon is not running (no pinned maps or a heartbeat older than 15 s), 0 otherwise
 `)
 		f.PrintDefaults()
