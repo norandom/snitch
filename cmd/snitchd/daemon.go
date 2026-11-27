@@ -57,6 +57,7 @@ type daemon struct {
 	counting bool
 	api      apiState
 	editMu   sync.Mutex // one overlay edit over the API at a time: load, change, validate, write
+	hook     hookCache
 
 	undecodable atomic.Uint64 // event records of the wrong size: skipped and counted, the first logged
 }
@@ -95,6 +96,7 @@ func startup(cfg config) (*daemon, error) {
 	}
 	d.dns = loadDNS(d)
 	d.dns.recompile(d.st.current())
+	d.hook.start(d.log)
 	fmt.Println(startupLine(version, modeName(trial.Mode(d.mode.Load())), cfg.source))
 	return d, nil
 }

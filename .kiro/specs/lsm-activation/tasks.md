@@ -53,7 +53,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Requirements: 2.1, 2.4, 2.5, 1.7_
 
 - [ ] 2. The daemon reports and refuses
-- [ ] 2.1 Probe at start, log, and serve the fact
+- [x] 2.1 Probe at start, log, and serve the fact
   - The daemon probes after attaching, logs the sentence as one line before its existing start
     line (which stays unchanged), keeps the probe cached and re-probes when older than 30 s,
     and puts the fact into every status it serves; `daemon.go` gains one struct field and one
@@ -271,3 +271,6 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
     counter is above zero
   - _Depends: 7.1_
   - _Requirements: 8.5_
+
+## Implementation Notes
+- Task 2.1: `cmd/snitchd/apifacts_test.go` (`TestFactsOfAFlagDaemon`) was added to Task 2.1's boundary to assert `got.Hook != nil && got.Hook.State != "" && got.Hook.Reason != ""` and clear `got.Hook = nil` alongside `got.DNS` and `got.Counters` before struct equality comparison (matching commits `2f68e338` and `90bfeb11`). Also `hookCache` uses field name `clock` because `now()` is a method.

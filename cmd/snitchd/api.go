@@ -95,6 +95,7 @@ func (d *daemon) facts() api.Status {
 		Started: a.started.UTC().Format(time.RFC3339), Counting: d.counting, DNS: d.dns.facts()}
 	s.Rules.Programs, s.Rules.Resolved, s.Rules.Executables, s.Rules.Rules = counts(d.st.current())
 	s.Counters = countersStatus(a.egressCounters(), d.dns.counters())
+	s.Hook = hookStatus(d.hookNow())
 	return s
 }
 

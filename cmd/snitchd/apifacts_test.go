@@ -22,7 +22,10 @@ func TestFactsOfAFlagDaemon(t *testing.T) {
 	if got.Counters == nil || got.Counters.Egress.Available || got.Counters.DNS.Reason != "unavailable" {
 		t.Fatalf("Counters: %+v", got.Counters)
 	}
-	got.DNS, got.Counters = nil, nil
+	if got.Hook == nil || got.Hook.State == "" || got.Hook.Reason == "" {
+		t.Fatalf("Hook: %+v", got.Hook)
+	}
+	got.DNS, got.Counters, got.Hook = nil, nil, nil
 	want := api.Status{Running: true, Pid: os.Getpid(), Version: "dev", Mode: "monitor", Source: "flag", Kill: true, Learning: true,
 		Rules:   api.RulesSummary{Programs: 1, Resolved: 0, Executables: 0, Rules: 1, File: "/etc/snitch/rules.toml", Overlay: "/etc/snitch/rules.d/local.toml"},
 		Started: "2026-10-10T12:00:00Z", Counting: true}
