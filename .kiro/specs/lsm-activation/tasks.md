@@ -160,7 +160,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Requirements: 8.3_
 
 - [ ] 5. The package configures the next boot
-- [ ] 5.1 The helper and the drop-in
+- [x] 5.1 The helper and the drop-in
   - A POSIX shell helper that prints one kernel parameter or nothing for the five cases of the
     design's table, with `--explain` for the human sentence, file overrides for tests, output
     validated against `^[a-z0-9_,]+$`, exit 0 always; a GRUB drop-in that appends the helper's

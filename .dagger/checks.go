@@ -86,27 +86,31 @@ func (c *Snitch) Go(
 	return nil
 }
 
-// Shellcheck is the workflow's shellcheck step: every scripts/*.sh, in
-// the pinned shellcheck build. That image is built FROM scratch - it ships
-// only the static shellcheck binary, no shell - so the workflow's glob,
-// which bash expands before shellcheck ever runs, is expanded here by
-// Directory.Glob and handed to the binary as plain arguments: shellcheck
-// receives the same resolved file list the runner passes it, sorted the
-// way bash sorts its glob matches.
+// Shellcheck is the workflow's shellcheck step: every scripts/*.sh and
+// packaging/*.sh, in the pinned shellcheck build. That image is built FROM
+// scratch - it ships only the static shellcheck binary, no shell - so the
+// workflow's glob, which bash expands before shellcheck ever runs, is expanded
+// here by Directory.Glob and handed to the binary as plain arguments:
+// shellcheck receives the same resolved file list the runner passes it, sorted
+// the way bash sorts its glob matches.
 // +check
 func (c *Snitch) Shellcheck(
 	ctx context.Context,
-	// The repository root holding scripts/.
+	// The repository root holding scripts/ and packaging/.
 	// +defaultPath="/"
 	source *dagger.Directory,
 ) error {
-	scripts, err := source.Glob(ctx, "scripts/*.sh")
-	if err != nil {
-		return fmt.Errorf("check shellcheck: %w", err)
+	var scripts []string
+	for _, pattern := range []string{"scripts/*.sh", "packaging/*.sh"} {
+		matched, err := source.Glob(ctx, pattern)
+		if err != nil {
+			return fmt.Errorf("check shellcheck: %w", err)
+		}
+		scripts = append(scripts, matched...)
 	}
 	sort.Strings(scripts)
 	args := append([]string{"/bin/shellcheck"}, scripts...)
-	_, err = dag.Container().
+	_, err := dag.Container().
 		From(imageShellcheck).
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
