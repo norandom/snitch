@@ -27,6 +27,7 @@
 #   A6  the stand-in up: monitor and Active within one reconnect backoff
 #   A7  kill switch set: NeedsAttention, the tooltip's first line
 #   A8  rules error: NeedsAttention, the tooltip's first line
+#   A8b kernel hook inactive: NeedsAttention, the tooltip's first line
 #   A9  enforce kept: Active, "enforce kept"
 #   A10 enforce trial: Active, "enforce trial" with the deadline
 #   A11 a question is posted: the Notify call on the notification service (busctl monitor)
@@ -338,6 +339,13 @@ a_error() {
   assert_state 15 "rules error" NeedsAttention
   fake_cmd "error none"
 }
+a_hook() {
+  local rc=0
+  fake_cmd "hook pending"
+  assert_state 15 "kernel hook inactive" NeedsAttention || rc=1
+  fake_cmd "hook none"
+  return "$rc"
+}
 a_kept() {
   fake_cmd "mode enforce"
   fake_cmd "keep"
@@ -447,6 +455,7 @@ phase_a() {
   must "A6 stand-in up: monitor and Active" a_stand_in
   step "A7 kill switch set: NeedsAttention and the tooltip" a_kill
   step "A8 rules error: NeedsAttention and the tooltip" a_error
+  step "A8b kernel hook inactive: NeedsAttention and the tooltip" a_hook
   step "A9 enforce kept: Active and the words" a_kept
   step "A10 enforce trial: Active and the deadline words" a_trial
   must "A11 a question is posted: the Notify call about $allow_name" a_question
@@ -486,10 +495,16 @@ phase_a_headless() {
   must "A6 stand-in up: monitor and Active" a_stand_in
   step "A7 kill switch set: NeedsAttention and the tooltip" a_kill
   step "A8 rules error: NeedsAttention and the tooltip" a_error
+  step "A8b kernel hook inactive: NeedsAttention and the tooltip" a_hook
   step "A9 enforce kept: Active and the words" a_kept
   step "A10 enforce trial: Active and the deadline words" a_trial
   skip "A11 a question is posted: the Notify call" "headless: no notification service on a bare bus and no operator at a desktop to watch the popup"
-  answer_steps   # A12/A13: a smoke container has no operator file, so the reader's skips print, as at a desktop
+  if role_guess; then
+    skip "A12 Allow: rule.add allow to $allow_name" "headless: no notification service on a bare bus and no operator to press buttons"
+    skip "A13 Block: rule.add deny to $block_addr" "headless: no notification service on a bare bus and no operator to press buttons"
+  else
+    answer_steps   # A12/A13: a smoke container has no operator file, so the reader's skips print, as at a desktop
+  fi
   step "A14 stand-in restart: gone, then back and monitor" a_stand_in_restart
   skip "A15 plasmashell restart (operator): registered again" "headless: no panel to restart; the re-registration path needs the watcher only a desktop has"
   skip "A16 idle: the CPU record (8.7)" "headless: the ten-minute idle window is the desktop's own measurement, not a bus assertion"

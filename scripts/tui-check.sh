@@ -492,6 +492,85 @@ elif cmd == "pty-trial":
         sess.close()
         raise
 
+elif cmd == "pty-hook-inactive":
+    bin_path, fake_bin, fake_sock = args[0], args[1], args[2]
+    try:
+        os.unlink(fake_sock)
+    except FileNotFoundError:
+        pass
+    fake = subprocess.Popen(
+        [fake_bin, "-api", fake_sock],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    sess = None
+    try:
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if os.path.exists(fake_sock):
+                break
+            if fake.poll() is not None:
+                err = fake.stderr.read().decode("utf-8", "replace")
+                raise RuntimeError(f"fakedaemon exited early ({fake.returncode}): {err}")
+            time.sleep(0.05)
+        else:
+            raise RuntimeError(f"fakedaemon socket {fake_sock} did not appear")
+        fake.stdin.write(b"hook pending\n")
+        fake.stdin.flush()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(1.0)
+            try:
+                s.connect(fake_sock)
+                s.sendall(b'{"type":"status","id":1}\n')
+                buf = b""
+                while b"\n" not in buf:
+                    chunk = s.recv(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+                reply = json.loads(buf.split(b"\n", 1)[0].decode("utf-8", "replace"))
+                hook = (reply.get("status") or {}).get("hook") or {}
+                if hook.get("state") == "inactive" and hook.get("pending") is True:
+                    break
+            except (OSError, ValueError):
+                pass
+            finally:
+                s.close()
+            time.sleep(0.05)
+        else:
+            raise RuntimeError("fakedaemon did not transition to hook pending")
+        sess = PtySession(bin_path, fake_sock)
+        if sess.wait_for("NO KERNEL HOOK", timeout=6.0) is None:
+            raise RuntimeError("overview header missing NO KERNEL HOOK tag on PTY")
+        want_line = "kernel hook inactive: connections not seen or blocked - reboot to activate"
+        if sess.wait_for(want_line, timeout=6.0) is None:
+            raise RuntimeError(f"overview bottom missing {want_line!r} on PTY")
+        rc = sess.close()
+        sess = None
+        if rc != 0:
+            raise RuntimeError(f"snitch exited {rc} on 'q'")
+    finally:
+        if sess is not None:
+            sess.close()
+        try:
+            if fake.poll() is None and fake.stdin:
+                fake.stdin.write(b"quit\n")
+                fake.stdin.flush()
+                fake.stdin.close()
+            fake.wait(timeout=2.0)
+        except Exception:
+            fake.kill()
+            fake.wait()
+        if fake.stderr:
+            fake.stderr.close()
+        try:
+            os.unlink(fake_sock)
+        except OSError:
+            pass
+
 elif cmd == "role-guess":
     op_file, user_name = args[0], args[1]
     try:
@@ -570,6 +649,12 @@ step_pty_smoke() {
   note "overview rendered, egress graph toggled (e), non-dumpable, XDG_RUNTIME_DIR clean, quit 0"
 }
 
+step_pty_hook_inactive() {
+  go build -o "$tmp/fakedaemon" ./tools/fakedaemon || return 1
+  pyrun pty-hook-inactive "$BIN" "$tmp/fakedaemon" "$tmp/hook-fake.sock" || return 1
+  note "NO KERNEL HOOK header tag and pending bottom warning rendered on PTY, quit 0"
+}
+
 step_testnet_connect() {
   curl -sS --connect-timeout 1 --max-time 1 "https://$testnet_addr/" >/dev/null 2>&1 || true
   snap_info=$(pyrun snapshot-has "$testnet_addr") || {
@@ -625,6 +710,7 @@ must "build snitch binary from tree" step_build
 must "daemon answers on $api in monitor mode" step_daemon_probe
 step "snitch status prints valid JSON" step_status_json
 step "overview PTY: start, egress graph (e), non-dumpable, runtime dir clean, quit (q)" step_pty_smoke
+step "PTY hook inactive: NO KERNEL HOOK tag and pending bottom warning, quit (q)" step_pty_hook_inactive
 
 if [ "$is_fake" -eq 1 ]; then
   skip "TEST-NET ($testnet_addr) connect makes row exist" \

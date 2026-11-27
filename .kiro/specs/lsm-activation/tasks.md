@@ -102,7 +102,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Depends: 1.2_
   - _Requirements: 8.3_
 
-- [ ] 4. Every client surface warns
+- [x] 4. Every client surface warns
 - [x] 4.1 The status-bar verb
   - Inactive gives class `down` and the sanitised reason as the tooltip's first line; unknown
     and not reported print what they print today; always one line, exit 0
@@ -145,7 +145,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: internal/tray/hook.go, internal/tray/hook_test.go, internal/tray/model.go, internal/tray/view.go, internal/tray/facts.go, internal/tray/notes.go, internal/tray/model_test.go, internal/sni/icons_blind.go, internal/sni/icons_blind_test.go, internal/sni/icons.go, internal/sni/icons_test.go, docs/tray-blind-22.png, docs/tray-blind-44.png_
   - _Depends: 1.2_
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 3.3, 1.7_
-- [ ] 4.4 The inactive state in the two host-check scripts, and the first whole-tree gate
+- [x] 4.4 The inactive state in the two host-check scripts, and the first whole-tree gate
   - One step each in the tray check and the TUI check that drives the stand-in to inactive
     (stdin command `hook pending`) and asserts the tray's title, status and tooltip and the
     screen's tag and bottom line
