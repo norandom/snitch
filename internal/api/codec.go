@@ -23,8 +23,12 @@ type LineReader struct {
 	limit int
 }
 
-// NewLineReader reads lines of at most LineLimit bytes from r.
+// NewLineReader reads lines of at most LineLimit bytes from r: the server's request reader.
 func NewLineReader(r io.Reader) *LineReader { return newLineReader(r, LineLimit) }
+
+// NewReplyReader reads lines of at most ReplyLimit bytes from r: a client's reader of the
+// daemon's replies and pushes, which (a snapshot) may be far longer than any request.
+func NewReplyReader(r io.Reader) *LineReader { return newLineReader(r, ReplyLimit) }
 
 func newLineReader(r io.Reader, limit int) *LineReader {
 	contract.Require(limit > 0, "line reader: limit must be positive")

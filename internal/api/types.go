@@ -8,7 +8,12 @@ import "time"
 
 // Limits of the protocol (design "Server and Client queue").
 const (
-	LineLimit     = 64 << 10        // longest request line in bytes, inclusive
+	LineLimit = 64 << 10 // longest request line in bytes, inclusive
+	// ReplyLimit bounds a daemon line as a client reads it: a snapshot of a full table
+	// (DefaultMax entries, each with a path up to PATH_MAX and a name) is one line far over
+	// LineLimit, and a client reading replies at LineLimit dropped it and reported the daemon
+	// as not answering.
+	ReplyLimit    = 32 << 20
 	Backlog       = 1024            // queued messages per client before drops
 	WriteDeadline = 5 * time.Second // a write slower than this closes the client
 	SummaryEvery  = 2 * time.Second // summary cadence for subscribers

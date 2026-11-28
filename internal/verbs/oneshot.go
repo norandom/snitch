@@ -173,7 +173,7 @@ func writeRequests(conn net.Conn, reqs []api.Request) error {
 }
 
 func readReplies(conn net.Conn, want int) ([]api.Reply, error) {
-	lr := api.NewLineReader(conn)
+	lr := api.NewReplyReader(conn)
 	out := make([]api.Reply, want)
 	seen := make([]bool, want)
 	for left := want; left > 0; {

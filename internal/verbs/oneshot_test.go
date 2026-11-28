@@ -195,3 +195,30 @@ func TestAskContextCanceled(t *testing.T) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
+
+// A snapshot of a busy table is one reply line far over the request limit; Ask must read it
+// (chandali 2026-11-28: 738 entries, a 237 KB line, and `snitch status` said "down").
+func TestAskReadsReplyOverRequestLimit(t *testing.T) {
+	server, clientConn := net.Pipe()
+	defer func() { _ = server.Close() }()
+	entries := make([]api.Entry, 2000)
+	for i := range entries {
+		entries[i] = api.Entry{Program: "unknown", Path: "/usr/sbin/" + strings.Repeat("p", 200),
+			Addr: "159.69.58.118", Port: 36057, Protocol: "udp"}
+	}
+	big := api.Encode(api.Reply{Type: "reply", Id: 1, Ok: true, Window: "1h", Entries: entries})
+	if len(big) <= api.LineLimit {
+		t.Fatalf("fixture line %d bytes, want over %d", len(big), api.LineLimit)
+	}
+	go func() {
+		_, _ = api.NewLineReader(server).ReadLine()
+		_, _ = server.Write(big)
+	}()
+	dial := func(context.Context) (net.Conn, error) { return clientConn, nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	replies, err := Ask(ctx, dial, nil, api.Request{Type: "snapshot", Window: "1h"})
+	if err != nil || len(replies) != 1 || len(replies[0].Entries) != len(entries) {
+		t.Fatalf("err=%v replies=%d", err, len(replies))
+	}
+}

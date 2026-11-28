@@ -615,6 +615,7 @@ a field maps, the API keeps the name, so the TUI's views port field for field:
 | what | value |
 |---|---|
 | request line | 64 KiB inclusive (65536 bytes); a longer line is an error and discarded, the connection stays |
+| reply line (client side) | unbounded by the request limit: a `snapshot` of a full table is one line of several MiB; the shipped clients read daemon lines up to 32 MiB |
 | queue per client | 1024 messages; what does not fit is dropped and reported with a `dropped` line |
 | write deadline | 5 s; a client slower than that is closed |
 | clients | 64; the 65th gets `too many clients` and is closed |

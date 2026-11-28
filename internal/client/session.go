@@ -84,7 +84,7 @@ func (c *Client) session(ctx context.Context) (reason string, up bool) {
 
 // read hands lines over until the stream ends or the session does.
 func (s *session) read() {
-	r := api.NewLineReader(s.conn)
+	r := api.NewReplyReader(s.conn)
 	for {
 		b, err := r.ReadLine()
 		select {
