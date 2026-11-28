@@ -53,14 +53,20 @@ cat /sys/kernel/security/lsm     # must include bpf
 
 (From a source checkout, `scripts/lsm-check.sh` checks all of these read-only.)
 
-The package enables no systemd units, creates no `/etc/snitch/operator`, and touches no
-rules beyond the sample. Start the daemon, and name yourself as the operator, the one user
-besides root who may block, allow and start trials:
+The package enables `snitchd.service` and its boot revert `snitchd-trial-boot.service` at
+boot (in monitor mode: it watches, it blocks nothing until you start a trial), and restarts a
+running daemon when you upgrade. It starts nothing on install, creates no
+`/etc/snitch/operator`, and touches no rules beyond the sample. If you need no reboot (the
+hook is already active), start the daemon now; then name yourself as the operator, the one
+user besides root who may block, allow and start trials:
 
 ```sh
-sudo systemctl enable --now snitchd-trial-boot.service snitchd.service
+sudo systemctl start snitchd.service
 echo "$USER" | sudo install -m 644 /dev/stdin /etc/snitch/operator
 ```
+
+`sudo systemctl disable snitchd.service snitchd-trial-boot.service` turns autostart off;
+upgrades keep that choice. Removing the package stops and disables both.
 
 Then look:
 

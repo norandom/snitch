@@ -389,9 +389,18 @@ Hook *HookStatus `json:"hook,omitempty"`
     their line.
 - **postinst** (`configure` only): if `update-grub` is on PATH and `${DPKG_ROOT:-}/boot/grub`
   exists, run it and report failure in one line without failing; then print
-  `lsm-cmdline --explain`. Without GRUB, print `lsm-cmdline --manual`. Exit 0. Every absolute
+  `lsm-cmdline --explain`. Without GRUB, print `lsm-cmdline --manual`. Then, on a fresh
+  configure (no previous version) or from a previous version `lt 1.2.0`: `systemctl
+  [--root=$DPKG_ROOT] enable snitchd-trial-boot.service snitchd.service`, one printed line
+  either way (works offline; later upgrades keep an operator's disable). Then, when
+  `${DPKG_ROOT:-}/run/systemd/system` exists and `systemctl` is on PATH: `daemon-reload`, and
+  if `snitchd.service` is active, `try-restart` it and print one line (restarted, or failed with
+  the command to run); a stopped unit is never started (7.10, amended 2026-11-28). Exit 0. Every absolute
   path is prefixed with `${DPKG_ROOT:-}` (dpkg's own variable, empty on a normal install), which
   is also how the root-less tests point the scripts at a temporary tree.
+- **prerm** (`remove` only, amended 2026-11-28): under a booted systemd stop
+  `snitchd.service` (the programs detach: fail-open), then `systemctl [--root] disable` both
+  units while their files still exist; print failures, exit 0. Upgrades are untouched.
 - **postrm** (`remove`, `purge`): run `update-grub` when present and `${DPKG_ROOT:-}/boot/grub`
   exists, ignoring its status. dpkg removes the package's files before `postrm remove`, so the
   helper is gone and the surviving conffile adds nothing (7.9); `purge` removes the conffile
@@ -459,7 +468,8 @@ The start log line and `snitchd status` `hook:`; `status.hook` for clients.
   free re-run of `postinst configure` calls the stub once; a failing stub still exits 0.
 - Helper table cases with fixture files inside the container.
 - `dpkg -r`: helper gone, drop-in inert (sourcing it changes nothing), stub called;
-  `dpkg -P`: drop-in gone. `systemctl is-enabled` for both units is not `enabled` throughout.
+  `dpkg -P`: drop-in gone. `systemctl is-enabled` for both units is `enabled` after the install
+  (with the autostart line in group 2's output) and not `enabled` after remove and purge.
 - Lintian (now group 10) stays at `--fail-on error`.
 
 ### Host Check (operator, chandali)
@@ -478,5 +488,6 @@ The start log line and `snitchd status` `hook:`; `status.hook` for clients.
 - Upgrade from 1.1.0: `postinst configure` runs for the first time and behaves as on install.
 - Hosts where `bpf` is active by kernel default (the dev VM): the helper adds nothing.
 - The "nothing runs on install" statement in `docs/ci-debs.md` is replaced by: "the package
-  runs `update-grub` on configure and on removal, and nothing else".
+  runs `update-grub` on configure and on removal, enables snitchd with its boot revert at boot,
+  restarts a running snitchd on upgrade, stops and disables both on removal, and nothing else".
 - Rollback: `apt remove snitch` then reboot restores the kernel's default list.

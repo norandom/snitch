@@ -129,7 +129,8 @@ test on this VM with `-duration`, and the kill switch reset in a trap.
   `/sys/kernel/security/lsm`, kernel build config, and GRUB config). Build + try:
   `go build -o /tmp/snitchd ./cmd/snitchd && sudo /tmp/snitchd -mode monitor -duration 10s`.
 - `packaging/` deb control files, GRUB drop-in (`grub-snitch-lsm.cfg`), `lsm-cmdline.sh` helper,
-  and `postinst.sh`/`postrm.sh` (runs `update-grub` on configure and removal, nothing else;
+  and `postinst.sh`/`postrm.sh` (runs `update-grub` on configure and removal; enables snitchd + trial-boot at boot on fresh
+  install, restarts a running snitchd on upgrade, `prerm` stops and disables on remove;
   `packaging/*.sh` is checked by `shellcheck` alongside `scripts/*.sh`).
 - `cmd/snitch/` the user binary: `snitch` (overview TUI), `snitch egress`, `snitch status`,
   `snitch default deny|allow [--keep]`, `snitch tray [-api PATH] [-ask all|enforce]
@@ -210,7 +211,8 @@ Spec `lsm-activation` (2026-11-27, see `.kiro/specs/lsm-activation/`): `internal
 the kernel supports BPF LSM, and whether GRUB already configures it; `api.Status.Hook`,
 daemon log/status/trial refusal, TUI tag + bottom line, `snitch status` `down` class, 7th
 tray state `Blind` (`kernel hook inactive`), and deb GRUB drop-in + `lsm-cmdline` +
-`postinst`/`postrm` (running `update-grub` on configure and removal, and nothing else).
+`postinst`/`postrm` (running `update-grub` on configure and removal; amended 2026-11-28: autostart enable, restart on
+upgrade, `prerm` stop + disable on remove).
 Not done yet, in order:
 
 1. `write-gate` (mandatory follow-up: API writes currently authorise by uid alone; harden loosening writes and `trial`/`keep`), then `popups-trace` (alert popups `watch`/`ask` + kernel-side process trace).

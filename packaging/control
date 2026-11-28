@@ -19,7 +19,9 @@ Description: egress control for Linux, decided at connect() in the kernel
  binaries are static (CGO_ENABLED=0), so the package declares no Depends:
  installation needs nothing but the archive. On GRUB hosts the package
  configures the next boot for the bpf LSM and runs update-grub; the systemd
- units and the desktop entry stay unpacked, never enabled. Recommended:
+ daemon and its boot revert are enabled at boot (monitor mode; never started
+ on install), a running daemon is restarted on upgrade, and removal stops and
+ disables both; the desktop entry stays unpacked. Recommended:
  bpftool, for the kill switch from a root console, and a D-Bus session bus,
  for the tray. Suggested: Plasma, whose panel hosts the tray, and the Breeze
  icons its notifications name.

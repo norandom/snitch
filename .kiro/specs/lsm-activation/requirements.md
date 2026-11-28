@@ -195,7 +195,13 @@ after the next reboot, so that I do not have to learn about kernel parameters.
    default again.
 10. The snitch package shall run nothing else on install, upgrade or removal: it shall not
     enable or start a unit, write the operator file, or touch rules beyond what dpkg does with
-    the shipped sample.
+    the shipped sample. Amended by operator decision 2026-11-28: on a fresh install (or an
+    upgrade from a version before 1.2.0) the package shall enable `snitchd.service` together
+    with `snitchd-trial-boot.service` at boot, never one without the other; when
+    `snitchd.service` is running at configure, it shall restart it so an upgrade takes effect
+    now; on removal it shall stop and disable both. It shall still never start a stopped unit
+    on install, and a failed enable, restart, stop or disable shall be printed without
+    failing the operation.
 11. The snitch package shall remain installable with no dependencies and shall pass the
     package checker at the committed threshold on both supported distributions.
 12. Before adding `bpf` to the next boot's configuration, the snitch package shall verify that

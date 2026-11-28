@@ -30,8 +30,8 @@ Payload (11 shipped files under `/` plus `DEBIAN/`; every mode explicit, every f
 | `/usr/local/sbin/snitchd` | the built daemon | 0755 | the frozen unit contract: both shipped units name this exact path in `ExecStart` (R4.2) |
 | `/usr/bin/snitch` | the built client binary | 0755 | a PATH directory, so `snitch` (TUI, `status`, `default`, `tray`) and the desktop entry's `Exec=` resolve for every user (R4.4) |
 | `/usr/lib/snitch/lsm-cmdline` | `packaging/lsm-cmdline.sh` | 0755 | POSIX `sh` helper computing `lsm=<list>,bpf` from active LSMs and kernel configs |
-| `/usr/lib/systemd/system/snitchd.service` | repo unit, byte-identical | 0644 | unpacked by dpkg, never enabled by the package |
-| `/usr/lib/systemd/system/snitchd-trial-boot.service` | repo unit, byte-identical | 0644 | unpacked by dpkg, never enabled by the package |
+| `/usr/lib/systemd/system/snitchd.service` | repo unit, byte-identical | 0644 | enabled at boot by `postinst` (fresh install or from `< 1.2.0`), never started by it |
+| `/usr/lib/systemd/system/snitchd-trial-boot.service` | repo unit, byte-identical | 0644 | enabled at boot by `postinst` (fresh install or from `< 1.2.0`), never started by it |
 | `/usr/share/applications/snitch-tray.desktop` | repo desktop entry | 0644 | the autostart entry the desktop session resolves |
 | `/etc/default/grub.d/snitch-lsm.cfg` | `packaging/grub-snitch-lsm.cfg` | 0644 | GRUB drop-in (declared conffile); invokes `lsm-cmdline` when executable |
 | `/etc/snitch/rules.toml` | `examples/rules.toml`, byte-identical | 0644 | the sample: a declared conffile, validated by `snitchd check` before packing |
@@ -40,7 +40,8 @@ Payload (11 shipped files under `/` plus `DEBIAN/`; every mode explicit, every f
 | `/usr/share/lintian/overrides/snitch` | `packaging/lintian-overrides` | 0644 | the package's policy-deviation review record (see below) |
 | `DEBIAN/control` | `packaging/control` + injected Version and Installed-Size | 0644 | no `Depends`; `Recommends` bpftool and a session bus, `Suggests` the KDE side (R4.5) |
 | `DEBIAN/conffiles` | `packaging/conffiles` | 0644 | lists `/etc/default/grub.d/snitch-lsm.cfg` and `/etc/snitch/rules.toml` |
-| `DEBIAN/postinst` | `packaging/postinst.sh` | 0755 | `configure`: runs `update-grub` when present and prints next-boot status or manual `lsm=` line |
+| `DEBIAN/postinst` | `packaging/postinst.sh` | 0755 | `configure`: runs `update-grub` when present and prints next-boot status or manual `lsm=` line; enables both units at boot (fresh install or from `< 1.2.0`); restarts `snitchd.service` if it is running |
+| `DEBIAN/prerm` | `packaging/prerm.sh` | 0755 | `remove`: stops `snitchd.service` and disables both units; never fails |
 | `DEBIAN/postrm` | `packaging/postrm.sh` | 0755 | `remove`/`purge`: runs `update-grub` when present; never fails |
 | `DEBIAN/md5sums` | generated, `LC_ALL=C` sorted | 0644 | dpkg's own verification form |
 
@@ -52,8 +53,11 @@ record the same justification. The units ship the repo's bytes unchanged
 
 Maintainer scripts (amended in `lsm-activation`, operator decision 2026-11-27,
 replacing the historical unpack-only rule): **the package runs `update-grub` on
-configure and on removal, and nothing else**. It never enables or starts a
-systemd unit, never creates `/etc/snitch/operator`, and never alters rules beyond
+configure and on removal, enables `snitchd.service` with
+`snitchd-trial-boot.service` at boot on a fresh install (or from a version
+before 1.2.0), restarts a running `snitchd.service` on upgrade, stops and
+disables both on removal (amended 2026-11-28), and nothing else**. It never
+starts a stopped unit on install, never creates `/etc/snitch/operator`, and never alters rules beyond
 dpkg's conffile handling of `/etc/snitch/rules.toml`. Enablement stays the
 operator's or pyinfra's step (R4.3): the deployment runs
 `systemctl enable --now snitchd-trial-boot.service snitchd.service`, never
@@ -101,7 +105,11 @@ Next-boot configuration (`lsm-activation`):
   failure in one line without failing the install) and prints
   `lsm-cmdline --explain` (stating a reboot is needed when it configured the next
   boot). Without GRUB or `update-grub`, `postinst` prints `lsm-cmdline --manual`
-  (`snitch: add to the kernel command line: lsm=<list>,bpf`) and exits `0`.
+  (`snitch: add to the kernel command line: lsm=<list>,bpf`). Then, under a
+  booted systemd (`${DPKG_ROOT:-}/run/systemd/system`), it runs
+  `systemctl daemon-reload` and, only if `snitchd.service` is active,
+  `systemctl try-restart snitchd.service`, printing one line either way; it
+  exits `0`.
   On `remove` and `purge`, `postrm` runs `update-grub` when present with
   `${DPKG_ROOT:-}/boot/grub`, ignoring its exit status.
 - **Conffile survival and inertness on removal**: on `dpkg -r snitch`, dpkg
@@ -174,7 +182,7 @@ naming its group):
    the helper's decision table with fixture files, stub-driven `postinst
    configure` (both working and failing `update-grub` exit 0), `dpkg -r`
    (helper removed, drop-in survives and is inert, stub called), `dpkg -P`
-   (drop-in removed), and both systemd units never enabled throughout.
+   (drop-in removed), both systemd units enabled after install and disabled after remove and purge.
 10. lintian — see below; it runs in the driver, which is the distro, not in
     the sibling.
 
@@ -301,10 +309,11 @@ draw exactly this line).
   ships byte-identical units and a byte-identical binary, so a host installed
   from the package and a host installed by pyinfra run the same code at the
   same paths.
-- Enablement and base configuration remain the deployment's: systemd units
-  stay unpacked and never enabled, `/etc/snitch/operator` stays uncreated, and
-  the package's only maintainer action is running `update-grub` on configure
-  and removal; everything else is a deploy step.
+- Base configuration remains the deployment's: `/etc/snitch/operator` stays
+  uncreated and rules stay the sample. Since 2026-11-28 the package enables
+  both units at boot on a fresh install, restarts a running daemon on upgrade
+  and stops and disables both on removal, besides running `update-grub`; the
+  deployment's own `systemctl enable --now` stays harmless (idempotent).
 - Consuming repos update their pins deliberately on each release; this
   feature's side of that contract is stable asset names and byte-stable
   construction (following `tui`, six assets publish: the four Go binary/sha256

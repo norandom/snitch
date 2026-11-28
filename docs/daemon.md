@@ -91,7 +91,10 @@ reachable by every local user (the status file there stays 0600, the daemon's ow
 operator file `/etc/snitch/operator` names the one user besides root who may write over the
 [API](#api).
 
-The deb unpacks both units and enables neither (see [ci-debs.md](ci-debs.md)). The `snitchd`
+The deb enables both units at boot on a fresh install (and on an upgrade from before 1.2.0;
+later upgrades keep an operator's disable), never starts a stopped one, restarts a running
+`snitchd.service` on upgrade, and stops and disables both on removal (see
+[ci-debs.md](ci-debs.md)). The `snitchd`
 task of the [hyperland-forky-worker-vm](https://github.com/norandom/hyperland-forky-worker-vm)
 repo deploys the binary (a release asset, pinned by version and sha256), the two units and the
 operator file with the desktop user; that repo carries a copy of the two unit files, marked as

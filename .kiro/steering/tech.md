@@ -40,9 +40,9 @@ tracing return with `popups-trace`.
   (`overview`, `egress`, `status`, `default`, `tray`, `-version`; see `docs/tui.md`). Interactive
   popups (`watch`, `ask`) and process trace return with `popups-trace`.
 - **Packaging**: static Go binaries; GitHub releases pinned by sha256 by the consuming repo;
-  `.deb` package (`packaging/`) shipping systemd units (unpacked, never enabled), GRUB
+  `.deb` package (`packaging/`) shipping systemd units (enabled at boot on fresh install, never started by it), GRUB
   drop-in + `lsm-cmdline` helper, and `postinst`/`postrm` (running `update-grub` on configure
-  and removal, and nothing else); Nix flake (`buildGoModule`) later. systemd units in `systemd/`.
+  and removal, restarting a running snitchd on upgrade) and `prerm` (stop + disable on remove); Nix flake (`buildGoModule`) later. systemd units in `systemd/`.
 
 ## Key Libraries
 

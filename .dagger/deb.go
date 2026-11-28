@@ -50,7 +50,7 @@ install -m 0755 /dist/snitchd /pkg/usr/local/sbin/snitchd
 install -m 0755 /dist/snitch-linux-amd64 /pkg/usr/bin/snitch
 
 # The repository's own files, shipped byte-identical (the payload table's
-# source column): units unpacked and never enabled by the package, the
+# source column): units enabled at boot by postinst, never started by it, the
 # desktop entry where sessions resolve it, the GRUB drop-in and its helper,
 # the verified sample as the conffile payload, the license where policy puts
 # it, and the overrides record with its written justifications.
@@ -95,6 +95,7 @@ chmod 0644 /pkg/DEBIAN/control
 install -m 0644 /src/packaging/conffiles /pkg/DEBIAN/conffiles
 install -m 0755 /src/packaging/postinst.sh /pkg/DEBIAN/postinst
 install -m 0755 /src/packaging/postrm.sh /pkg/DEBIAN/postrm
+install -m 0755 /src/packaging/prerm.sh /pkg/DEBIAN/prerm
 
 # DEBIAN/md5sums: every payload file, the conffile included per modern dpkg
 # convention, one canonical order (LC_ALL=C sort over null-separated

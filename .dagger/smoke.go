@@ -408,7 +408,9 @@ fi
 // manual instruction with DPKG_ROOT empty, the helper's decision table via
 // fixture directories, stub-driven postinst configure (working and failing),
 // dpkg -r (helper gone, conffile survives and is inert), dpkg -P (conffile
-// gone), and that neither systemd unit is enabled before remove or after purge.
+// gone), and the autostart: both systemd units enabled after the install
+// (postinst, amended 2026-11-28), disabled again by prerm on dpkg -r, and
+// still not enabled after purge.
 const smokeBootSettingScript = `#!/usr/bin/env bash
 set -euo pipefail
 die() { echo "smoke: $DISTRO: 9 boot setting: FAIL: $*"; exit 1; }
@@ -527,15 +529,20 @@ assert_helper "add explain" "--explain" "__ANY__" "configured next boot with lsm
 assert_helper "manual readable" "--manual" "snitch: add to the kernel command line: lsm=lockdown,apparmor,bpf" "" -l "$fdir/lsm-nobpf" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
 assert_helper "manual unreadable" "--manual" "snitch: add to the kernel command line: lsm=<your list>,bpf" "" -l "$fdir/missing-lsm" -c "$fdir/cmd-quiet" -k "$fdir/okboot" -- "quiet"
 
-# 4. Unit enablement before remove.
+# 4. Autostart: the install enabled both units (never one without the other).
 check_units_not_enabled() {
 	local phase=$1 u st
 	for u in snitchd.service snitchd-trial-boot.service; do
 		st=$(systemctl is-enabled "$u" 2>/dev/null || true)
-		[ "$st" != "enabled" ] || die "$phase: $u is enabled (expected never enabled)"
+		[ "$st" != "enabled" ] || die "$phase: $u is enabled (expected disabled)"
 	done
 }
-check_units_not_enabled "before remove"
+for u in snitchd.service snitchd-trial-boot.service; do
+	st=$(systemctl is-enabled "$u" 2>/dev/null || true)
+	[ "$st" = "enabled" ] || die "after install: $u is '$st' (expected enabled)"
+done
+grep -qF "snitch: enabled snitchd.service and snitchd-trial-boot.service" /tmp/g2.out ||
+	die "group 2 dpkg -i output missing the autostart line"
 
 # 5. Stub-driven postinst configure (working and failing update-grub).
 if [ ! -d /boot/grub ]; then
@@ -587,6 +594,7 @@ grub_after=$(
 	printf '%s' "$GRUB_CMDLINE_LINUX_DEFAULT"
 )
 [ "$grub_after" = "quiet splash" ] || die "drop-in modified GRUB_CMDLINE_LINUX_DEFAULT after remove: '$grub_after'"
+check_units_not_enabled "after remove"
 
 # 7. dpkg -P snitch: drop-in gone, stub called, units still not enabled.
 : > "$stublog"
@@ -600,7 +608,7 @@ calls=$(wc -l < "$stublog")
 [ ! -e /etc/default/grub.d/snitch-lsm.cfg ] || die "/etc/default/grub.d/snitch-lsm.cfg still exists after dpkg -P"
 check_units_not_enabled "after purge"
 
-say "files/modes, no-GRUB install line (DPKG_ROOT empty), helper table, stub postinst, remove (inert drop-in), purge, and units-not-enabled all verified"
+say "files/modes, no-GRUB install line (DPKG_ROOT empty), helper table, stub postinst, remove (inert drop-in), purge, and autostart enabled on install / disabled on remove all verified"
 `
 
 // Smoke is the deb's in-container proof on one contract distro (R5.3): the
