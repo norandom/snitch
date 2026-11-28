@@ -75,7 +75,7 @@ popups (`popups-trace`).
 - [ ] dns-tap bookkeeping -- tasks 1.4, 2.5, 3.3, 3.4 and the three parents are unchecked and
   `spec.json` says `tasks-approved`, although the commits record them as done and v0.4.0 is
   released. Run `/kiro-validate-impl dns-tap`, then tick the boxes and set the phase.
-- [ ] snitchd on chandali -- only with the operator's go (`lsm-activation` task 7.2): install
+- [x] snitchd on chandali (done 2026-11-28, see `lsm-activation` 7.2 notes) -- only with the operator's go (`lsm-activation` task 7.2): install
   the built `.deb` package (which checks `CONFIG_BPF_LSM=y`, writes
   `/etc/default/grub.d/snitch-lsm.cfg` for
   `lsm=lockdown,capability,landlock,yama,apparmor,ima,evm,bpf`, and runs `update-grub`),

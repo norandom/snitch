@@ -202,6 +202,20 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Boundary: packaging/postinst.sh, packaging/postrm.sh, packaging/conffiles, packaging/control, .dagger/deb.go, internal/lsm/scripts_test.go_
   - _Depends: 5.1_
   - _Requirements: 7.6, 7.7, 7.8, 7.9, 7.10_
+- [x] 5.4 Autostart and restart on upgrade (amendment 2026-11-28)
+  - Found in 7.2: upgrading 1.1.0 → 1.2.0 left the old daemon running (hook not reported
+    until a manual restart), and after the reboot nothing started it (units never enabled).
+    `postinst configure` enables both units at boot on a fresh install or from a version
+    `lt 1.2.0` (`--root=$DPKG_ROOT` under a root; later upgrades keep an operator's disable),
+    then `try-restart`s `snitchd.service` when it is active under a booted systemd; a stopped
+    unit is never started. A new `prerm remove` stops the daemon and disables both units.
+    Every failure prints one line and the operation succeeds
+  - Done when: `TestScriptsPostinstEnable`, `TestScriptsPostinstRestart` and
+    `TestScriptsPrerm` pass with a stub `systemctl` (no `start` ever), and smoke group 9 sees
+    both units enabled after install and disabled after remove and purge
+  - _Boundary: packaging/postinst.sh, packaging/prerm.sh, packaging/control, .dagger/deb.go, .dagger/smoke.go, internal/lsm/scripts_test.go_
+  - _Depends: 5.2_
+  - _Requirements: 7.10_
 - [x] 5.3 The smoke proves it on both distributions
   - Group 2's payload list grows to the eleven files; a new group 9 "boot setting" checks the
     laid files and modes, the no-GRUB message of the install, the stub-driven configure and
@@ -255,7 +269,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
   - _Depends: 2.1, 5.1_
   - _Requirements: 8.5_
 
-- [ ] 7. Close-out
+- [x] 7. Close-out
 - [x] 7.1 The whole tree is clean
   - Full test, vet, format, caps, the import and request pins of the user binary, and the
     pipeline's lint functions
@@ -263,7 +277,7 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
     `sh scripts/caps.sh` and `dagger call lint-all` are green
   - _Depends: 2.2, 2.3, 4.4, 5.3, 6.1, 6.2, 6.3_
   - _Requirements: 8.3_
-- [ ] 7.2 The check on chandali, run by the operator
+- [x] 7.2 The check on chandali, run by the operator
   - The operator installs the built package, runs the host check (inactive, reboot pending,
     every surface warning), reboots, and runs it again (active; the overview shows programs
     with destinations). No agent uses root; the outputs are pasted into the task notes
@@ -275,3 +289,4 @@ Tasks in the same Go package run one at a time; `(P)` tasks touch disjoint files
 ## Implementation Notes
 - Task 2.1: `cmd/snitchd/apifacts_test.go` (`TestFactsOfAFlagDaemon`) was added to Task 2.1's boundary to assert `got.Hook != nil && got.Hook.State != "" && got.Hook.Reason != ""` and clear `got.Hook = nil` alongside `got.DNS` and `got.Counters` before struct equality comparison (matching commits `2f68e338` and `90bfeb11`). Also `hookCache` uses field name `clock` because `now()` is a method.
 - Task 2.2: `cmd/snitchd/apiwrite_test.go` (`apiDaemonOf`) was added to Task 2.2's boundary so API trial tests inject an in-memory `hookCache` reader answering `lsm.Active` instead of reading host `/sys/kernel/security/lsm`.
+- Task 7.2 (chandali, kernel 7.3.4-3-t2-resolute, `snitch_1.2.0` sha256 `5da59890…ee7`). First run, before the reboot: active LSMs `lockdown,capability,landlock,yama,apparmor,ima,evm` (no `bpf`), no `lsm=` on the command line, drop-in 0644, helper 0755 with `lsm=lockdown,capability,landlock,yama,apparmor,ima,evm,bpf`, `status.hook` `inactive` `pending=true` with the reboot sentence, `snitch status` class `down`, all 4 grub.cfg entries carrying `evm,bpf`. The 1.1.0 daemon kept running after the install until the operator restarted it. Second run, after the reboot: active LSMs `lockdown,capability,landlock,yama,apparmor,bpf,ima,evm`, `/proc/cmdline` `lsm=lockdown,capability,landlock,yama,apparmor,ima,evm,bpf`, helper "bpf kernel hook is active; kept …", `lsm-check.sh` exit 0; the daemon was not running (units never enabled), and once the operator started it: `status.hook` `{"state":"active","reason":"kernel hook active"}`, mode monitor, egress `decisions` 53903, 738 table entries, DNS tap on (417 answers seen). Two findings, fixed here: the package neither enabled nor restarted the daemon (operator decision → task 5.4), and `snitch status` (and the TUI's session) read daemon lines at the 64 KiB request limit, so the 237 KB `snapshot` reply was dropped and the daemon reported as not answering; clients now read replies through `api.NewReplyReader` (`api.ReplyLimit`, 32 MiB), regression `TestAskReadsReplyOverRequestLimit`, after which `snitch status` gave class `allow` against the live daemon.
